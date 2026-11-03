@@ -7,10 +7,13 @@ import {
   KotakNeoError,
   type AuthenticatedSession,
   type MarginCheckInput,
+  type QuoteInstrument,
 } from "./kotak-neo-client.js";
 import { renderLoginPage } from "./login-page.js";
 import { renderMarginPage } from "./margin-page.js";
 import { renderNseFoScripMasterPage } from "./scrip-master-page.js";
+import { parseNiftyOptionContracts, sortExpiryLabels } from "./option-chain.js";
+import { renderOptionChainPage } from "./option-chain-page.js";
 
 interface LoginBody {
   totp: string;
@@ -26,6 +29,7 @@ interface AuthClient {
   login(input: KotakLoginInput): Promise<AuthenticatedSession>;
   getScripMaster(): Promise<unknown>;
   getNseFoScripMaster?(): Promise<string>;
+  getQuotes?(instruments: QuoteInstrument[], quoteType?: string): Promise<unknown>;
   checkMargin?(session: AuthenticatedSession, input: MarginCheckInput): Promise<unknown>;
 }
 
@@ -70,6 +74,13 @@ export function buildApp({ config, authClient }: AppOptions): FastifyInstance {
       .send(renderNseFoScripMasterPage());
   });
 
+  app.get("/option-chain", async (_request, reply) => {
+    return reply
+      .header("Cache-Control", "no-store")
+      .type("text/html; charset=utf-8")
+      .send(renderOptionChainPage());
+  });
+
   app.register(async (api) => {
     await api.register(swagger, {
       openapi: {
@@ -84,6 +95,7 @@ export function buildApp({ config, authClient }: AppOptions): FastifyInstance {
           { name: "Authentication", description: "Kotak Neo session authentication" },
           { name: "Scrip Master", description: "Kotak Neo instrument master files" },
           { name: "Margin", description: "Kotak Neo margin estimates" },
+          { name: "Options", description: "NIFTY option-chain quotes" },
         ],
       },
     });
@@ -92,6 +104,21 @@ export function buildApp({ config, authClient }: AppOptions): FastifyInstance {
     });
 
     let session: AuthenticatedSession | undefined;
+    let niftyContractsCache:
+      | { loadedAt: number; contracts: ReturnType<typeof parseNiftyOptionContracts> }
+      | undefined;
+
+    const getNiftyContracts = async () => {
+      if (niftyContractsCache && Date.now() - niftyContractsCache.loadedAt < 5 * 60 * 1000) {
+        return niftyContractsCache.contracts;
+      }
+      if (!client?.getNseFoScripMaster) {
+        throw new KotakNeoError("NSE F&O Scrip Master is not configured", 503);
+      }
+      const contracts = parseNiftyOptionContracts(await client.getNseFoScripMaster());
+      niftyContractsCache = { loadedAt: Date.now(), contracts };
+      return contracts;
+    };
 
     api.get(
       "/health",
@@ -315,6 +342,128 @@ export function buildApp({ config, authClient }: AppOptions): FastifyInstance {
       },
     );
 
+    api.get(
+      "/api/options/nifty/expiries",
+      {
+        schema: {
+          tags: ["Options"],
+          summary: "List available NIFTY option expiries",
+          response: {
+            200: {
+              type: "object",
+              required: ["expiries"],
+              properties: { expiries: { type: "array", items: { type: "string" } } },
+            },
+            400: errorResponseSchema,
+            401: errorResponseSchema,
+            429: errorResponseSchema,
+            502: errorResponseSchema,
+            503: errorResponseSchema,
+            504: errorResponseSchema,
+          },
+        },
+      },
+      async (request, reply) => {
+        if (!session) {
+          return reply.code(401).send({ error: "Authenticate with Kotak Neo to view the option chain" });
+        }
+        try {
+          const contracts = await getNiftyContracts();
+          const expiries = sortExpiryLabels([...new Set(contracts.map(({ expiry }) => expiry))]);
+          return { expiries };
+        } catch (error) {
+          const statusCode = brokerRequestStatus(error);
+          request.log.error(
+            {
+              statusCode,
+              errorName: error instanceof Error ? error.name : "UnknownError",
+              ...(error instanceof KotakNeoError
+                ? { errorMessage: error.message, upstreamStatusCode: error.statusCode }
+                : {}),
+            },
+            "Kotak Neo NIFTY option expiries request failed",
+          );
+          return reply.code(statusCode).send({
+            error: error instanceof KotakNeoError ? error.message : "NIFTY option expiries could not be loaded",
+          });
+        }
+      },
+    );
+
+    api.get<{ Querystring: { expiry: string } }>(
+      "/api/options/nifty/chain",
+      {
+        schema: {
+          tags: ["Options"],
+          summary: "Get NIFTY option chain quotes",
+          querystring: {
+            type: "object",
+            required: ["expiry"],
+            additionalProperties: false,
+            properties: { expiry: { type: "string", pattern: "^\\d{2}[A-Z]{3}\\d{4}$" } },
+          },
+          response: {
+            200: {
+              type: "object",
+              required: ["expiry", "contracts", "quotes"],
+              properties: {
+                expiry: { type: "string" },
+                contracts: { type: "array", items: { type: "object", additionalProperties: true } },
+                quotes: { type: "array", items: {} },
+              },
+            },
+            400: errorResponseSchema,
+            401: errorResponseSchema,
+            429: errorResponseSchema,
+            502: errorResponseSchema,
+            503: errorResponseSchema,
+            504: errorResponseSchema,
+          },
+        },
+      },
+      async (request, reply) => {
+        if (!session) {
+          return reply.code(401).send({ error: "Authenticate with Kotak Neo to view the option chain" });
+        }
+        if (!client?.getQuotes) {
+          return reply.code(503).send({ error: "Kotak Neo quotes API is not configured" });
+        }
+
+        try {
+          const contracts = await getNiftyContracts();
+          const selected = contracts.filter(({ expiry }) => expiry === request.query.expiry);
+          if (selected.length === 0) {
+            return reply.code(400).send({ error: "No NIFTY option contracts found for that expiry" });
+          }
+
+          const instruments: QuoteInstrument[] = selected.map(({ instrumentToken }) => ({
+            instrumentToken,
+            exchangeSegment: "nse_fo",
+          }));
+          const quotes: unknown[] = [];
+          for (let offset = 0; offset < instruments.length; offset += 50) {
+            quotes.push(await client.getQuotes(instruments.slice(offset, offset + 50), "all"));
+          }
+          return { expiry: request.query.expiry, contracts: selected, quotes };
+        } catch (error) {
+          const statusCode = brokerRequestStatus(error);
+          request.log.error(
+            {
+              statusCode,
+              errorName: error instanceof Error ? error.name : "UnknownError",
+              ...(error instanceof KotakNeoError
+                ? { errorMessage: error.message, upstreamStatusCode: error.statusCode }
+                : {}),
+            },
+            "Kotak Neo NIFTY option chain request failed",
+          );
+          return reply.code(statusCode).send({
+            error: error instanceof KotakNeoError ? error.message : "NIFTY option chain could not be loaded",
+          });
+        }
+      },
+    );
+
     api.post<{ Body: MarginCheckInput }>(
       "/api/margin",
       {
@@ -407,6 +556,21 @@ function authenticationErrorStatus(error: unknown): 401 | 429 | 502 | 503 | 504 
     return 429;
   }
   if (error.statusCode === 503 || error.statusCode === 504) {
+    return error.statusCode;
+  }
+  return 502;
+}
+
+function brokerRequestStatus(error: unknown): 400 | 401 | 429 | 502 | 503 | 504 {
+  if (!(error instanceof KotakNeoError)) return 502;
+  if (
+    error.statusCode === 400 ||
+    error.statusCode === 401 ||
+    error.statusCode === 429 ||
+    error.statusCode === 502 ||
+    error.statusCode === 503 ||
+    error.statusCode === 504
+  ) {
     return error.statusCode;
   }
   return 502;

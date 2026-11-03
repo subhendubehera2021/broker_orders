@@ -15,6 +15,7 @@ const validEnvironment: NodeJS.ProcessEnv = {
   KOTAK_NEO_TOTP_VALIDATE_PATH: "validate",
   KOTAK_NEO_SCRIP_MASTER_PATH: "script-details/1.0/masterscrip/file-paths",
   KOTAK_NEO_MARGIN_PATH: "quick/user/check-margin",
+  KOTAK_NEO_QUOTES_PATH: "script-details/1.0/quotes/neosymbol/{neo_symbols}/{quote_type}",
   KOTAK_NEO_REQUEST_TIMEOUT_MS: "10000",
 };
 
@@ -34,6 +35,7 @@ describe("loadConfig", () => {
         totpValidatePath: "validate",
         scripMasterPath: "script-details/1.0/masterscrip/file-paths",
         marginPath: "quick/user/check-margin",
+        quotesPath: "script-details/1.0/quotes/neosymbol/{neo_symbols}/{quote_type}",
         requestTimeoutMs: 10000,
       },
     });

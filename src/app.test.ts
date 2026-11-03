@@ -19,6 +19,7 @@ const config: AppConfig = {
     totpValidatePath: "test/validate",
     scripMasterPath: "script-details/1.0/masterscrip/file-paths",
     marginPath: "quick/user/check-margin",
+    quotesPath: "script-details/1.0/quotes/neosymbol/{neo_symbols}/{quote_type}",
     requestTimeoutMs: 1000,
   },
 };
@@ -51,6 +52,7 @@ describe("authentication routes", () => {
     assert.doesNotMatch(response.body, /654321/);
     assert.doesNotMatch(response.body, /name="mpin"/);
     assert.match(response.body, /href="\/margin">Open margin calculator/);
+    assert.match(response.body, /href="\/option-chain">Open NIFTY option chain/);
     assert.doesNotMatch(response.body, /id="margin-form"/);
     assert.match(response.body, /fetch\("\/api\/auth\/login"/);
   });
@@ -84,6 +86,20 @@ describe("authentication routes", () => {
     assert.match(response.body, /Search all instrument fields/);
   });
 
+  it("serves the separate NIFTY option-chain page", async () => {
+    const app = buildApp({ config });
+    apps.push(app);
+
+    const response = await app.inject("/option-chain");
+
+    assert.equal(response.statusCode, 200);
+    assert.match(String(response.headers["content-type"] ?? ""), /text\/html/);
+    assert.equal(response.headers["cache-control"], "no-store");
+    assert.match(response.body, /<h1>NIFTY option chain<\/h1>/);
+    assert.match(response.body, /\/api\/options\/nifty\/expiries/);
+    assert.match(response.body, /\/api\/options\/nifty\/chain/);
+  });
+
   it("serves Swagger UI and an OpenAPI document for the API routes", async () => {
     const app = buildApp({ config });
     apps.push(app);
@@ -101,6 +117,8 @@ describe("authentication routes", () => {
       "/api/auth/logout",
       "/api/auth/session",
       "/api/margin",
+      "/api/options/nifty/chain",
+      "/api/options/nifty/expiries",
       "/api/scrip-master",
       "/api/scrip-master/nse-fo",
       "/health",
@@ -320,6 +338,109 @@ describe("authentication routes", () => {
     assert.equal(response.statusCode, 502);
     assert.deepEqual(response.json(), {
       error: "Kotak Neo did not provide the NSE F&O Scrip Master file",
+    });
+  });
+
+  it("requires login before returning NIFTY option expiries", async () => {
+    let masterCalls = 0;
+    const app = buildApp({
+      config,
+      authClient: {
+        async login() { return authenticatedSession; },
+        async getScripMaster() { return { data: { filesPaths: [] } }; },
+        async getNseFoScripMaster() { masterCalls += 1; return ""; },
+      },
+    });
+    apps.push(app);
+
+    const response = await app.inject("/api/options/nifty/expiries");
+
+    assert.equal(response.statusCode, 401);
+    assert.equal(masterCalls, 0);
+  });
+
+  it("lists NIFTY expiries and returns quotes for the selected contracts", async () => {
+    let quoteInput: unknown;
+    const expiryEpoch = String(Date.UTC(2030, 0, 30) / 1000 - 315_511_200);
+    const csv = [
+      "pSymbol,pInstType,pSymbolName,pTrdSymbol,pOptionType,pExpiryDate,dStrikePrice;,lLotSize",
+      `123,OPTIDX,NIFTY,NIFTY30JAN2030CE,CE,${expiryEpoch},2500000,25`,
+      `124,OPTIDX,NIFTY,NIFTY30JAN2030PE,PE,${expiryEpoch},2500000,25`,
+      `125,OPTIDX,BANKNIFTY,BANKNIFTY30JAN2030CE,CE,${expiryEpoch},2500000,15`,
+    ].join("\n");
+    const app = buildApp({
+      config,
+      authClient: {
+        async login() { return authenticatedSession; },
+        async getScripMaster() { return { data: { filesPaths: [] } }; },
+        async getNseFoScripMaster() { return csv; },
+        async getQuotes(instruments, quoteType) {
+          quoteInput = { instruments, quoteType };
+          return { message: [{ tk: "123", ltp: "120.5" }, { tk: "124", ltp: "95.25" }] };
+        },
+      },
+    });
+    apps.push(app);
+
+    await app.inject({ method: "POST", url: "/api/auth/login", payload: { totp: "123456" } });
+    const expiriesResponse = await app.inject("/api/options/nifty/expiries");
+    const chainResponse = await app.inject("/api/options/nifty/chain?expiry=30JAN2030");
+
+    assert.equal(expiriesResponse.statusCode, 200);
+    assert.deepEqual(expiriesResponse.json(), { expiries: ["30JAN2030"] });
+    assert.equal(chainResponse.statusCode, 200);
+    assert.deepEqual(quoteInput, {
+      instruments: [
+        { instrumentToken: "123", exchangeSegment: "nse_fo" },
+        { instrumentToken: "124", exchangeSegment: "nse_fo" },
+      ],
+      quoteType: "all",
+    });
+    assert.deepEqual(chainResponse.json().contracts, [
+      {
+        instrumentToken: "123",
+        tradingSymbol: "NIFTY30JAN2030CE",
+        optionType: "CE",
+        strike: 25000,
+        expiry: "30JAN2030",
+        lotSize: "25",
+      },
+      {
+        instrumentToken: "124",
+        tradingSymbol: "NIFTY30JAN2030PE",
+        optionType: "PE",
+        strike: 25000,
+        expiry: "30JAN2030",
+        lotSize: "25",
+      },
+    ]);
+  });
+
+  it("preserves Kotak quote validation errors as HTTP 400", async () => {
+    const expiryEpoch = String(Date.UTC(2030, 0, 30) / 1000 - 315_511_200);
+    const csv = [
+      "pSymbol,pInstType,pSymbolName,pTrdSymbol,pOptionType,pExpiryDate,dStrikePrice;",
+      `123,OPTIDX,NIFTY,NIFTY30JAN2030CE,CE,${expiryEpoch},2500000`,
+    ].join("\n");
+    const app = buildApp({
+      config,
+      authClient: {
+        async login() { return authenticatedSession; },
+        async getScripMaster() { return { data: { filesPaths: [] } }; },
+        async getNseFoScripMaster() { return csv; },
+        async getQuotes() {
+          throw new KotakNeoError("Kotak Neo rejected the API request (HTTP 400)", 400);
+        },
+      },
+    });
+    apps.push(app);
+
+    await app.inject({ method: "POST", url: "/api/auth/login", payload: { totp: "123456" } });
+    const response = await app.inject("/api/options/nifty/chain?expiry=30JAN2030");
+
+    assert.equal(response.statusCode, 400);
+    assert.deepEqual(response.json(), {
+      error: "Kotak Neo rejected the API request (HTTP 400)",
     });
   });
 

@@ -158,6 +158,8 @@ const loginPageTemplate = `<!doctype html>
       .margin-link:hover { background: #22261f; }
       .scrip-link { display: block; margin-top: 13px; color: #a9aea3; font-size: 11px; text-align: center; text-decoration: none; }
       .scrip-link:hover { color: var(--green); }
+      .option-link { display: block; margin-top: 10px; color: #a9aea3; font-size: 11px; text-align: center; text-decoration: none; }
+      .option-link:hover { color: var(--green); }
       footer { display: flex; justify-content: space-between; gap: 20px; padding: 10px 7% 0; color: #63685e; font-size: 10px; }
       footer a { color: #92988a; text-decoration: none; }
       footer a:hover { color: var(--green); }
@@ -249,6 +251,7 @@ const loginPageTemplate = `<!doctype html>
             <div class="session-state">Kotak Neo session active</div>
             <p class="session-copy">Your account is connected and ready to request a margin estimate.</p>
             <a class="margin-link" href="/margin">Open margin calculator</a>
+            <a class="option-link" href="/option-chain">Open NIFTY option chain</a>
             <a class="scrip-link" href="/scrip-master">Browse NSE F&amp;O Scrip Master</a>
             <button class="logout" id="logout-button" type="button">Disconnect this session</button>
           </div>

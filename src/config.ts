@@ -9,6 +9,7 @@ export interface KotakNeoConfig {
   totpValidatePath: string;
   scripMasterPath: string;
   marginPath: string;
+  quotesPath: string;
   requestTimeoutMs: number;
 }
 
@@ -59,10 +60,18 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     "KOTAK_NEO_SCRIP_MASTER_PATH",
   );
   const marginPath = requiredValue(env.KOTAK_NEO_MARGIN_PATH, "KOTAK_NEO_MARGIN_PATH");
+  const quotesPath = requiredValue(env.KOTAK_NEO_QUOTES_PATH, "KOTAK_NEO_QUOTES_PATH");
   validateRelativePath(totpLoginPath, "KOTAK_NEO_TOTP_LOGIN_PATH");
   validateRelativePath(totpValidatePath, "KOTAK_NEO_TOTP_VALIDATE_PATH");
   validateRelativePath(scripMasterPath, "KOTAK_NEO_SCRIP_MASTER_PATH");
   validateRelativePath(marginPath, "KOTAK_NEO_MARGIN_PATH");
+  if (!quotesPath.includes("{neo_symbols}") || !quotesPath.includes("{quote_type}")) {
+    throw new Error("KOTAK_NEO_QUOTES_PATH must contain {neo_symbols} and {quote_type}");
+  }
+  validateRelativePath(
+    quotesPath.replaceAll("{neo_symbols}", "symbols").replaceAll("{quote_type}", "all"),
+    "KOTAK_NEO_QUOTES_PATH",
+  );
 
   return {
     host: requiredValue(env.HOST, "HOST"),
@@ -78,6 +87,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       totpValidatePath,
       scripMasterPath,
       marginPath,
+      quotesPath,
       requestTimeoutMs,
     },
   };

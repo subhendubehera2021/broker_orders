@@ -37,12 +37,18 @@ stays server-side; only the current TOTP is submitted by the browser.
 - `GET /margin` — standalone margin calculator UI; requires an active local
   Kotak Neo session to show the calculator form.
 - `GET /scrip-master` — browse and search the full NSE F&O instrument list.
+- `GET /option-chain` — NIFTY option-chain UI; requires an active local
+  Kotak Neo session for expiries and live quotes.
 - `POST /api/auth/login` — submit the current TOTP. The service uses the
   server-side mobile number, UCC, and MPIN to complete authentication.
 - `GET /api/auth/session` — check whether this process has an authenticated
   session. Broker tokens are never returned.
 - `GET /api/scrip-master` — retrieve Scrip Master file paths from Kotak Neo.
 - `GET /api/scrip-master/nse-fo` — retrieve the NSE F&O Scrip Master CSV.
+- `GET /api/options/nifty/expiries` — list NIFTY option expiries from the
+  Scrip Master.
+- `GET /api/options/nifty/chain?expiry=DDMMMYYYY` — get contracts and quote
+  data for a selected NIFTY expiry.
 - `POST /api/margin` — check the required margin for the supplied order details
   using the current authenticated session. This does not place an order.
 - `POST /api/auth/logout` — clear the in-memory session from this process. This
@@ -70,6 +76,11 @@ curl http://127.0.0.1:3000/api/scrip-master
 Browse all NSE F&O instruments at
 [http://127.0.0.1:3000/scrip-master](http://127.0.0.1:3000/scrip-master).
 The page provides search across every field, pagination, and a CSV download.
+
+Open the NIFTY option chain at
+[http://127.0.0.1:3000/option-chain](http://127.0.0.1:3000/option-chain) after
+signing in. It groups calls and puts by strike and supports expiry selection
+and quote refresh.
 
 The margin calculator has a separate UI route at
 [http://127.0.0.1:3000/margin](http://127.0.0.1:3000/margin). Sign in at `/`
@@ -102,7 +113,8 @@ application:
   environment-specific authentication paths.
 - `KOTAK_NEO_SCRIP_MASTER_PATH` — the Scrip Master file-path endpoint.
 - `KOTAK_NEO_MARGIN_PATH` — the check-margin endpoint.
-- `KOTAK_NEO_MARGIN_PATH` — the check-margin endpoint.
+- `KOTAK_NEO_QUOTES_PATH` — quote endpoint template; retain the
+  `{neo_symbols}` and `{quote_type}` placeholders.
 - `KOTAK_NEO_REQUEST_TIMEOUT_MS` — upstream request timeout in milliseconds.
 - `HOST` and `PORT` — service bind address and port.
 

@@ -26,6 +26,11 @@ export interface MarginCheckInput {
   trnsTp: string;
 }
 
+export interface QuoteInstrument {
+  instrumentToken: string;
+  exchangeSegment: "nse_fo";
+}
+
 interface KotakResponse {
   data?: {
     token?: unknown;
@@ -180,6 +185,27 @@ export class KotakNeoClient {
     });
   }
 
+  async getQuotes(instruments: QuoteInstrument[], quoteType = "all"): Promise<unknown> {
+    if (instruments.length === 0 || instruments.length > 50) {
+      throw new KotakNeoError("Quote requests must include between 1 and 50 instruments", 400);
+    }
+
+    const neoSymbols = instruments
+      .map(({ exchangeSegment, instrumentToken }) => `${exchangeSegment}|${instrumentToken}`)
+      .join(",");
+    const path = this.config.quotesPath
+      .replace("{neo_symbols}", encodeURIComponent(neoSymbols))
+      .replace("{quote_type}", encodeURIComponent(quoteType));
+
+    return this.requestJson(path, {
+      method: "GET",
+      headers: {
+        Authorization: this.config.consumerKey,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+    });
+  }
+
   private async post(
     path: string,
     headers: Record<string, string>,
@@ -222,7 +248,10 @@ export class KotakNeoClient {
     }
 
     if (!response.ok) {
-      throw new KotakNeoError("Kotak Neo rejected the API request", response.status);
+      throw new KotakNeoError(
+        `Kotak Neo rejected the API request (HTTP ${response.status})`,
+        response.status,
+      );
     }
 
     let responseBody: unknown;

@@ -10,6 +10,7 @@ const prodConfig = {
   totpValidatePath: "login/1.0/tradeApiValidate",
   scripMasterPath: "script-details/1.0/masterscrip/file-paths",
   marginPath: "quick/user/check-margin",
+  quotesPath: "script-details/1.0/quotes/neosymbol/{neo_symbols}/{quote_type}",
   requestTimeoutMs: 1000,
 };
 
@@ -201,5 +202,43 @@ describe("KotakNeoClient", () => {
     const body = new URLSearchParams(String(capturedInit?.body));
     assert.deepEqual(JSON.parse(body.get("jData") ?? "null"), input);
     assert.deepEqual(response, { data: { margin: "12500.00" } });
+  });
+
+  it("requests quotes for encoded NIFTY option tokens", async () => {
+    let capturedUrl: URL | undefined;
+    let capturedInit: RequestInit | undefined;
+    const quoteResponse = { message: [{ tk: "123", ltp: "120.5" }] };
+    const client = new KotakNeoClient(prodConfig, async (input, init) => {
+      capturedUrl = new URL(input.toString());
+      capturedInit = init;
+      return Response.json(quoteResponse);
+    });
+
+    const result = await client.getQuotes(
+      [
+        { instrumentToken: "123", exchangeSegment: "nse_fo" },
+        { instrumentToken: "456", exchangeSegment: "nse_fo" },
+      ],
+      "all",
+    );
+
+    assert.equal(
+      capturedUrl?.href,
+      "https://mis.kotaksecurities.com/script-details/1.0/quotes/neosymbol/nse_fo%7C123%2Cnse_fo%7C456/all",
+    );
+    assert.equal(capturedInit?.method, "GET");
+    assert.equal(new Headers(capturedInit?.headers).get("authorization"), "consumer-key");
+    assert.deepEqual(result, quoteResponse);
+  });
+
+  it("includes the upstream HTTP status when Kotak rejects a quote request", async () => {
+    const client = new KotakNeoClient(prodConfig, async () =>
+      new Response("Bad request", { status: 400 }),
+    );
+
+    await assert.rejects(
+      client.getQuotes([{ instrumentToken: "123", exchangeSegment: "nse_fo" }]),
+      /Kotak Neo rejected the API request \(HTTP 400\)/,
+    );
   });
 });
