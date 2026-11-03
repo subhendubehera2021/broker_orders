@@ -99,7 +99,7 @@ describe("authentication routes", () => {
     assert.equal(response.statusCode, 200);
     assert.match(String(response.headers["content-type"] ?? ""), /text\/html/);
     assert.equal(response.headers["cache-control"], "no-store");
-    assert.match(response.body, /<h1>NIFTY option chain<\/h1>/);
+    assert.doesNotMatch(response.body, /<h1>NIFTY option chain<\/h1>/);
     assert.match(response.body, /\/api\/options\/nifty\/expiries/);
     assert.match(response.body, /\/api\/options\/nifty\/chain/);
     assert.match(response.body, /Reconnect<\/button>/);

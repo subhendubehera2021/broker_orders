@@ -20,7 +20,6 @@ export function renderOptionChainPage(): string {
       .nav a { color: #a9aea3; font-size: 12px; text-decoration: none; }
       .nav a:hover { color: var(--green); }
       main { padding: clamp(36px, 7vh, 68px) 0 24px; }
-      h1 { margin: 0 0 20px; font-size: clamp(32px, 5vw, 48px); font-weight: 600; letter-spacing: -.055em; }
       .panel { padding: 20px; border: 1px solid #30342c; border-radius: 14px; background: linear-gradient(145deg, #1a1d18, #151713 80%); }
       .controls { display: flex; min-height: 44px; flex-wrap: wrap; align-items: center; gap: 12px; }
       .feed-status { color: var(--muted); font-size: 12px; }
@@ -75,7 +74,6 @@ export function renderOptionChainPage(): string {
         <nav class="nav" aria-label="Main navigation"><a href="/margin">Margin calculator</a><a href="/scrip-master">Scrip Master</a><a href="/">Sign in</a></nav>
       </header>
       <main>
-        <h1>NIFTY option chain</h1>
         <section class="panel" aria-label="NIFTY option chain">
           <div class="controls">
             <label for="expiry">Expiry</label>
