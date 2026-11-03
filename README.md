@@ -21,11 +21,21 @@ npm run dev
 
 The checked-in environment template is configured for Kotak Neo production.
 
+## API documentation
+
+Start the service and open [http://127.0.0.1:3000/docs](http://127.0.0.1:3000/docs)
+for interactive Swagger UI. The generated OpenAPI document is available at
+`/docs/json`.
+
+The login screen is available at [http://127.0.0.1:3000/](http://127.0.0.1:3000/).
+It pre-fills the mobile number and UCC from local server settings. The MPIN
+stays server-side; only the current TOTP is submitted by the browser.
+
 ## Endpoints
 
 - `GET /health` — process health check.
-- `POST /api/auth/login` — submit the registered mobile number, UCC, current
-  TOTP, and MPIN. The service completes both Kotak Neo authentication steps.
+- `POST /api/auth/login` — submit the current TOTP. The service uses the
+  server-side mobile number, UCC, and MPIN to complete authentication.
 - `GET /api/auth/session` — check whether this process has an authenticated
   session. Broker tokens are never returned.
 - `POST /api/auth/logout` — clear the in-memory session from this process. This
@@ -34,12 +44,7 @@ The checked-in environment template is configured for Kotak Neo production.
 Example login request:
 
 ```json
-{
-  "mobileNumber": "+919999996708",
-  "ucc": "YOUR_UCC",
-  "totp": "123456",
-  "mpin": "123456"
-}
+{ "totp": "123456" }
 ```
 
 The login response contains only `{ "authenticated": true }`. Session tokens
@@ -54,6 +59,10 @@ Copy `.env.example` to `.env` and set the values supplied for your Kotak Neo
 application:
 
 - `KOTAK_NEO_CONSUMER_KEY` — the API token generated in the Kotak Neo app or website.
+- `KOTAK_NEO_MOBILE_NUMBER` and `KOTAK_NEO_UCC` — your account's registered
+  mobile number and unique client code.
+- `KOTAK_NEO_MPIN` — your account MPIN. The server uses it for login; it is
+  never sent to or rendered in the browser.
 - `KOTAK_NEO_FIN_KEY` — the Neo financial key for production.
 - `KOTAK_NEO_API_BASE_URL` — the broker API base URL.
 - `KOTAK_NEO_TOTP_LOGIN_PATH` and `KOTAK_NEO_TOTP_VALIDATE_PATH` — the

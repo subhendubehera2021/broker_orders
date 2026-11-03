@@ -11,6 +11,9 @@ const config: AppConfig = {
   kotakNeo: {
     apiBaseUrl: "https://kotak.example/",
     consumerKey: "test-consumer-key",
+    mobileNumber: "+910000000000",
+    ucc: "TESTUCC",
+    mpin: "654321",
     financialKey: "test-financial-key",
     totpLoginPath: "test/login",
     totpValidatePath: "test/validate",
@@ -30,13 +33,66 @@ afterEach(async () => {
 });
 
 describe("authentication routes", () => {
+  it("serves the login page without caching it", async () => {
+    const app = buildApp({ config });
+    apps.push(app);
+
+    const response = await app.inject("/");
+
+    assert.equal(response.statusCode, 200);
+    assert.match(String(response.headers["content-type"] ?? ""), /text\/html/);
+    assert.equal(response.headers["cache-control"], "no-store");
+    assert.match(response.body, /Registered mobile number/);
+    assert.match(response.body, /Authenticator code/);
+    assert.match(response.body, /value="\+910000000000" readonly/);
+    assert.match(response.body, /value="TESTUCC" readonly/);
+    assert.doesNotMatch(response.body, /654321/);
+    assert.doesNotMatch(response.body, /name="mpin"/);
+    assert.match(response.body, /fetch\("\/api\/auth\/login"/);
+  });
+
+  it("serves Swagger UI and an OpenAPI document for the API routes", async () => {
+    const app = buildApp({ config });
+    apps.push(app);
+
+    const uiResponse = await app.inject("/docs/");
+    assert.equal(uiResponse.statusCode, 200);
+    assert.match(String(uiResponse.headers["content-type"] ?? ""), /text\/html/);
+
+    const specResponse = await app.inject("/docs/json");
+    assert.equal(specResponse.statusCode, 200);
+    const spec = specResponse.json();
+    assert.equal(spec.openapi, "3.0.3");
+    assert.deepEqual(Object.keys(spec.paths).sort(), [
+      "/api/auth/login",
+      "/api/auth/logout",
+      "/api/auth/session",
+      "/health",
+    ]);
+    assert.equal(
+      spec.paths["/api/auth/login"].post.requestBody.content["application/json"].schema.required.includes(
+        "totp",
+      ),
+      true,
+    );
+    const loginSchema = spec.paths["/api/auth/login"].post.requestBody.content["application/json"].schema;
+    assert.deepEqual(loginSchema.required, ["totp"]);
+    assert.deepEqual(Object.keys(loginSchema.properties), ["totp"]);
+  });
+
   it("completes login without returning broker tokens", async () => {
     let loginCount = 0;
     const app = buildApp({
       config,
       authClient: {
-        async login() {
+        async login(input) {
           loginCount += 1;
+          assert.deepEqual(input, {
+            mobileNumber: "+910000000000",
+            ucc: "TESTUCC",
+            mpin: "654321",
+            totp: "123456",
+          });
           return authenticatedSession;
         },
       },
@@ -46,12 +102,7 @@ describe("authentication routes", () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/auth/login",
-      payload: {
-        mobileNumber: "+919999996708",
-        ucc: "TESTUCC",
-        totp: "123456",
-        mpin: "123456",
-      },
+      payload: { totp: "123456" },
     });
 
     assert.equal(response.statusCode, 200);
@@ -80,12 +131,7 @@ describe("authentication routes", () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/auth/login",
-      payload: {
-        mobileNumber: "+919999996708",
-        ucc: "TESTUCC",
-        totp: "not-a-totp",
-        mpin: "123456",
-      },
+      payload: { totp: "not-a-totp" },
     });
 
     assert.equal(response.statusCode, 400);
@@ -101,12 +147,7 @@ describe("authentication routes", () => {
     await app.inject({
       method: "POST",
       url: "/api/auth/login",
-      payload: {
-        mobileNumber: "+919999996708",
-        ucc: "TESTUCC",
-        totp: "123456",
-        mpin: "123456",
-      },
+      payload: { totp: "123456" },
     });
     const logoutResponse = await app.inject({ method: "POST", url: "/api/auth/logout" });
 
@@ -128,17 +169,38 @@ describe("authentication routes", () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/auth/login",
-      payload: {
-        mobileNumber: "+919999996708",
-        ucc: "TESTUCC",
-        totp: "123456",
-        mpin: "123456",
-      },
+      payload: { totp: "123456" },
     });
 
     assert.equal(response.statusCode, 503);
     assert.deepEqual(response.json(), {
-      error: "Kotak Neo consumer key is not configured",
+      error: "Kotak Neo login settings are not configured",
+    });
+  });
+
+  it("does not authenticate if server-side MPIN is missing", async () => {
+    const app = buildApp({
+      config: {
+        ...config,
+        kotakNeo: { ...config.kotakNeo, mpin: undefined },
+      },
+      authClient: {
+        async login() {
+          assert.fail("login should not be called without configured credentials");
+        },
+      },
+    });
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      payload: { totp: "123456" },
+    });
+
+    assert.equal(response.statusCode, 503);
+    assert.deepEqual(response.json(), {
+      error: "Kotak Neo login settings are not configured",
     });
   });
 });

@@ -1,6 +1,9 @@
 export interface KotakNeoConfig {
   apiBaseUrl: string;
   consumerKey?: string;
+  mobileNumber?: string;
+  ucc?: string;
+  mpin?: string;
   financialKey: string;
   totpLoginPath: string;
   totpValidatePath: string;
@@ -58,6 +61,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     kotakNeo: {
       apiBaseUrl,
       consumerKey: env.KOTAK_NEO_CONSUMER_KEY || undefined,
+      mobileNumber: env.KOTAK_NEO_MOBILE_NUMBER || undefined,
+      ucc: env.KOTAK_NEO_UCC || undefined,
+      mpin: env.KOTAK_NEO_MPIN || undefined,
       financialKey: requiredValue(env.KOTAK_NEO_FIN_KEY, "KOTAK_NEO_FIN_KEY"),
       totpLoginPath,
       totpValidatePath,
