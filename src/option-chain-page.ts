@@ -24,6 +24,11 @@ export function renderOptionChainPage(): string {
       h1 { margin: 0; font-size: clamp(32px, 5vw, 48px); font-weight: 600; letter-spacing: -.055em; }
       .intro { max-width: 680px; margin: 10px 0 26px; color: var(--muted); font-size: 13px; line-height: 1.7; }
       .panel { padding: 18px; border: 1px solid #30342c; border-radius: 14px; background: linear-gradient(145deg, #1a1d18, #151713 80%); }
+      .market-card { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 18px; width: fit-content; min-width: 240px; margin-bottom: 16px; padding: 14px 18px; border: 1px solid #30342c; border-radius: 10px; background: #171a15; }
+      .market-label { color: #aeb5a2; font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+      .market-price { color: var(--green); font-size: 24px; font-variant-numeric: tabular-nums; font-weight: 650; }
+      .market-meta { width: 100%; color: var(--muted); font-size: 10px; }
+      .market-card button { margin-left: auto; }
       .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
       label { color: #d7dad1; font-size: 11px; font-weight: 600; }
       select, button { height: 40px; padding: 0 12px; border: 1px solid #383d33; border-radius: 7px; background: #11130f; color: #e5e9dd; font: inherit; font-size: 12px; }
@@ -60,7 +65,13 @@ export function renderOptionChainPage(): string {
       <main>
         <p class="eyebrow">Local contract data · NSE F&amp;O</p>
         <h1>NIFTY option chain</h1>
-        <p class="intro">Select an expiry to view NIFTY calls and puts by strike. Contract details are read from the local NSE F&amp;O CSV; this page does not load prices or request live quotes.</p>
+        <p class="intro">The NIFTY index price is fetched live from Kotak Neo. Option contracts and expiries are read from the local NSE F&amp;O CSV; option prices are not loaded.</p>
+        <section class="market-card" aria-label="Live NIFTY index price">
+          <span class="market-label">NIFTY 50</span>
+          <strong class="market-price" id="nifty-price" aria-live="polite">—</strong>
+          <button id="refresh-price" type="button">Reconnect feed</button>
+          <span class="market-meta" id="price-status" role="status" aria-live="polite">Sign in to connect to the live feed</span>
+        </section>
         <section class="panel" aria-label="NIFTY option chain">
           <div class="controls">
             <label for="expiry">Expiry</label>
@@ -88,8 +99,12 @@ export function renderOptionChainPage(): string {
       const status = document.querySelector("#status");
       const tableWrap = document.querySelector("#table-wrap");
       const tableBody = document.querySelector("#rows");
+      const niftyPrice = document.querySelector("#nifty-price");
+      const priceStatus = document.querySelector("#price-status");
+      const refreshPriceButton = document.querySelector("#refresh-price");
       const numberFormat = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 });
       let expiryValues = [];
+      let marketFeed;
 
       function setStatus(text, kind = "") {
         status.textContent = text;
@@ -100,6 +115,49 @@ export function renderOptionChainPage(): string {
         const cell = document.createElement("td");
         cell.textContent = value;
         row.append(cell);
+      }
+
+      function connectNiftyPriceStream() {
+        marketFeed?.close();
+        priceStatus.textContent = "Connecting to Kotak live feed…";
+        const source = new EventSource("/api/market/nifty/stream");
+        marketFeed = source;
+        source.onopen = () => {
+          priceStatus.textContent = "Connected · waiting for index tick…";
+        };
+        source.addEventListener("price", (event) => {
+          if (!(event instanceof MessageEvent)) return;
+          try {
+            const tick = JSON.parse(event.data);
+            niftyPrice.textContent = "₹" + numberFormat.format(tick.price);
+            priceStatus.textContent = "Live · " + new Date(tick.asOf).toLocaleTimeString();
+          } catch {
+            priceStatus.textContent = "Received an invalid NIFTY price update";
+          }
+        });
+        source.addEventListener("market-error", (event) => {
+          if (!(event instanceof MessageEvent)) return;
+          try {
+            const data = JSON.parse(event.data);
+            priceStatus.textContent = data.error || "Kotak live feed disconnected";
+          } catch {
+            priceStatus.textContent = "Kotak live feed disconnected";
+          }
+        });
+        source.onerror = () => {
+          priceStatus.textContent = "Live feed disconnected · reconnecting…";
+          void fetch("/api/auth/session", { headers: { Accept: "application/json" } })
+            .then((response) => response.json())
+            .then((data) => {
+              if (data.authenticated !== true) {
+                source.close();
+                priceStatus.textContent = "Sign in to Kotak Neo to connect to the live feed";
+              }
+            })
+            .catch(() => {
+              priceStatus.textContent = "Could not verify the Kotak Neo session";
+            });
+        };
       }
 
       function renderChain(data) {
@@ -149,6 +207,7 @@ export function renderOptionChainPage(): string {
       }
 
       async function initialize() {
+        void initializeLivePrice();
         try {
           const response = await fetch("/api/options/nifty/expiries", { headers: { Accept: "application/json" } });
           const data = await response.json();
@@ -168,8 +227,26 @@ export function renderOptionChainPage(): string {
           setStatus(error instanceof Error ? error.message : "Could not initialize the option chain.", "error");
         }
       }
+
+      async function initializeLivePrice() {
+        try {
+          const response = await fetch("/api/auth/session", { headers: { Accept: "application/json" } });
+          if (!response.ok) throw new Error("Could not check your Kotak Neo session.");
+          const session = await response.json();
+          if (session.authenticated !== true) {
+            priceStatus.textContent = "Sign in to Kotak Neo to connect to the live feed";
+            return;
+          }
+          connectNiftyPriceStream();
+        } catch (error) {
+          priceStatus.textContent = error instanceof Error ? error.message : "Could not load live NIFTY price.";
+        }
+      }
+
       expirySelect.addEventListener("change", loadChain);
-      expirySelect.addEventListener("change", loadChain);
+      refreshPriceButton.addEventListener("click", () => {
+        void initializeLivePrice();
+      });
       initialize();
     </script>
   </body>

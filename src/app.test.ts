@@ -20,6 +20,8 @@ const config: AppConfig = {
     scripMasterPath: "script-details/1.0/masterscrip/file-paths",
     marginPath: "quick/user/check-margin",
     quotesPath: "script-details/1.0/quotes/neosymbol/{neo_symbols}/{quote_type}",
+    niftyIndexToken: "Nifty 50",
+    niftyIndexSegment: "nse_cm",
     requestTimeoutMs: 1000,
   },
 };
@@ -98,7 +100,8 @@ describe("authentication routes", () => {
     assert.match(response.body, /<h1>NIFTY option chain<\/h1>/);
     assert.match(response.body, /\/api\/options\/nifty\/expiries/);
     assert.match(response.body, /\/api\/options\/nifty\/chain/);
-    assert.match(response.body, /does not load prices or request live quotes/);
+    assert.match(response.body, /option prices are not loaded/);
+    assert.match(response.body, /api\/market\/nifty\/stream/);
     assert.doesNotMatch(response.body, /Refresh quotes|>LTP</);
   });
 
@@ -119,6 +122,7 @@ describe("authentication routes", () => {
       "/api/auth/logout",
       "/api/auth/session",
       "/api/margin",
+      "/api/market/nifty/stream",
       "/api/options/nifty/chain",
       "/api/options/nifty/expiries",
       "/api/scrip-master",
@@ -433,6 +437,52 @@ describe("authentication routes", () => {
         },
       ],
     });
+  });
+
+  it("requires authentication before opening the NIFTY live-price stream", async () => {
+    let streamRequests = 0;
+    const app = buildApp({
+      config,
+      authClient: {
+        async login() { return authenticatedSession; },
+        async getScripMaster() { return { data: { filesPaths: [] } }; },
+        streamNiftyIndexPrice() {
+          streamRequests += 1;
+          return () => {};
+        },
+      },
+    });
+    apps.push(app);
+
+    const unauthorized = await app.inject("/api/market/nifty/stream");
+    assert.equal(unauthorized.statusCode, 401);
+    assert.equal(streamRequests, 0);
+  });
+
+  it("relays live index ticks to the page as server-sent events", async () => {
+    let streamStopped = false;
+    const app = buildApp({
+      config,
+      authClient: {
+        async login() { return authenticatedSession; },
+        async getScripMaster() { return { data: { filesPaths: [] } }; },
+        streamNiftyIndexPrice(_session, onPrice, onError) {
+          onPrice({ price: 24250.75, asOf: "2030-01-30T10:00:00.000Z" });
+          onError(new Error("Kotak market-data WebSocket disconnected"));
+          return () => { streamStopped = true; };
+        },
+      },
+    });
+    apps.push(app);
+
+    await app.inject({ method: "POST", url: "/api/auth/login", payload: { totp: "123456" } });
+    const response = await app.inject("/api/market/nifty/stream");
+
+    assert.equal(response.statusCode, 200);
+    assert.match(String(response.headers["content-type"] ?? ""), /text\/event-stream/);
+    assert.match(response.body, /event: price\ndata: \{"price":24250\.75,"asOf":"2030-01-30T10:00:00\.000Z"\}/);
+    assert.match(response.body, /event: market-error/);
+    assert.equal(streamStopped, true);
   });
 
   it("returns HTTP 400 when the selected expiry has no NIFTY contracts", async () => {

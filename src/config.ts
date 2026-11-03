@@ -10,6 +10,8 @@ export interface KotakNeoConfig {
   scripMasterPath: string;
   marginPath: string;
   quotesPath: string;
+  niftyIndexToken?: string;
+  niftyIndexSegment?: string;
   requestTimeoutMs: number;
 }
 
@@ -88,6 +90,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       scripMasterPath,
       marginPath,
       quotesPath,
+      niftyIndexToken: env.KOTAK_NEO_NIFTY_INDEX_TOKEN || undefined,
+      niftyIndexSegment: env.KOTAK_NEO_NIFTY_INDEX_SEGMENT || undefined,
       requestTimeoutMs,
     },
   };

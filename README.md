@@ -37,12 +37,14 @@ stays server-side; only the current TOTP is submitted by the browser.
 - `GET /margin` — standalone margin calculator UI; requires an active local
   Kotak Neo session to show the calculator form.
 - `GET /scrip-master` — browse and search the full NSE F&O instrument list.
-- `GET /option-chain` — NIFTY option-chain UI using local contract data; no
-  Kotak Neo session or live quotes required.
+- `GET /option-chain` — NIFTY option-chain UI using local contract data, with
+  optional live index streaming after Kotak Neo sign-in.
 - `POST /api/auth/login` — submit the current TOTP. The service uses the
   server-side mobile number, UCC, and MPIN to complete authentication.
 - `GET /api/auth/session` — check whether this process has an authenticated
   session. Broker tokens are never returned.
+- `GET /api/market/nifty/stream` — stream live NIFTY 50 index prices from the
+  Kotak Neo market-data WebSocket, relayed as Server-Sent Events.
 - `GET /api/scrip-master` — retrieve Scrip Master file paths from Kotak Neo.
 - `GET /api/scrip-master/nse-fo` — retrieve the NSE F&O Scrip Master CSV.
 - `GET /api/options/nifty/expiries` — list NIFTY option expiries from the
@@ -79,11 +81,17 @@ The page provides search across every field, pagination, and a CSV download.
 
 Open the NIFTY option chain at
 [http://127.0.0.1:3000/option-chain](http://127.0.0.1:3000/option-chain) without
-signing in. Contract details and expiries are read from the local
-[`src/nse_fo.csv`](./src/nse_fo.csv) file. The page does not load prices or call
-Kotak Neo for live quotes. Replace the CSV with an updated NSE F&O Scrip Master
-when you need new contracts. The page groups calls and puts by strike and
-supports expiry selection.
+signing in to browse contracts. Contract details and expiries are read from the
+local [`src/nse_fo.csv`](./src/nse_fo.csv) file. The page also displays the live
+NIFTY 50 index price from Kotak Neo's WebSocket feed; sign in first to enable
+it. Only the index price is live—option contract prices are not loaded. The
+stream uses the account-specific `feedUrl` returned during login and the
+configured `KOTAK_NEO_NIFTY_INDEX_TOKEN` and
+`KOTAK_NEO_NIFTY_INDEX_SEGMENT` values (`Nifty 50` and `nse_cm` in `.env.example`).
+Replace the CSV with an updated NSE F&O Scrip Master when you need new
+contracts. The page groups calls and puts by strike and supports expiry
+selection. Streaming follows Kotak's
+[market-data WebSocket guide](https://github.com/Kotak-Neo/Kotak-Neo/blob/main/docs/market-data-apis/websocket.md).
 
 The margin calculator has a separate UI route at
 [http://127.0.0.1:3000/margin](http://127.0.0.1:3000/margin). Sign in at `/`

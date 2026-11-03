@@ -10,8 +10,25 @@ interface LoginInput {
 export interface AuthenticatedSession {
   sid: string;
   tradeToken: string;
+  feedUrl?: string;
+  user?: string;
   rid?: string;
   serverId?: string;
+}
+
+export interface NiftyIndexTick {
+  price: number;
+  asOf: string;
+}
+
+interface MarketDataSocket {
+  readyState: number;
+  onopen: ((event: Event) => void) | null;
+  onmessage: ((event: MessageEvent) => void) | null;
+  onerror: ((event: Event) => void) | null;
+  onclose: ((event: CloseEvent) => void) | null;
+  send(data: string): void;
+  close(): void;
 }
 
 export interface MarginCheckInput {
@@ -28,13 +45,14 @@ export interface MarginCheckInput {
 
 export interface QuoteInstrument {
   instrumentToken: string;
-  exchangeSegment: "nse_fo";
+  exchangeSegment: string;
 }
 
 interface KotakResponse {
   data?: {
     token?: unknown;
     sid?: unknown;
+    feedUrl?: unknown;
     rid?: unknown;
     hsServerId?: unknown;
   };
@@ -54,6 +72,8 @@ export class KotakNeoClient {
   constructor(
     private readonly config: KotakNeoConfig & { consumerKey: string },
     private readonly fetchImpl: typeof fetch = fetch,
+    private readonly webSocketFactory: (url: string) => MarketDataSocket = (url) =>
+      new WebSocket(url),
   ) {}
 
   async login(input: LoginInput): Promise<AuthenticatedSession> {
@@ -93,8 +113,133 @@ export class KotakNeoClient {
     return {
       sid,
       tradeToken,
+      feedUrl: optionalString(tradeResponse.data?.feedUrl),
+      user: input.ucc,
       rid: optionalString(tradeResponse.data?.rid),
       serverId: optionalString(tradeResponse.data?.hsServerId),
+    };
+  }
+
+  streamNiftyIndexPrice(
+    session: AuthenticatedSession,
+    onPrice: (tick: NiftyIndexTick) => void,
+    onError: (error: Error) => void,
+  ): () => void {
+    if (!session.feedUrl || !session.user) {
+      onError(new KotakNeoError("Kotak market-data feed details are missing; sign in again", 503));
+      return () => {};
+    }
+
+    let socket: MarketDataSocket;
+    try {
+      socket = this.webSocketFactory(toWebSocketUrl(session.feedUrl));
+    } catch {
+      onError(new KotakNeoError("Could not connect to the Kotak market-data feed", 503));
+      return () => {};
+    }
+
+    let stopped = false;
+    let authenticated = false;
+    let divider = 100;
+    let errorReported = false;
+
+    const reportError = (error: Error) => {
+      if (stopped || errorReported) return;
+      errorReported = true;
+      onError(error);
+    };
+    const emitFrame = (frame: ArrayBuffer) => {
+      for (const price of parseNiftyIndexFrame(frame, divider)) {
+        onPrice({ price, asOf: new Date().toISOString() });
+      }
+    };
+
+    socket.onopen = () => {
+      socket.send(
+        JSON.stringify({
+          user: session.user,
+          auth: session.sid,
+          format: "native_batch",
+          source: "NEOTRADEAPI",
+          sdk_version: 1.1,
+          sdk_date: new Date().toISOString().slice(0, 10),
+        }),
+      );
+    };
+
+    socket.onmessage = (event) => {
+      void (async () => {
+        if (typeof event.data === "string") {
+          let message: unknown;
+          try {
+            message = JSON.parse(event.data);
+          } catch {
+            reportError(new KotakNeoError("Kotak market-data feed sent an invalid message", 502));
+            return;
+          }
+          if (!isRecord(message)) return;
+
+          const messageCode = Number(message.message_code);
+          if (messageCode === 1120) {
+            reportError(new KotakNeoError("Kotak market-data feed authentication failed", 401));
+            return;
+          }
+          if (messageCode === 1119 || messageCode === 1117) {
+            const exchanges = isRecord(message.exchanges) ? message.exchanges : undefined;
+            const nseCash = exchanges && isRecord(exchanges.nse_cm) ? exchanges.nse_cm : undefined;
+            const receivedDivider = Number(nseCash?.divider);
+            if (Number.isFinite(receivedDivider) && receivedDivider > 0) {
+              divider = receivedDivider;
+            }
+            if (messageCode === 1117) {
+              if (message.format !== "native_batch") {
+                reportError(new KotakNeoError("Kotak market-data feed returned an unsupported format", 502));
+                return;
+              }
+              const { niftyIndexSegment, niftyIndexToken } = this.config;
+              if (!niftyIndexSegment || !niftyIndexToken) {
+                reportError(new KotakNeoError("NIFTY index feed settings are not configured", 503));
+                return;
+              }
+              authenticated = true;
+              const inputtoken = `${niftyIndexSegment}|${niftyIndexToken}`;
+              socket.send(JSON.stringify({ event: "subscribeIndices", inputtoken }));
+              socket.send(JSON.stringify({ event: "snapshotIndices", inputtoken }));
+            }
+            return;
+          }
+          if (messageCode === 1109 && Number(message.error_code) !== 0) {
+            reportError(new KotakNeoError("Kotak rejected the NIFTY index subscription", 502));
+          }
+          return;
+        }
+
+        if (!authenticated || stopped) return;
+        if (event.data instanceof ArrayBuffer) {
+          emitFrame(event.data);
+          return;
+        }
+        emitFrame(await event.data.arrayBuffer());
+      })().catch(() => {
+        reportError(new KotakNeoError("Could not decode the Kotak NIFTY index feed", 502));
+      });
+    };
+
+    socket.onerror = () => {
+      reportError(new KotakNeoError("Kotak market-data WebSocket connection failed", 503));
+    };
+    socket.onclose = () => {
+      reportError(new KotakNeoError("Kotak market-data WebSocket disconnected", 503));
+    };
+
+    return () => {
+      if (stopped) return;
+      stopped = true;
+      socket.onopen = null;
+      socket.onmessage = null;
+      socket.onerror = null;
+      socket.onclose = null;
+      if (socket.readyState < 2) socket.close();
     };
   }
 
@@ -185,7 +330,11 @@ export class KotakNeoClient {
     });
   }
 
-  async getQuotes(instruments: QuoteInstrument[], quoteType = "all"): Promise<unknown> {
+  async getQuotes(
+    session: AuthenticatedSession,
+    instruments: QuoteInstrument[],
+    quoteType = "all",
+  ): Promise<unknown> {
     if (instruments.length === 0 || instruments.length > 50) {
       throw new KotakNeoError("Quote requests must include between 1 and 50 instruments", 400);
     }
@@ -201,6 +350,9 @@ export class KotakNeoClient {
       method: "GET",
       headers: {
         Authorization: this.config.consumerKey,
+        Auth: session.tradeToken,
+        Sid: session.sid,
+        "neo-fin-key": this.config.financialKey,
         "Content-Type": "application/x-www-form-urlencoded",
       },
     });
@@ -226,6 +378,7 @@ export class KotakNeoClient {
         ? {
             token: data.token,
             sid: data.sid,
+            feedUrl: data.feedUrl,
             rid: data.rid,
             hsServerId: data.hsServerId,
           }
@@ -358,6 +511,48 @@ function ensureTrailingSlash(value: string): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function toWebSocketUrl(value: string): string {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error("Invalid Kotak market-data feed URL");
+  }
+  if (url.protocol === "https:") {
+    url.protocol = "wss:";
+  } else if (url.protocol !== "wss:") {
+    throw new Error("Kotak market-data feed URL must use HTTPS or WSS");
+  }
+  if (url.username || url.password) {
+    throw new Error("Kotak market-data feed URL must not contain credentials");
+  }
+  return url.toString();
+}
+
+function parseNiftyIndexFrame(frame: ArrayBuffer, divider: number): number[] {
+  const view = new DataView(frame);
+  const prices: number[] = [];
+  let offset = 0;
+
+  while (offset + 2 <= view.byteLength) {
+    const packetLength = view.getUint16(offset, true);
+    if (packetLength < 9 || offset + packetLength > view.byteLength) break;
+
+    if (
+      packetLength >= 87 &&
+      view.getUint16(offset + 2, true) === 7207 &&
+      view.getInt8(offset + 4) === 1
+    ) {
+      const price = view.getInt32(offset + 29, true) / divider;
+      if (Number.isFinite(price) && price > 0) prices.push(price);
+    }
+
+    offset += packetLength;
+  }
+
+  return prices;
 }
 
 function requiredString(value: unknown): string {

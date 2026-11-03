@@ -8,6 +8,7 @@ import {
   KotakNeoError,
   type AuthenticatedSession,
   type MarginCheckInput,
+  type NiftyIndexTick,
 } from "./kotak-neo-client.js";
 import { renderLoginPage } from "./login-page.js";
 import { renderMarginPage } from "./margin-page.js";
@@ -33,6 +34,11 @@ interface AuthClient {
   login(input: KotakLoginInput): Promise<AuthenticatedSession>;
   getScripMaster(): Promise<unknown>;
   getNseFoScripMaster?(): Promise<string>;
+  streamNiftyIndexPrice?(
+    session: AuthenticatedSession,
+    onPrice: (tick: NiftyIndexTick) => void,
+    onError: (error: Error) => void,
+  ): () => void;
   checkMargin?(session: AuthenticatedSession, input: MarginCheckInput): Promise<unknown>;
 }
 
@@ -103,7 +109,7 @@ export function buildApp({
           { name: "Authentication", description: "Kotak Neo session authentication" },
           { name: "Scrip Master", description: "Kotak Neo instrument master files" },
           { name: "Margin", description: "Kotak Neo margin estimates" },
-          { name: "Options", description: "NIFTY option contracts from the local NSE F&O file" },
+          { name: "Options", description: "NIFTY contracts and live index market data" },
         ],
       },
     });
@@ -112,6 +118,7 @@ export function buildApp({
     });
 
     let session: AuthenticatedSession | undefined;
+    const activeNiftyStreams = new Set<() => void>();
     let niftyContractsLoad: Promise<NiftyOptionContract[]> | undefined;
 
     const getNiftyContracts = (): Promise<NiftyOptionContract[]> => {
@@ -162,6 +169,92 @@ export function buildApp({
       }),
     );
 
+    api.get(
+      "/api/market/nifty/stream",
+      {
+        schema: {
+          tags: ["Options"],
+          summary: "Stream live NIFTY index prices over Server-Sent Events",
+          response: {
+            200: {
+              type: "string",
+              description: "Server-Sent Events containing NIFTY index price updates.",
+            },
+            401: errorResponseSchema,
+            503: errorResponseSchema,
+          },
+        },
+      },
+      async (request, reply) => {
+        if (!session) {
+          return reply.code(401).send({ error: "Sign in to Kotak Neo to stream the live NIFTY price" });
+        }
+        if (!client?.streamNiftyIndexPrice) {
+          return reply.code(503).send({ error: "Kotak Neo market-data WebSocket is not configured" });
+        }
+
+        const authenticatedSession = session;
+        reply.hijack();
+        const response = reply.raw;
+        response.writeHead(200, {
+          "Cache-Control": "no-cache, no-transform",
+          Connection: "keep-alive",
+          "Content-Type": "text/event-stream; charset=utf-8",
+          "X-Accel-Buffering": "no",
+        });
+        response.write("retry: 5000\n\n");
+
+        let closed = false;
+        let stopFeed: (() => void) | undefined;
+        const keepAlive = setInterval(() => {
+          if (!closed && !response.destroyed) response.write(": keep-alive\n\n");
+        }, 20_000);
+        const closeStream = () => {
+          if (closed) return;
+          closed = true;
+          clearInterval(keepAlive);
+          response.off("close", closeStream);
+          activeNiftyStreams.delete(closeStream);
+          stopFeed?.();
+          if (!response.destroyed && !response.writableEnded) response.end();
+        };
+        activeNiftyStreams.add(closeStream);
+        response.once("close", closeStream);
+
+        try {
+          stopFeed = client.streamNiftyIndexPrice(
+            authenticatedSession,
+            (tick) => {
+              if (!closed && !response.destroyed) {
+                response.write(`event: price\ndata: ${JSON.stringify(tick)}\n\n`);
+              }
+            },
+            (error) => {
+              request.log.error(
+                { errorName: error.name, errorMessage: error.message },
+                "NIFTY live WebSocket stream failed",
+              );
+              if (!closed && !response.destroyed) {
+                response.write(`event: market-error\ndata: ${JSON.stringify({ error: error.message })}\n\n`);
+                closeStream();
+              }
+            },
+          );
+          if (closed) stopFeed();
+        } catch (error) {
+          request.log.error(
+            { errorName: error instanceof Error ? error.name : "UnknownError" },
+            "NIFTY live WebSocket stream could not start",
+          );
+          response.write(
+            `event: market-error\ndata: ${JSON.stringify({ error: "NIFTY live price stream could not start" })}\n\n`,
+          );
+          closeStream();
+        }
+        return reply;
+      },
+    );
+
     api.post<{ Body: LoginBody }>(
       "/api/auth/login",
       {
@@ -198,6 +291,7 @@ export function buildApp({
           return reply.code(503).send({ error: "Kotak Neo login settings are not configured" });
         }
 
+        for (const closeStream of activeNiftyStreams) closeStream();
         session = undefined;
         try {
           session = await client.login({
@@ -237,6 +331,7 @@ export function buildApp({
         },
       },
       async () => {
+        for (const closeStream of activeNiftyStreams) closeStream();
         session = undefined;
         return { authenticated: false };
       },

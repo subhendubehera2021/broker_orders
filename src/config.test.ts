@@ -16,6 +16,8 @@ const validEnvironment: NodeJS.ProcessEnv = {
   KOTAK_NEO_SCRIP_MASTER_PATH: "script-details/1.0/masterscrip/file-paths",
   KOTAK_NEO_MARGIN_PATH: "quick/user/check-margin",
   KOTAK_NEO_QUOTES_PATH: "script-details/1.0/quotes/neosymbol/{neo_symbols}/{quote_type}",
+  KOTAK_NEO_NIFTY_INDEX_TOKEN: "Nifty 50",
+  KOTAK_NEO_NIFTY_INDEX_SEGMENT: "nse_cm",
   KOTAK_NEO_REQUEST_TIMEOUT_MS: "10000",
 };
 
@@ -36,6 +38,8 @@ describe("loadConfig", () => {
         scripMasterPath: "script-details/1.0/masterscrip/file-paths",
         marginPath: "quick/user/check-margin",
         quotesPath: "script-details/1.0/quotes/neosymbol/{neo_symbols}/{quote_type}",
+        niftyIndexToken: "Nifty 50",
+        niftyIndexSegment: "nse_cm",
         requestTimeoutMs: 10000,
       },
     });
