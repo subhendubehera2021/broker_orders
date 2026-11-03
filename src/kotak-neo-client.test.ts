@@ -541,6 +541,7 @@ describe("KotakNeoClient", () => {
       },
       {
         tradingSymbol: "NIFTY30JAN2030CE",
+        instrumentToken: "12345",
         transactionType: "B",
         quantity: "50",
         product: "MIS",
@@ -560,9 +561,11 @@ describe("KotakNeoClient", () => {
     const headers = new Headers(capturedInit?.headers);
     assert.equal(headers.get("auth"), "test-trade-token");
     assert.equal(headers.get("sid"), "test-sid");
+    assert.equal(headers.get("neo-fin-key"), "test-prod-financial-key");
     assert.equal(headers.get("content-type"), "application/x-www-form-urlencoded");
     const body = new URLSearchParams(String(capturedInit?.body));
-    assert.deepEqual(Object.fromEntries(body), {
+    assert.deepEqual([...body.keys()], ["jData"]);
+    assert.deepEqual(JSON.parse(body.get("jData") ?? "null"), {
       am: "NO",
       dq: "0",
       es: "nse_fo",
@@ -596,6 +599,7 @@ describe("KotakNeoClient", () => {
       baseUrl: "https://neo-gw.kotaksecurities.com/api/",
     }, {
         tradingSymbol: "NIFTY30JAN2030CE",
+        instrumentToken: "12345",
         transactionType: "B",
         quantity: "25",
         product: "MIS",
@@ -613,6 +617,60 @@ describe("KotakNeoClient", () => {
     assert.equal(capturedHeaders?.get("auth"), "test-trade-token");
     assert.equal(capturedHeaders?.get("sid"), "test-sid");
     assert.deepEqual(response, { stat: "Ok" });
+  });
+
+  it("includes the documented bracket-order fields and scrip token", async () => {
+    let capturedInit: RequestInit | undefined;
+    const client = new KotakNeoClient(prodConfig, async (_input, init) => {
+      capturedInit = init;
+      return Response.json({ stat: "Ok", nOrdNo: "order-id" });
+    });
+
+    await client.placeNiftyOptionOrder(testSession, {
+      tradingSymbol: "NIFTY30JAN2030CE",
+      instrumentToken: "12345",
+      transactionType: "B",
+      quantity: "25",
+      product: "BO",
+      orderType: "L",
+      price: "100",
+      validity: "DAY",
+      amo: "NO",
+      disclosedQuantity: "0",
+      marketProtection: "0",
+      triggerPrice: "0",
+      squareOffType: "Ticks",
+      stopLossType: "Ticks",
+      stopLossValue: "20",
+      squareOffValue: "40",
+      trailingStopLoss: "Y",
+      trailingSlValue: "5",
+    });
+
+    const form = new URLSearchParams(String(capturedInit?.body));
+    const orderData = JSON.parse(form.get("jData") ?? "null");
+    assert.deepEqual(
+      {
+        pc: orderData.pc,
+        tk: orderData.tk,
+        sot: orderData.sot,
+        slt: orderData.slt,
+        slv: orderData.slv,
+        sov: orderData.sov,
+        tlt: orderData.tlt,
+        tsv: orderData.tsv,
+      },
+      {
+        pc: "BO",
+        tk: "12345",
+        sot: "Ticks",
+        slt: "Ticks",
+        slv: "20",
+        sov: "40",
+        tlt: "Y",
+        tsv: "5",
+      },
+    );
   });
 
   it("requests quotes for encoded NIFTY option tokens", async () => {
@@ -661,6 +719,33 @@ describe("KotakNeoClient", () => {
     await assert.rejects(
       client.getQuotes(testSession, [{ instrumentToken: "123", exchangeSegment: "nse_fo" }]),
       /Kotak Neo rejected the API request \(HTTP 400\): Invalid quote type/,
+    );
+  });
+
+  it("extracts Kotak's nested errMsg field from an order rejection", async () => {
+    const client = new KotakNeoClient(prodConfig, async () =>
+      Response.json(
+        { stat: "Not_Ok", data: { errMsg: "Invalid order parameters" } },
+        { status: 400 },
+      ),
+    );
+
+    await assert.rejects(
+      client.placeNiftyOptionOrder(testSession, {
+        tradingSymbol: "NIFTY30JAN2030CE",
+        instrumentToken: "12345",
+        transactionType: "B",
+        quantity: "25",
+        product: "MIS",
+        orderType: "L",
+        price: "100",
+        validity: "DAY",
+        amo: "NO",
+        disclosedQuantity: "0",
+        marketProtection: "0",
+        triggerPrice: "0",
+      }),
+      /Kotak Neo rejected the API request \(HTTP 400\): Invalid order parameters/,
     );
   });
 });

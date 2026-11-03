@@ -62,9 +62,10 @@ export interface QuoteInstrument {
 
 export interface PlaceNiftyOptionOrderInput {
   tradingSymbol: string;
+  instrumentToken: string;
   transactionType: "B" | "S";
   quantity: string;
-  product: "NRML" | "MIS";
+  product: "NRML" | "MIS" | "CNC" | "CO" | "BO" | "MTF";
   orderType: "L" | "MKT" | "SL" | "SL-M";
   price: string;
   validity: "DAY" | "IOC";
@@ -73,6 +74,13 @@ export interface PlaceNiftyOptionOrderInput {
   marketProtection: string;
   triggerPrice: string;
   tag?: string;
+  squareOffType?: "Absolute" | "Ticks";
+  stopLossType?: "Absolute" | "Ticks";
+  stopLossValue?: string;
+  squareOffValue?: string;
+  trailingStopLoss?: "Y" | "N";
+  trailingSlValue?: string;
+  lastTradedPrice?: string;
 }
 
 interface KotakResponse {
@@ -479,7 +487,7 @@ export class KotakNeoClient {
         503,
       );
     }
-    const body = new URLSearchParams({
+    const orderData: Record<string, string> = {
       am: input.amo,
       dq: input.disclosedQuantity,
       es: "nse_fo",
@@ -494,8 +502,29 @@ export class KotakNeoClient {
       ts: input.tradingSymbol,
       tt: input.transactionType,
       os: this.config.orderSource,
-    });
-    if (input.tag) body.set("ig", input.tag);
+    };
+    if (input.tag) orderData.ig = input.tag;
+    if (input.product === "BO") {
+      if (
+        !input.squareOffType ||
+        !input.stopLossType ||
+        !input.stopLossValue ||
+        !input.squareOffValue ||
+        !input.trailingStopLoss ||
+        input.trailingSlValue === undefined
+      ) {
+        throw new KotakNeoError("Bracket orders require all bracket parameters", 400);
+      }
+      orderData.tk = input.instrumentToken;
+      orderData.sot = input.squareOffType;
+      orderData.slt = input.stopLossType;
+      orderData.slv = input.stopLossValue;
+      orderData.sov = input.squareOffValue;
+      orderData.tlt = input.trailingStopLoss;
+      orderData.tsv = input.trailingSlValue;
+      if (input.lastTradedPrice) orderData.lat = input.lastTradedPrice;
+    }
+    const body = new URLSearchParams({ jData: JSON.stringify(orderData) });
 
     const baseUrl = session.baseUrl ?? this.config.apiBaseUrl;
     const path = new URL(this.config.placeOrderPath, ensureTrailingSlash(baseUrl));
@@ -505,6 +534,7 @@ export class KotakNeoClient {
       headers: {
         Auth: session.tradeToken,
         Sid: session.sid,
+        "neo-fin-key": this.config.financialKey,
         "Content-Type": "application/x-www-form-urlencoded",
       },
       body,
@@ -601,8 +631,28 @@ function findErrorMessage(value: unknown): string | undefined {
   }
   if (!isRecord(value)) return undefined;
 
-  for (const key of ["message", "error_description", "description", "error"]) {
+  const messageKeys = [
+    "message",
+    "errMsg",
+    "errorMessage",
+    "error_message",
+    "error_msg",
+    "error_description",
+    "description",
+    "faultstring",
+    "faultString",
+    "detail",
+    "reason",
+    "error",
+  ];
+  for (const key of messageKeys) {
     const message = findErrorMessage(value[key]);
+    if (message) return message;
+  }
+
+  for (const nestedValue of Object.values(value)) {
+    if (!Array.isArray(nestedValue) && !isRecord(nestedValue)) continue;
+    const message = findErrorMessage(nestedValue);
     if (message) return message;
   }
   return undefined;

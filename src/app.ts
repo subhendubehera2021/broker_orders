@@ -39,7 +39,7 @@ interface NiftyOptionOrderBody {
   tradingSymbol: string;
   transactionType: "B" | "S";
   quantity: string;
-  product: "NRML" | "MIS";
+  product: "NRML" | "MIS" | "CNC" | "CO" | "BO" | "MTF";
   orderType: "L" | "MKT" | "SL" | "SL-M";
   price: string;
   validity: "DAY" | "IOC";
@@ -48,6 +48,13 @@ interface NiftyOptionOrderBody {
   marketProtection?: string;
   triggerPrice?: string;
   tag?: string;
+  squareOffType?: "Absolute" | "Ticks";
+  stopLossType?: "Absolute" | "Ticks";
+  stopLossValue?: string;
+  squareOffValue?: string;
+  trailingStopLoss?: "Y" | "N";
+  trailingSlValue?: string;
+  lastTradedPrice?: string;
 }
 
 interface AuthClient {
@@ -732,7 +739,7 @@ export function buildApp({
           tags: ["Options"],
           summary: "Place a live NIFTY option order",
           description:
-            "Submits a live NSE F&O order. The expiry and trading symbol must match the local NSE F&O Scrip Master. Quantity is in units and must be a whole number of lots.",
+            "Submits a live NIFTY option order. Supports limit, market, stop-limit, stop-market, cover, and bracket orders with MIS, NRML, CO, or BO products. Quantity must be a whole number of lots.",
           body: {
             type: "object",
             required: [
@@ -751,7 +758,7 @@ export function buildApp({
               tradingSymbol: { type: "string", minLength: 1, maxLength: 64 },
               transactionType: { type: "string", enum: ["B", "S"] },
               quantity: { type: "string", pattern: "^[1-9]\\d{0,7}$" },
-              product: { type: "string", enum: ["NRML", "MIS"] },
+              product: { type: "string", enum: ["NRML", "MIS", "CNC", "CO", "BO", "MTF"] },
               orderType: { type: "string", enum: ["L", "MKT", "SL", "SL-M"] },
               price: { type: "string", pattern: "^\\d+(\\.\\d{1,4})?$" },
               validity: { type: "string", enum: ["DAY", "IOC"] },
@@ -760,6 +767,13 @@ export function buildApp({
               marketProtection: { type: "string", pattern: "^\\d+(\\.\\d{1,2})?$" },
               triggerPrice: { type: "string", pattern: "^\\d+(\\.\\d{1,4})?$" },
               tag: { type: "string", minLength: 1, maxLength: 20 },
+              squareOffType: { type: "string", enum: ["Absolute", "Ticks"] },
+              stopLossType: { type: "string", enum: ["Absolute", "Ticks"] },
+              stopLossValue: { type: "string", pattern: "^\\d+(\\.\\d{1,4})?$" },
+              squareOffValue: { type: "string", pattern: "^\\d+(\\.\\d{1,4})?$" },
+              trailingStopLoss: { type: "string", enum: ["Y", "N"] },
+              trailingSlValue: { type: "string", pattern: "^\\d+(\\.\\d{1,4})?$" },
+              lastTradedPrice: { type: "string", pattern: "^\\d+(\\.\\d{1,4})?$" },
             },
           },
           response: {
@@ -795,11 +809,37 @@ export function buildApp({
         const body = request.body;
         const isMarketOrder = body.orderType === "MKT" || body.orderType === "SL-M";
         const isStopOrder = body.orderType === "SL" || body.orderType === "SL-M";
+        const isCoverOrder = body.product === "CO";
         if (
           isMarketOrder !== (Number(body.price) === 0) ||
-          isStopOrder !== (body.triggerPrice !== undefined && Number(body.triggerPrice) > 0)
+          (!isMarketOrder && Number(body.price) <= 0) ||
+          (isStopOrder || isCoverOrder) !==
+            (body.triggerPrice !== undefined && Number(body.triggerPrice) > 0)
         ) {
-          return reply.code(400).send({ error: "Price and trigger price do not match the order type" });
+          return reply.code(400).send({
+            error: "Price and trigger price do not match the order type and product",
+          });
+        }
+        if (body.product === "CNC" || body.product === "MTF") {
+          return reply.code(400).send({
+            error: `${body.product} is not supported for NIFTY F&O contracts; use MIS, NRML, CO, or BO`,
+          });
+        }
+        if (
+          body.product === "BO" &&
+          (!body.squareOffType ||
+            !body.stopLossType ||
+            !body.stopLossValue ||
+            Number(body.stopLossValue) <= 0 ||
+            !body.squareOffValue ||
+            Number(body.squareOffValue) <= 0 ||
+            !body.trailingStopLoss ||
+            body.trailingSlValue === undefined ||
+            (body.trailingStopLoss === "Y" && Number(body.trailingSlValue) <= 0))
+        ) {
+          return reply.code(400).send({
+            error: "Bracket orders require positive square-off and stop-loss values and trailing settings",
+          });
         }
         const invalidStopLimitPrice =
           body.orderType === "SL" &&
@@ -847,6 +887,7 @@ export function buildApp({
           brokerRequestStarted = true;
           return await client.placeNiftyOptionOrder(authenticatedSession, {
             tradingSymbol: contract.tradingSymbol,
+            instrumentToken: contract.instrumentToken,
             transactionType: body.transactionType,
             quantity: body.quantity,
             product: body.product,
@@ -858,6 +899,13 @@ export function buildApp({
             marketProtection: body.marketProtection ?? "0",
             triggerPrice: body.triggerPrice ?? "0",
             ...(body.tag ? { tag: body.tag } : {}),
+            ...(body.squareOffType ? { squareOffType: body.squareOffType } : {}),
+            ...(body.stopLossType ? { stopLossType: body.stopLossType } : {}),
+            ...(body.stopLossValue ? { stopLossValue: body.stopLossValue } : {}),
+            ...(body.squareOffValue ? { squareOffValue: body.squareOffValue } : {}),
+            ...(body.trailingStopLoss ? { trailingStopLoss: body.trailingStopLoss } : {}),
+            ...(body.trailingSlValue !== undefined ? { trailingSlValue: body.trailingSlValue } : {}),
+            ...(body.lastTradedPrice ? { lastTradedPrice: body.lastTradedPrice } : {}),
           });
         } catch (error) {
           const statusCode = orderRequestStatus(error);
@@ -868,7 +916,12 @@ export function buildApp({
             {
               statusCode,
               errorName: error instanceof Error ? error.name : "UnknownError",
-              ...(error instanceof KotakNeoError ? { upstreamStatusCode: error.statusCode } : {}),
+              ...(error instanceof KotakNeoError
+                ? {
+                    upstreamStatusCode: error.statusCode,
+                    upstreamErrorMessage: error.message,
+                  }
+                : {}),
             },
             "Kotak Neo NIFTY option order failed",
           );

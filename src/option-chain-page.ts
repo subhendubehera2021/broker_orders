@@ -80,6 +80,7 @@ export function renderOptionChainPage(): string {
       .order-ltp { color: #9ce0cb; font-variant-numeric: tabular-nums; font-weight: 700; }
       .order-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
       .order-fields label { display: grid; gap: 7px; color: #a9b6c4; font-size: 10px; }
+      .order-fields [hidden] { display: none; }
       .order-fields input, .order-value { width: 100%; min-height: 40px; padding: 0 10px; border: 1px solid #303d4b; border-radius: 7px; background: #0e141b; color: #e3eaf1; font: inherit; font-size: 13px; }
       .order-value { display: flex; align-items: center; color: #cbd6df; font-size: 12px; }
       .order-note { margin: 16px 0; color: #9aa8b7; font-size: 11px; line-height: 1.5; }
@@ -143,23 +144,89 @@ export function renderOptionChainPage(): string {
         <h2 class="order-title" id="order-title">Place BUY order</h2>
         <p class="order-contract"><span id="order-contract"></span><span class="order-ltp" id="order-ltp" aria-live="polite">LTP unavailable</span></p>
         <div class="order-fields">
+          <label for="order-side">Side
+            <select id="order-side">
+              <option value="B">BUY</option>
+              <option value="S">SELL</option>
+            </select>
+          </label>
           <label for="order-quantity">Quantity (units)
             <input id="order-quantity" type="number" min="1" step="1" required>
           </label>
-          <label>Product
-            <span class="order-value">MIS · Intraday</span>
+          <label for="order-product">Product
+            <select id="order-product">
+              <option value="MIS">MIS · Intraday</option>
+              <option value="NRML">NRML · Carry forward</option>
+              <option value="CO">CO · Cover order</option>
+              <option value="BO">BO · Bracket order</option>
+            </select>
           </label>
-          <label>Order type
-            <span class="order-value">Stop-loss limit (SL)</span>
+          <label for="order-type">Order type
+            <select id="order-type">
+              <option value="L">Limit (L)</option>
+              <option value="MKT">Market (MKT)</option>
+              <option value="SL">Stop-limit (SL)</option>
+              <option value="SL-M">Stop-market (SL-M)</option>
+            </select>
           </label>
-          <label for="order-trigger-price">Trigger price (₹)
-            <input id="order-trigger-price" type="number" min="0.05" step="0.05" required>
+          <label for="order-price" id="order-price-field">Price (₹)
+            <input id="order-price" type="number" min="0.05" step="0.05" required>
           </label>
-          <label for="order-limit-price">Limit price (₹)
-            <input id="order-limit-price" type="number" min="0.05" step="0.05" required>
+          <label for="order-trigger-price" id="order-trigger-field" hidden>Trigger price (₹)
+            <input id="order-trigger-price" type="number" min="0.05" step="0.05">
+          </label>
+          <label for="order-validity">Validity
+            <select id="order-validity">
+              <option value="DAY">DAY</option>
+              <option value="IOC">IOC</option>
+            </select>
+          </label>
+          <label for="order-amo">After market order
+            <select id="order-amo">
+              <option value="NO">NO</option>
+              <option value="YES">YES</option>
+            </select>
+          </label>
+          <label for="order-disclosed-quantity">Disclosed quantity
+            <input id="order-disclosed-quantity" type="number" min="0" step="1" value="0" required>
+          </label>
+          <label for="order-market-protection">Market protection
+            <input id="order-market-protection" type="number" min="0" step="0.01" value="0" required>
+          </label>
+          <label for="order-tag">Order tag
+            <input id="order-tag" type="text" maxlength="20">
           </label>
         </div>
-        <p class="order-note">Quantity starts at one lot. Set both prices; for a BUY stop-limit order, the limit price must be at least the trigger price. Review the live-order confirmation before submitting.</p>
+        <div class="order-fields" id="order-bracket-fields" hidden>
+          <label for="order-square-off-type">Square-off type
+            <select id="order-square-off-type">
+              <option value="Ticks">Ticks</option>
+              <option value="Absolute">Absolute</option>
+            </select>
+          </label>
+          <label for="order-square-off-value">Square-off value
+            <input id="order-square-off-value" type="number" min="0.01" step="0.01">
+          </label>
+          <label for="order-stop-loss-type">Stop-loss type
+            <select id="order-stop-loss-type">
+              <option value="Ticks">Ticks</option>
+              <option value="Absolute">Absolute</option>
+            </select>
+          </label>
+          <label for="order-stop-loss-value">Stop-loss value
+            <input id="order-stop-loss-value" type="number" min="0.01" step="0.01">
+          </label>
+          <label for="order-trailing-stop">Trailing stop-loss
+            <select id="order-trailing-stop">
+              <option value="N">No</option>
+              <option value="Y">Yes</option>
+            </select>
+          </label>
+          <label for="order-trailing-value">Trailing stop value
+            <input id="order-trailing-value" type="number" min="0" step="0.01" value="0">
+          </label>
+        </div>
+        <p class="order-note">Quantity must be a whole number of lots. CNC and MTF are not available for NIFTY F&amp;O. Review the live-order confirmation before submitting.</p>
         <p class="order-error" id="order-error" role="alert"></p>
         <div class="order-actions">
           <button type="button" id="order-cancel">Cancel</button>
@@ -179,8 +246,25 @@ export function renderOptionChainPage(): string {
       const orderContractLabel = document.querySelector("#order-contract");
       const orderLtpLabel = document.querySelector("#order-ltp");
       const orderQuantityInput = document.querySelector("#order-quantity");
+      const orderSideSelect = document.querySelector("#order-side");
+      const orderProductSelect = document.querySelector("#order-product");
+      const orderTypeSelect = document.querySelector("#order-type");
+      const orderPriceField = document.querySelector("#order-price-field");
+      const orderPriceInput = document.querySelector("#order-price");
+      const orderTriggerField = document.querySelector("#order-trigger-field");
       const orderTriggerInput = document.querySelector("#order-trigger-price");
-      const orderLimitInput = document.querySelector("#order-limit-price");
+      const orderValiditySelect = document.querySelector("#order-validity");
+      const orderAmoSelect = document.querySelector("#order-amo");
+      const orderDisclosedQuantityInput = document.querySelector("#order-disclosed-quantity");
+      const orderMarketProtectionInput = document.querySelector("#order-market-protection");
+      const orderTagInput = document.querySelector("#order-tag");
+      const orderBracketFields = document.querySelector("#order-bracket-fields");
+      const orderSquareOffTypeSelect = document.querySelector("#order-square-off-type");
+      const orderSquareOffValueInput = document.querySelector("#order-square-off-value");
+      const orderStopLossTypeSelect = document.querySelector("#order-stop-loss-type");
+      const orderStopLossValueInput = document.querySelector("#order-stop-loss-value");
+      const orderTrailingStopSelect = document.querySelector("#order-trailing-stop");
+      const orderTrailingValueInput = document.querySelector("#order-trailing-value");
       const orderError = document.querySelector("#order-error");
       const orderSubmitButton = document.querySelector("#order-submit");
       const numberFormat = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 });
@@ -244,8 +328,21 @@ export function renderOptionChainPage(): string {
           orderContractLabel.textContent = contract.tradingSymbol + " · " + expirySelect.value;
           updateOrderLtp();
           orderQuantityInput.value = String(contract.lotSize);
+          orderSideSelect.value = "B";
+          orderProductSelect.value = "MIS";
+          orderTypeSelect.value = "SL";
+          orderValiditySelect.value = "DAY";
+          orderAmoSelect.value = "NO";
           orderTriggerInput.value = "";
-          orderLimitInput.value = "";
+          orderPriceInput.value = "";
+          orderDisclosedQuantityInput.value = "0";
+          orderMarketProtectionInput.value = "0";
+          orderTagInput.value = "";
+          orderSquareOffValueInput.value = "";
+          orderStopLossValueInput.value = "";
+          orderTrailingStopSelect.value = "N";
+          orderTrailingValueInput.value = "0";
+          updateOrderFields();
           orderDialog.showModal();
           orderQuantityInput.focus();
         } catch (error) {
@@ -260,6 +357,33 @@ export function renderOptionChainPage(): string {
             : "LTP unavailable";
       }
 
+      function updateOrderFields() {
+        const orderType = orderTypeSelect.value;
+        const product = orderProductSelect.value;
+        const marketOrder = orderType === "MKT" || orderType === "SL-M";
+        const triggerRequired =
+          orderType === "SL" || orderType === "SL-M" || product === "CO";
+        orderPriceField.hidden = marketOrder;
+        orderPriceInput.required = !marketOrder;
+        orderPriceInput.disabled = marketOrder;
+        if (marketOrder) orderPriceInput.value = "0";
+        else if (orderPriceInput.value === "0") orderPriceInput.value = "";
+        orderTriggerField.hidden = !triggerRequired;
+        orderTriggerInput.required = triggerRequired;
+        if (!triggerRequired) orderTriggerInput.value = "";
+        orderBracketFields.hidden = product !== "BO";
+        orderSquareOffValueInput.required = product === "BO";
+        orderStopLossValueInput.required = product === "BO";
+        orderTrailingValueInput.required = product === "BO" && orderTrailingStopSelect.value === "Y";
+        if (product === "BO" && orderTrailingStopSelect.value === "N") {
+        orderTrailingValueInput.value = "0";
+        }
+      }
+
+      orderTypeSelect.addEventListener("change", updateOrderFields);
+      orderProductSelect.addEventListener("change", updateOrderFields);
+      orderTrailingStopSelect.addEventListener("change", updateOrderFields);
+
       orderForm.addEventListener("submit", async (event) => {
         event.preventDefault();
         if (!selectedOrderContract || !orderForm.reportValidity()) return;
@@ -267,7 +391,13 @@ export function renderOptionChainPage(): string {
         const quantity = Number(orderQuantityInput.value);
         const lotSize = Number(selectedOrderContract.lotSize);
         const triggerPrice = Number(orderTriggerInput.value);
-        const limitPrice = Number(orderLimitInput.value);
+        const orderType = orderTypeSelect.value;
+        const product = orderProductSelect.value;
+        const side = orderSideSelect.value;
+        const isMarketOrder = orderType === "MKT" || orderType === "SL-M";
+        const price = isMarketOrder ? 0 : Number(orderPriceInput.value);
+        const triggerRequired =
+          orderType === "SL" || orderType === "SL-M" || product === "CO";
         if (
           !Number.isSafeInteger(quantity) ||
           !Number.isSafeInteger(lotSize) ||
@@ -277,28 +407,84 @@ export function renderOptionChainPage(): string {
           orderError.textContent = "Quantity must be a whole number of lots (" + lotSize + " units per lot).";
           return;
         }
+        if (Number(orderDisclosedQuantityInput.value) > quantity) {
+          orderError.textContent = "Disclosed quantity cannot exceed order quantity.";
+          return;
+        }
+        if (!isMarketOrder && (!Number.isFinite(price) || price <= 0)) {
+          orderError.textContent = "Enter a positive price for a limit order.";
+          return;
+        }
+        if (triggerRequired && (!Number.isFinite(triggerPrice) || triggerPrice <= 0)) {
+          orderError.textContent = "Enter a positive trigger price for this order.";
+          return;
+        }
         if (
-          !Number.isFinite(triggerPrice) ||
-          !Number.isFinite(limitPrice) ||
-          triggerPrice <= 0 ||
-          limitPrice < triggerPrice
+          orderType === "SL" &&
+          (side === "B" ? price < triggerPrice : price > triggerPrice)
         ) {
-          orderError.textContent = "For a BUY stop-limit order, enter a positive trigger and a limit at or above it.";
+          orderError.textContent =
+            side === "B"
+              ? "For a BUY stop-limit order, the limit price must be at least the trigger price."
+              : "For a SELL stop-limit order, the limit price must be at most the trigger price.";
+          return;
+        }
+        if (
+          product === "BO" &&
+          (Number(orderSquareOffValueInput.value) <= 0 ||
+            Number(orderStopLossValueInput.value) <= 0 ||
+            (orderTrailingStopSelect.value === "Y" && Number(orderTrailingValueInput.value) <= 0))
+        ) {
+          orderError.textContent = "Bracket order values must be positive; trailing value is required when enabled.";
           return;
         }
 
         const lots = quantity / lotSize;
+        const sideLabel = side === "B" ? "BUY" : "SELL";
+        const orderTypeLabel = orderTypeSelect.selectedOptions[0].textContent;
+        const productLabel = orderProductSelect.selectedOptions[0].textContent;
         const confirmation =
-          "Place a LIVE BUY order?\\n\\n" +
+          "Place a LIVE " + sideLabel + " order?\\n\\n" +
           selectedOrderContract.tradingSymbol + " · " + expirySelect.value + "\\n" +
-          quantity + " units (" + lots + " lot" + (lots === 1 ? "" : "s") + ") · MIS · SL · DAY\\n" +
-          "Trigger ₹" + numberFormat.format(triggerPrice) +
-          " · Limit ₹" + numberFormat.format(limitPrice);
+          quantity + " units (" + lots + " lot" + (lots === 1 ? "" : "s") + ") · " +
+          productLabel + " · " + orderTypeLabel + " · " + orderValiditySelect.value +
+          "\\nPrice ₹" + numberFormat.format(price) +
+          (triggerRequired ? " · Trigger ₹" + numberFormat.format(triggerPrice) : "");
         if (!window.confirm(confirmation)) return;
 
         orderSubmitButton.disabled = true;
         orderSubmitButton.textContent = "Submitting…";
         orderError.textContent = "";
+        const orderTag = orderTagInput.value.trim();
+        const orderPayload = {
+          expiry: expirySelect.value,
+          tradingSymbol: selectedOrderContract.tradingSymbol,
+          transactionType: side,
+          quantity: String(quantity),
+          product,
+          orderType,
+          price: String(price),
+          validity: orderValiditySelect.value,
+          amo: orderAmoSelect.value,
+          disclosedQuantity: orderDisclosedQuantityInput.value,
+          marketProtection: orderMarketProtectionInput.value,
+          triggerPrice: triggerRequired ? String(triggerPrice) : "0",
+          ...(product === "BO"
+            ? {
+                squareOffType: orderSquareOffTypeSelect.value,
+                stopLossType: orderStopLossTypeSelect.value,
+                stopLossValue: orderStopLossValueInput.value,
+                squareOffValue: orderSquareOffValueInput.value,
+                trailingStopLoss: orderTrailingStopSelect.value,
+                trailingSlValue:
+                  orderTrailingStopSelect.value === "Y" ? orderTrailingValueInput.value : "0",
+                ...(optionPrices.has(selectedOrderContract.tradingSymbol)
+                  ? { lastTradedPrice: String(optionPrices.get(selectedOrderContract.tradingSymbol)) }
+                  : {}),
+              }
+            : {}),
+          ...(orderTag ? { tag: orderTag } : {}),
+        };
         try {
           const response = await fetch("/api/options/nifty/order", {
             method: "POST",
@@ -306,17 +492,7 @@ export function renderOptionChainPage(): string {
               Accept: "application/json",
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({
-              expiry: expirySelect.value,
-              tradingSymbol: selectedOrderContract.tradingSymbol,
-              transactionType: "B",
-              quantity: String(quantity),
-              product: "MIS",
-              orderType: "SL",
-              price: String(limitPrice),
-              triggerPrice: String(triggerPrice),
-              validity: "DAY",
-            }),
+            body: JSON.stringify(orderPayload),
           });
           const result = await response.json();
           if (!response.ok) {
@@ -354,9 +530,11 @@ export function renderOptionChainPage(): string {
           );
         } finally {
           orderSubmitButton.disabled = false;
-          orderSubmitButton.textContent = "Review & place live BUY";
+          orderSubmitButton.textContent = "Review & place live " + (orderSideSelect.value === "B" ? "BUY" : "SELL");
         }
       });
+
+      updateOrderFields();
 
       document.querySelector("#order-cancel").addEventListener("click", () => {
         orderDialog.close();

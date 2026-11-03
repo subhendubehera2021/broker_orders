@@ -116,7 +116,12 @@ describe("authentication routes", () => {
     assert.match(response.body, /selectedOrderContract\?\.tradingSymbol === tick\.tradingSymbol/);
     assert.match(response.body, /api\/options\/nifty\/order/);
     assert.match(response.body, /window\.confirm\(confirmation\)/);
-    assert.match(response.body, /orderType: "SL"/);
+    assert.match(response.body, /id="order-type"/);
+    assert.match(response.body, /<option value="SL-M">Stop-market \(SL-M\)<\/option>/);
+    assert.match(response.body, /<option value="BO">BO · Bracket order<\/option>/);
+    assert.match(response.body, /orderType,/);
+    assert.match(response.body, /squareOffType: orderSquareOffTypeSelect\.value/);
+    assert.match(response.body, /trailingStopLoss: orderTrailingStopSelect\.value/);
     assert.match(response.body, /option-row:hover \.buy-button/);
     assert.match(response.body, /className = "option-price"/);
     assert.match(response.body, /api\/market\/nifty\/stream\?expiry=/);
@@ -757,6 +762,7 @@ describe("authentication routes", () => {
     assert.deepEqual(orderSession, { ...authenticatedSession, serverId: "server-id" });
     assert.deepEqual(orderInput, {
       tradingSymbol: "NIFTY30JAN2030CE",
+      instrumentToken: "123",
       transactionType: "B",
       quantity: "50",
       product: "MIS",
@@ -769,6 +775,112 @@ describe("authentication routes", () => {
       triggerPrice: "0",
       tag: "test-order",
     });
+  });
+
+  it("accepts each documented NIFTY order type and sends bracket parameters", async () => {
+    const expiryEpoch = String(Date.UTC(2030, 0, 30) / 1000 - 315_511_200);
+    const csv = [
+      "pSymbol,pInstType,pSymbolName,pTrdSymbol,pOptionType,pExpiryDate,dStrikePrice;,lLotSize",
+      `123,OPTIDX,NIFTY,NIFTY30JAN2030CE,CE,${expiryEpoch},2500000,25`,
+    ].join("\n");
+    const submittedOrders: unknown[] = [];
+    const app = buildApp({
+      config,
+      authClient: {
+        async login() { return authenticatedSession; },
+        async getScripMaster() { return { data: { filesPaths: [] } }; },
+        async placeNiftyOptionOrder(_session, input) {
+          submittedOrders.push(input);
+          return { stat: "Ok" };
+        },
+      },
+      optionChainCsvLoader: async () => csv,
+    });
+    apps.push(app);
+
+    await app.inject({ method: "POST", url: "/api/auth/login", payload: { totp: "123456" } });
+    const basePayload = {
+      expiry: "30JAN2030",
+      tradingSymbol: "NIFTY30JAN2030CE",
+      transactionType: "B",
+      quantity: "25",
+      product: "MIS",
+      orderType: "L",
+      price: "100",
+      validity: "DAY",
+    };
+    const orderVariations = [
+      { orderType: "L" },
+      { orderType: "MKT", price: "0" },
+      { orderType: "SL", triggerPrice: "90" },
+      { orderType: "SL-M", price: "0", triggerPrice: "90" },
+      { product: "CO", triggerPrice: "90" },
+      {
+        product: "BO",
+        squareOffType: "Ticks",
+        stopLossType: "Absolute",
+        stopLossValue: "10",
+        squareOffValue: "20",
+        trailingStopLoss: "N",
+        trailingSlValue: "0",
+      },
+    ];
+
+    for (const variation of orderVariations) {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/options/nifty/order",
+        payload: { ...basePayload, ...variation },
+      });
+      assert.equal(response.statusCode, 200, response.body);
+    }
+
+    assert.equal(submittedOrders.length, orderVariations.length);
+    assert.equal(
+      (submittedOrders[5] as { instrumentToken: string }).instrumentToken,
+      "123",
+    );
+    assert.equal(
+      (submittedOrders[5] as { trailingSlValue: string }).trailingSlValue,
+      "0",
+    );
+  });
+
+  it("rejects CNC and MTF products for NIFTY F&O", async () => {
+    let orderCalls = 0;
+    const app = buildApp({
+      config,
+      authClient: {
+        async login() { return authenticatedSession; },
+        async getScripMaster() { return { data: { filesPaths: [] } }; },
+        async placeNiftyOptionOrder() {
+          orderCalls += 1;
+          return { stat: "Ok" };
+        },
+      },
+    });
+    apps.push(app);
+
+    await app.inject({ method: "POST", url: "/api/auth/login", payload: { totp: "123456" } });
+    for (const product of ["CNC", "MTF"]) {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/options/nifty/order",
+        payload: {
+          expiry: "30JAN2030",
+          tradingSymbol: "NIFTY30JAN2030CE",
+          transactionType: "B",
+          quantity: "25",
+          product,
+          orderType: "L",
+          price: "100",
+          validity: "DAY",
+        },
+      });
+      assert.equal(response.statusCode, 400);
+      assert.match(response.json().error, new RegExp(product));
+    }
+    assert.equal(orderCalls, 0);
   });
 
   it("rejects a BUY stop-limit order whose limit is below its trigger", async () => {

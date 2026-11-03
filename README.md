@@ -128,8 +128,15 @@ the current session token, session ID, and financial key server-side.
 `POST /api/options/nifty/order` places a real order with Kotak Neo. The endpoint
 only accepts a NIFTY option whose exact expiry and trading symbol are present in
 the local `src/nse_fo.csv` Scrip Master. Quantity is in units and must be a
-multiple of that contract's lot size. Supported products are `NRML` and `MIS`;
-order types are `L`, `MKT`, `SL`, and `SL-M`.
+multiple of that contract's lot size. The order ticket supports BUY and SELL,
+`L`, `MKT`, `SL`, and `SL-M` order types, and the `MIS`, `NRML`, `CO`, and
+`BO` products. `CNC` and `MTF` are not valid for NIFTY F&O. Market and
+stop-market orders send price `"0"`; stop orders and cover orders require a
+trigger price. Bracket orders require square-off/stop-loss types and values,
+plus trailing-stop settings. The server resolves the bracket order's scrip
+token from the local Scrip Master rather than accepting one from the browser.
+`DAY`/`IOC`, AMO, disclosed quantity, market protection, and an optional tag
+are also configurable in the ticket.
 
 Example limit-order request:
 
@@ -140,14 +147,16 @@ curl http://127.0.0.1:3000/api/options/nifty/order \
 ```
 
 Replace the example symbol and quantity with a contract and lot multiple from
-the selected local expiry. The server supplies Kotak's exchange segment and
-order defaults, and does not expose broker tokens to the browser. Order
-submission has no automatic retry or idempotency guarantee: if the API returns
-502, 503, or 504, the request may have reached Kotak despite the uncertain
-response. Check the Kotak Neo order book before submitting it again. The option
-chain BUY buttons open a ticket prefilled with one lot; select the trigger and
-limit prices and confirm the live order before submission. The UI currently
-uses the `MIS` product and a stop-loss-limit (`SL`) order.
+the selected local expiry. For a bracket order (`"product":"BO"`), also supply
+`squareOffType`, `squareOffValue`, `stopLossType`, `stopLossValue`,
+`trailingStopLoss`, and `trailingSlValue`; the server adds Kotak's `tk` field
+from the Scrip Master. The server supplies Kotak's exchange segment and order
+defaults, and does not accept a broker token from the browser. Order submission
+has no automatic retry or idempotency guarantee: if the API returns 502, 503,
+or 504, the request may have reached Kotak despite the uncertain response.
+Check the Kotak Neo order book before submitting it again. The option-chain BUY
+buttons open a ticket prefilled with one lot; review and confirm the live order
+before submission.
 
 ## Configuration
 
