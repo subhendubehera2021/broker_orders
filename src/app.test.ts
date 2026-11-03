@@ -100,10 +100,15 @@ describe("authentication routes", () => {
     assert.match(String(response.headers["content-type"] ?? ""), /text\/html/);
     assert.equal(response.headers["cache-control"], "no-store");
     assert.match(response.body, /<h1>NIFTY option chain<\/h1>/);
-    assert.match(response.body, /three closest strikes below and above the live NIFTY price/);
     assert.match(response.body, /\/api\/options\/nifty\/expiries/);
     assert.match(response.body, /\/api\/options\/nifty\/chain/);
-    assert.match(response.body, /option prices are not loaded/);
+    assert.match(response.body, /Reconnect<\/button>/);
+    assert.match(response.body, /spotPrice\.id = "nifty-spot-price"/);
+    assert.match(response.body, /spotRow\.className = "spot-row"/);
+    assert.match(response.body, /button\.textContent = "BUY"/);
+    assert.match(response.body, /button\.disabled = true/);
+    assert.match(response.body, /tr:hover \.buy-button/);
+    assert.doesNotMatch(response.body, /<th>Token<\/th>|<th>Lot size<\/th>/);
     assert.match(response.body, /api\/market\/nifty\/stream/);
     assert.doesNotMatch(response.body, /Refresh quotes|>LTP</);
   });
