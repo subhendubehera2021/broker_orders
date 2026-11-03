@@ -88,6 +88,10 @@ it. Only the index price is live—option contract prices are not loaded. The
 stream uses the account-specific `feedUrl` returned during login and the
 configured `KOTAK_NEO_NIFTY_INDEX_TOKEN` and
 `KOTAK_NEO_NIFTY_INDEX_SEGMENT` values (`Nifty 50` and `nse_cm` in `.env.example`).
+For the selected expiry, the page displays the three nearest strike prices
+below and above the live NIFTY price (six call contracts and six put contracts).
+The contracts are loaded through `/api/options/nifty/chain` and filtered around
+the latest index tick in the browser.
 Replace the CSV with an updated NSE F&O Scrip Master when you need new
 contracts. The page groups calls and puts by strike and supports expiry
 selection. Streaming follows Kotak's

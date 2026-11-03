@@ -65,7 +65,7 @@ export function renderOptionChainPage(): string {
       <main>
         <p class="eyebrow">Local contract data · NSE F&amp;O</p>
         <h1>NIFTY option chain</h1>
-        <p class="intro">The NIFTY index price is fetched live from Kotak Neo. Option contracts and expiries are read from the local NSE F&amp;O CSV; option prices are not loaded.</p>
+        <p class="intro">Select an expiry to see the three closest strikes below and above the live NIFTY price, with both calls and puts at each strike. Contract details come from the local NSE F&amp;O CSV; option prices are not loaded.</p>
         <section class="market-card" aria-label="Live NIFTY index price">
           <span class="market-label">NIFTY 50</span>
           <strong class="market-price" id="nifty-price" aria-live="polite">—</strong>
@@ -105,6 +105,9 @@ export function renderOptionChainPage(): string {
       const numberFormat = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 });
       let expiryValues = [];
       let marketFeed;
+      let liveSpotPrice;
+      let loadedContracts = [];
+      let displayedStrikesKey = "";
 
       function setStatus(text, kind = "") {
         status.textContent = text;
@@ -129,8 +132,13 @@ export function renderOptionChainPage(): string {
           if (!(event instanceof MessageEvent)) return;
           try {
             const tick = JSON.parse(event.data);
+            if (!Number.isFinite(tick.price) || tick.price <= 0) {
+              throw new Error("Kotak returned an invalid NIFTY price");
+            }
+            liveSpotPrice = tick.price;
             niftyPrice.textContent = "₹" + numberFormat.format(tick.price);
             priceStatus.textContent = "Live · " + new Date(tick.asOf).toLocaleTimeString();
+            renderChain();
           } catch {
             priceStatus.textContent = "Received an invalid NIFTY price update";
           }
@@ -160,16 +168,40 @@ export function renderOptionChainPage(): string {
         };
       }
 
-      function renderChain(data) {
+      function renderChain() {
+        if (liveSpotPrice === undefined) {
+          tableWrap.hidden = true;
+          if (loadedContracts.length > 0) {
+            setStatus("Waiting for the live NIFTY price to select nearby strikes.");
+          }
+          return;
+        }
+
         const strikes = new Map();
-        for (const contract of data.contracts) {
+        for (const contract of loadedContracts) {
           const pair = strikes.get(contract.strike) ?? {};
           pair[contract.optionType] = contract;
           strikes.set(contract.strike, pair);
         }
-        const sorted = [...strikes.entries()].sort((left, right) => right[0] - left[0]);
+        const pairedStrikes = [...strikes.entries()]
+          .filter(([, pair]) => pair.CE && pair.PE)
+          .map(([strike]) => strike);
+        const belowStrikes = pairedStrikes
+          .filter((strike) => strike < liveSpotPrice)
+          .sort((left, right) => right - left)
+          .slice(0, 3);
+        const aboveStrikes = pairedStrikes
+          .filter((strike) => strike > liveSpotPrice)
+          .sort((left, right) => left - right)
+          .slice(0, 3);
+        const sorted = [...belowStrikes, ...aboveStrikes].sort((left, right) => right - left);
+        const strikesKey = sorted.join(",") || "none";
+        if (strikesKey === displayedStrikesKey) return;
+        displayedStrikesKey = strikesKey;
+
         tableBody.replaceChildren();
-        for (const [strike, pair] of sorted) {
+        for (const strike of sorted) {
+          const pair = strikes.get(strike);
           const row = document.createElement("tr");
           const call = pair.CE;
           const put = pair.PE;
@@ -182,8 +214,20 @@ export function renderOptionChainPage(): string {
           makeCell(row, put?.tradingSymbol ?? "—");
           tableBody.append(row);
         }
+        if (sorted.length === 0) {
+          tableWrap.hidden = true;
+          setStatus(
+            "No paired call and put contracts are available around the current NIFTY price.",
+            "error",
+          );
+          return;
+        }
         tableWrap.hidden = false;
-        setStatus(sorted.length + " strikes · " + data.contracts.length + " contracts · local CSV data");
+        setStatus(
+          "Showing " + sorted.length + " strikes (" + belowStrikes.length + " below, " +
+          aboveStrikes.length + " above) · " + sorted.length * 2 +
+          " contracts · centered on live NIFTY · local CSV data",
+        );
       }
 
       async function loadChain() {
@@ -191,6 +235,8 @@ export function renderOptionChainPage(): string {
         if (!expiry) return;
         expirySelect.disabled = true;
         tableWrap.hidden = true;
+        displayedStrikesKey = "";
+        loadedContracts = [];
         setStatus("Loading local option contracts…");
         try {
           const response = await fetch("/api/options/nifty/chain?expiry=" + encodeURIComponent(expiry), {
@@ -198,7 +244,8 @@ export function renderOptionChainPage(): string {
           });
           const data = await response.json();
           if (!response.ok) throw new Error(data.error || "Could not load the option chain.");
-          renderChain(data);
+          loadedContracts = data.contracts;
+          renderChain();
         } catch (error) {
           setStatus(error instanceof Error ? error.message : "Could not load the option chain.", "error");
         } finally {

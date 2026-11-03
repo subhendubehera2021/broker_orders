@@ -9,6 +9,44 @@ export interface NiftyOptionContract {
   lotSize: string;
 }
 
+export function selectNearbyNiftyOptionContracts(
+  contracts: NiftyOptionContract[],
+  spotPrice: number,
+  strikesPerSide = 3,
+): NiftyOptionContract[] {
+  if (!Number.isFinite(spotPrice) || spotPrice <= 0) {
+    throw new RangeError("NIFTY spot price must be a positive number");
+  }
+  if (!Number.isInteger(strikesPerSide) || strikesPerSide < 1) {
+    throw new RangeError("Strikes per side must be a positive integer");
+  }
+
+  const contractsByStrike = new Map<
+    number,
+    Partial<Record<NiftyOptionContract["optionType"], NiftyOptionContract>>
+  >();
+  for (const contract of contracts) {
+    const pair = contractsByStrike.get(contract.strike) ?? {};
+    pair[contract.optionType] = contract;
+    contractsByStrike.set(contract.strike, pair);
+  }
+
+  const pairedStrikes = [...contractsByStrike.entries()]
+    .filter(([, pair]) => pair.CE && pair.PE)
+    .map(([strike]) => strike);
+  const below = pairedStrikes
+    .filter((strike) => strike < spotPrice)
+    .sort((left, right) => right - left)
+    .slice(0, strikesPerSide);
+  const above = pairedStrikes
+    .filter((strike) => strike > spotPrice)
+    .sort((left, right) => left - right)
+    .slice(0, strikesPerSide);
+  const selectedStrikes = new Set([...below, ...above]);
+
+  return contracts.filter(({ strike }) => selectedStrikes.has(strike));
+}
+
 const KOTAK_EXPIRY_EPOCH_OFFSET_SECONDS = 315_511_200;
 
 export function parseNiftyOptionContracts(csv: string): NiftyOptionContract[] {

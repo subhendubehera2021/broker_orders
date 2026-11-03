@@ -238,7 +238,7 @@ const loginPageTemplate = `<!doctype html>
             <div class="field">
               <label for="totp">Authenticator code</label>
               <input id="totp" name="totp" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" minlength="6" maxlength="6" placeholder="6-digit TOTP" aria-describedby="totp-hint" required>
-              <p class="field-hint" id="totp-hint">Use the current code from your authenticator app.</p>
+              <p class="field-hint" id="totp-hint">Use the current code from your authenticator app. Sign-in submits automatically after six digits.</p>
             </div>
             <p class="message" id="form-message" role="status" aria-live="polite"></p>
             <button class="submit" id="submit-button" type="submit">
@@ -273,10 +273,17 @@ const loginPageTemplate = `<!doctype html>
       const submitLabel = document.querySelector("#submit-label");
       const sessionPanel = document.querySelector("#session-panel");
       const logoutButton = document.querySelector("#logout-button");
+      const totpInput = document.querySelector("#totp");
       function showMessage(text, kind = "error") {
         message.textContent = text;
         message.dataset.kind = kind;
       }
+
+      totpInput.addEventListener("input", () => {
+        const digits = totpInput.value.replace(/\\D/g, "").slice(0, 6);
+        if (totpInput.value !== digits) totpInput.value = digits;
+        if (digits.length === 6 && !submitButton.disabled) form.requestSubmit();
+      });
 
       function setAuthenticated(authenticated) {
         form.hidden = authenticated;

@@ -50,6 +50,8 @@ describe("authentication routes", () => {
     assert.match(response.body, /Registered mobile number/);
     assert.match(response.body, /Authenticator code/);
     assert.match(response.body, /value="\+910000000000" readonly/);
+    assert.match(response.body, /Sign-in submits automatically after six digits/);
+    assert.match(response.body, /digits\.length === 6 && !submitButton\.disabled\) form\.requestSubmit\(\)/);
     assert.match(response.body, /value="TESTUCC" readonly/);
     assert.doesNotMatch(response.body, /654321/);
     assert.doesNotMatch(response.body, /name="mpin"/);
@@ -98,6 +100,7 @@ describe("authentication routes", () => {
     assert.match(String(response.headers["content-type"] ?? ""), /text\/html/);
     assert.equal(response.headers["cache-control"], "no-store");
     assert.match(response.body, /<h1>NIFTY option chain<\/h1>/);
+    assert.match(response.body, /three closest strikes below and above the live NIFTY price/);
     assert.match(response.body, /\/api\/options\/nifty\/expiries/);
     assert.match(response.body, /\/api\/options\/nifty\/chain/);
     assert.match(response.body, /option prices are not loaded/);
