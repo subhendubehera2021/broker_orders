@@ -34,6 +34,8 @@ stays server-side; only the current TOTP is submitted by the browser.
 ## Endpoints
 
 - `GET /health` — process health check.
+- `GET /margin` — standalone margin calculator UI; requires an active local
+  Kotak Neo session to show the calculator form.
 - `POST /api/auth/login` — submit the current TOTP. The service uses the
   server-side mobile number, UCC, and MPIN to complete authentication.
 - `GET /api/auth/session` — check whether this process has an authenticated
@@ -63,9 +65,11 @@ is attached server-side):
 curl http://127.0.0.1:3000/api/scrip-master
 ```
 
-The login screen includes a margin calculator after authentication. The
-equivalent API request accepts the order fields from Kotak Neo's `jData` as
-JSON:
+The margin calculator has a separate UI route at
+[http://127.0.0.1:3000/margin](http://127.0.0.1:3000/margin). Sign in at `/`
+first; the calculator checks the active session before showing the form.
+The equivalent API request accepts the order fields from Kotak Neo's `jData`
+as JSON:
 
 ```sh
 curl http://127.0.0.1:3000/api/margin \

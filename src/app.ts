@@ -9,6 +9,7 @@ import {
   type MarginCheckInput,
 } from "./kotak-neo-client.js";
 import { renderLoginPage } from "./login-page.js";
+import { renderMarginPage } from "./margin-page.js";
 
 interface LoginBody {
   totp: string;
@@ -51,6 +52,13 @@ export function buildApp({ config, authClient }: AppOptions): FastifyInstance {
       .header("Cache-Control", "no-store")
       .type("text/html; charset=utf-8")
       .send(renderLoginPage(config.kotakNeo));
+  });
+
+  app.get("/margin", async (_request, reply) => {
+    return reply
+      .header("Cache-Control", "no-store")
+      .type("text/html; charset=utf-8")
+      .send(renderMarginPage());
   });
 
   app.register(async (api) => {

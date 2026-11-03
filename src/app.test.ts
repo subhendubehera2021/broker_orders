@@ -50,10 +50,24 @@ describe("authentication routes", () => {
     assert.match(response.body, /value="TESTUCC" readonly/);
     assert.doesNotMatch(response.body, /654321/);
     assert.doesNotMatch(response.body, /name="mpin"/);
-    assert.match(response.body, /id="margin-form"/);
-    assert.match(response.body, /name="tok" value="11536"/);
-    assert.match(response.body, /fetch\("\/api\/margin"/);
+    assert.match(response.body, /href="\/margin">Open margin calculator/);
+    assert.doesNotMatch(response.body, /id="margin-form"/);
     assert.match(response.body, /fetch\("\/api\/auth\/login"/);
+  });
+
+  it("serves the margin calculator on its own uncached route", async () => {
+    const app = buildApp({ config });
+    apps.push(app);
+
+    const response = await app.inject("/margin");
+
+    assert.equal(response.statusCode, 200);
+    assert.match(String(response.headers["content-type"] ?? ""), /text\/html/);
+    assert.equal(response.headers["cache-control"], "no-store");
+    assert.match(response.body, /<h1>Margin calculator<\/h1>/);
+    assert.match(response.body, /id="margin-form" hidden/);
+    assert.match(response.body, /fetch\("\/api\/margin"/);
+    assert.match(response.body, /Go to sign in/);
   });
 
   it("serves Swagger UI and an OpenAPI document for the API routes", async () => {
