@@ -79,6 +79,27 @@ describe("KotakNeoClient", () => {
     });
   });
 
+  it("uses the TOTP login server ID when validate omits it", async () => {
+    let requestCount = 0;
+    const client = new KotakNeoClient(prodConfig, async () => {
+      requestCount += 1;
+      return Response.json({
+        data: requestCount === 1
+          ? { token: "view-token", sid: "view-sid", hsServerId: "login-server-id" }
+          : { token: "trade-token", sid: "trade-sid" },
+      });
+    });
+
+    const session = await client.login({
+      mobileNumber: "+919999996708",
+      ucc: "TESTUCC",
+      totp: "123456",
+      mpin: "654321",
+    });
+
+    assert.equal(session.serverId, "login-server-id");
+  });
+
   it("authenticates and subscribes to the live NIFTY index WebSocket feed", () => {
     const sent: string[] = [];
     let socketUrl = "";
@@ -484,7 +505,7 @@ describe("KotakNeoClient", () => {
         marketProtection: "0",
         triggerPrice: "0",
       }),
-      /order session details are missing/,
+      /required order server ID \(hsServerId\)/,
     );
     assert.equal(requestCount, 0);
   });

@@ -142,7 +142,9 @@ export class KotakNeoClient {
       feedUrl: optionalString(tradeResponse.data?.feedUrl),
       user: input.ucc,
       rid: optionalString(tradeResponse.data?.rid),
-      serverId: optionalString(tradeResponse.data?.hsServerId),
+      serverId:
+        optionalString(tradeResponse.data?.hsServerId) ??
+        optionalString(viewResponse.data?.hsServerId),
     };
   }
 
@@ -474,7 +476,10 @@ export class KotakNeoClient {
       );
     }
     if (!session.serverId) {
-      throw new KotakNeoError("Kotak Neo order session details are missing; sign in again", 503);
+      throw new KotakNeoError(
+        "Kotak Neo did not provide the required order server ID (hsServerId) during sign-in",
+        503,
+      );
     }
 
     const body = new URLSearchParams({

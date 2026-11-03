@@ -191,14 +191,18 @@ export function buildApp({
           response: {
             200: {
               type: "object",
-              required: ["authenticated"],
-              properties: { authenticated: { type: "boolean" } },
+              required: ["authenticated", "orderReady"],
+              properties: {
+                authenticated: { type: "boolean" },
+                orderReady: { type: "boolean" },
+              },
             },
           },
         },
       },
       async () => ({
         authenticated: Boolean(session),
+        orderReady: Boolean(session?.serverId),
       }),
     );
 
@@ -781,7 +785,8 @@ export function buildApp({
         }
         if (!session.serverId) {
           return reply.code(401).send({
-              error: "Kotak Neo order session details are missing; sign in again",
+            error:
+              "Kotak Neo did not provide the required order server ID (hsServerId) during sign-in. Live market data may still work; order placement requires this field.",
           });
         }
 

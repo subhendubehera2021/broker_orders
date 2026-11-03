@@ -76,7 +76,8 @@ export function renderOptionChainPage(): string {
       .order-dialog::backdrop { background: rgb(0 0 0 / 72%); backdrop-filter: blur(3px); }
       .order-form { padding: 22px; }
       .order-title { margin: 0; font-size: 18px; font-weight: 750; }
-      .order-contract { margin: 6px 0 20px; color: #9aa8b7; font-size: 12px; }
+      .order-contract { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; margin: 6px 0 20px; color: #9aa8b7; font-size: 12px; }
+      .order-ltp { color: #9ce0cb; font-variant-numeric: tabular-nums; font-weight: 700; }
       .order-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
       .order-fields label { display: grid; gap: 7px; color: #a9b6c4; font-size: 10px; }
       .order-fields input, .order-value { width: 100%; min-height: 40px; padding: 0 10px; border: 1px solid #303d4b; border-radius: 7px; background: #0e141b; color: #e3eaf1; font: inherit; font-size: 13px; }
@@ -140,7 +141,7 @@ export function renderOptionChainPage(): string {
     <dialog class="order-dialog" id="order-dialog" aria-labelledby="order-title">
       <form class="order-form" id="order-form">
         <h2 class="order-title" id="order-title">Place BUY order</h2>
-        <p class="order-contract" id="order-contract"></p>
+        <p class="order-contract"><span id="order-contract"></span><span class="order-ltp" id="order-ltp" aria-live="polite">LTP unavailable</span></p>
         <div class="order-fields">
           <label for="order-quantity">Quantity (units)
             <input id="order-quantity" type="number" min="1" step="1" required>
@@ -176,6 +177,7 @@ export function renderOptionChainPage(): string {
       const orderDialog = document.querySelector("#order-dialog");
       const orderForm = document.querySelector("#order-form");
       const orderContractLabel = document.querySelector("#order-contract");
+      const orderLtpLabel = document.querySelector("#order-ltp");
       const orderQuantityInput = document.querySelector("#order-quantity");
       const orderTriggerInput = document.querySelector("#order-trigger-price");
       const orderLimitInput = document.querySelector("#order-limit-price");
@@ -238,12 +240,16 @@ export function renderOptionChainPage(): string {
             setStatus("Sign in before placing an order.", "error");
             return;
           }
+          if (session.orderReady !== true) {
+            setStatus(
+              "Kotak Neo sign-in did not provide the order server ID (hsServerId). Live prices can work, but order placement needs this field. Sign out and sign in again; contact Kotak if it remains missing.",
+              "error",
+            );
+            return;
+          }
           selectedOrderContract = contract;
-          orderContractLabel.textContent =
-            contract.tradingSymbol + " · " + expirySelect.value +
-            (optionPrices.has(contract.tradingSymbol)
-              ? " · LTP ₹" + numberFormat.format(optionPrices.get(contract.tradingSymbol))
-              : "");
+          orderContractLabel.textContent = contract.tradingSymbol + " · " + expirySelect.value;
+          updateOrderLtp();
           orderQuantityInput.value = String(contract.lotSize);
           orderTriggerInput.value = "";
           orderLimitInput.value = "";
@@ -252,6 +258,13 @@ export function renderOptionChainPage(): string {
         } catch (error) {
           setStatus(error instanceof Error ? error.message : "Could not open the order ticket.", "error");
         }
+      }
+
+      function updateOrderLtp(price = optionPrices.get(selectedOrderContract?.tradingSymbol)) {
+        orderLtpLabel.textContent =
+          Number.isFinite(price) && price > 0
+            ? "LTP ₹" + numberFormat.format(price)
+            : "LTP unavailable";
       }
 
       orderForm.addEventListener("submit", async (event) => {
@@ -407,6 +420,9 @@ export function renderOptionChainPage(): string {
             }
             optionPrices.set(tick.tradingSymbol, tick.price);
             setFeedStatus("live", "Live");
+            if (selectedOrderContract?.tradingSymbol === tick.tradingSymbol) {
+              updateOrderLtp(tick.price);
+            }
             for (const price of document.querySelectorAll(".option-price")) {
               if (price.dataset.symbol === tick.tradingSymbol) {
                 price.textContent = "LTP ₹" + numberFormat.format(tick.price);

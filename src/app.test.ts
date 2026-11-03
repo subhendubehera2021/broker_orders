@@ -112,8 +112,11 @@ describe("authentication routes", () => {
     assert.match(response.body, /\.option-row:hover \.buy-button, \.option-row:focus-within \.buy-button \{ opacity: \.9; pointer-events: auto; \}/);
     assert.match(response.body, /orderDialog\.showModal\(\)/);
     assert.match(response.body, /Place BUY order/);
+    assert.match(response.body, /id="order-ltp" aria-live="polite">LTP unavailable/);
+    assert.match(response.body, /selectedOrderContract\?\.tradingSymbol === tick\.tradingSymbol/);
     assert.match(response.body, /api\/options\/nifty\/order/);
     assert.match(response.body, /window\.confirm\(confirmation\)/);
+    assert.match(response.body, /session\.orderReady !== true/);
     assert.match(response.body, /orderType: "SL"/);
     assert.match(response.body, /option-row:hover \.buy-button/);
     assert.match(response.body, /className = "option-price"/);
@@ -209,6 +212,7 @@ describe("authentication routes", () => {
     const sessionResponse = await app.inject("/api/auth/session");
     assert.deepEqual(sessionResponse.json(), {
       authenticated: true,
+      orderReady: false,
     });
     assert.equal(sessionResponse.body.includes("private-sid"), false);
   });
@@ -256,6 +260,7 @@ describe("authentication routes", () => {
     assert.deepEqual(logoutResponse.json(), { authenticated: false });
     assert.deepEqual((await app.inject("/api/auth/session")).json(), {
       authenticated: false,
+      orderReady: false,
     });
   });
 
