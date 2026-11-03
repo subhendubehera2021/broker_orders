@@ -49,6 +49,7 @@ interface AuthClient {
     onIndexPrice: (tick: NiftyIndexTick) => void,
     onOptionPrice: (tick: NiftyOptionPriceTick) => void,
     onError: (error: Error) => void,
+    onConnected?: () => void,
   ): () => void;
   checkMargin?(session: AuthenticatedSession, input: MarginCheckInput): Promise<unknown>;
 }
@@ -302,6 +303,7 @@ export function buildApp({
                 writeEvent("market-error", { error: error.message });
                 closeStream();
               },
+              () => writeEvent("feed-connected", { status: "live" }),
             );
           } else if (client?.streamNiftyIndexPrice) {
             stopFeed = client.streamNiftyIndexPrice(

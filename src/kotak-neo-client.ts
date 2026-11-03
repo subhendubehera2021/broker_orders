@@ -146,6 +146,7 @@ export class KotakNeoClient {
     onIndexPrice: (tick: NiftyIndexTick) => void,
     onOptionPrice: (tick: NiftyOptionPriceTick) => void,
     onError: (error: Error) => void,
+    onConnected: () => void = () => {},
   ): () => void {
     if (!session.feedUrl || !session.user) {
       onError(new KotakNeoError("Kotak market-data feed details are missing; sign in again", 503));
@@ -290,6 +291,7 @@ export class KotakNeoClient {
                 return;
               }
               authenticated = true;
+              onConnected();
               const inputtoken = `${niftyIndexSegment}|${niftyIndexToken}`;
               socket.send(JSON.stringify({ event: "subscribeIndices", inputtoken }));
               socket.send(JSON.stringify({ event: "snapshotIndices", inputtoken }));

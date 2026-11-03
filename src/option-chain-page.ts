@@ -4,62 +4,80 @@ export function renderOptionChainPage(): string {
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#10120f">
+    <meta name="theme-color" content="#0b0f14">
     <title>NIFTY Option Chain · Neo Desk</title>
     <style>
-      :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #10120f; color: #f3f4ee; --muted: #898e84; --line: #292d26; --green: #c8f169; }
+      :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #0b0f14; color: #e6edf3; --muted: #8d9aaa; --line: #26313d; --accent: #70d6bd; }
       * { box-sizing: border-box; }
-      body { min-width: 320px; min-height: 100vh; margin: 0; background: radial-gradient(ellipse at 18% 0%, rgb(200 241 105 / 8%), transparent 34rem), #10120f; }
+      body { min-width: 320px; min-height: 100vh; margin: 0; background: radial-gradient(ellipse at 18% 0%, rgb(112 214 189 / 6%), transparent 34rem), #0b0f14; }
       .shell { max-width: 1440px; min-height: 100vh; margin: auto; padding: 24px 4vw; }
       header { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
       .brand { display: inline-flex; gap: 12px; align-items: center; color: inherit; text-decoration: none; }
-      .brand-mark { display: grid; width: 36px; height: 36px; place-items: center; border-radius: 11px; background: var(--green); color: #141810; font-size: 15px; font-weight: 850; }
+      .brand-mark { display: grid; width: 36px; height: 36px; place-items: center; border-radius: 11px; background: var(--accent); color: #0d1715; font-size: 15px; font-weight: 850; }
       .brand-name { font-size: 14px; font-weight: 700; }
       .brand-caption { margin-top: 2px; color: var(--muted); font-size: 10px; letter-spacing: .13em; text-transform: uppercase; }
       .nav { display: flex; gap: 18px; align-items: center; }
-      .nav a { color: #a9aea3; font-size: 12px; text-decoration: none; }
-      .nav a:hover { color: var(--green); }
+      .nav a { color: #aab6c3; font-size: 12px; text-decoration: none; }
+      .nav a:hover { color: var(--accent); }
       main { padding: clamp(36px, 7vh, 68px) 0 24px; }
-      .panel { padding: 20px; border: 1px solid #30342c; border-radius: 14px; background: linear-gradient(145deg, #1a1d18, #151713 80%); }
+      .panel { padding: 20px; border: 1px solid #26313d; border-radius: 14px; background: linear-gradient(145deg, #131a22, #10161d 80%); box-shadow: 0 18px 48px rgb(0 0 0 / 18%); }
       .controls { display: flex; min-height: 44px; flex-wrap: wrap; align-items: center; gap: 12px; }
-      .feed-status { color: var(--muted); font-size: 12px; }
-      label { color: #aeb5a2; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
-      select, button { height: 40px; padding: 0 12px; border: 1px solid #383d33; border-radius: 7px; background: #11130f; color: #e5e9dd; font: inherit; font-size: 12px; }
+      .feed-status { display: inline-flex; min-height: 32px; align-items: center; gap: 8px; padding: 0 11px; border: 1px solid #303d4b; border-radius: 999px; background: #0e141b; color: #9aa8b7; font-size: 11px; font-weight: 750; letter-spacing: .08em; }
+      .feed-dot { width: 8px; height: 8px; flex: 0 0 auto; border-radius: 50%; background: #8290a0; }
+      .feed-status[data-state="connecting"] .feed-dot, .feed-status[data-state="reconnecting"] .feed-dot { background: #e6b65c; }
+      .feed-status[data-state="live"] { border-color: #315e53; color: #9ce0cb; }
+      .feed-status[data-state="live"] .feed-dot { background: #55d6a5; box-shadow: 0 0 0 3px rgb(85 214 165 / 14%); animation: live-pulse 1.8s ease-out infinite; }
+      .feed-status[data-state="disconnected"] { border-color: #67434a; color: #f0a3a3; }
+      .feed-status[data-state="disconnected"] .feed-dot { background: #e36d78; }
+      @keyframes live-pulse { 50% { box-shadow: 0 0 0 5px rgb(85 214 165 / 4%); } }
+      @media (prefers-reduced-motion: reduce) { .feed-status[data-state="live"] .feed-dot { animation: none; } }
+      label { color: #a9b6c4; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+      select, button { height: 40px; padding: 0 12px; border: 1px solid #303d4b; border-radius: 7px; background: #0e141b; color: #e3eaf1; font: inherit; font-size: 12px; }
       select { min-width: 170px; }
-      button { background: #22261f; cursor: pointer; }
-      button:hover:not(:disabled) { border-color: #9cbe57; color: var(--green); }
+      button { background: #1a2530; cursor: pointer; }
+      button:hover:not(:disabled) { border-color: #579887; color: var(--accent); }
       button:disabled, select:disabled { cursor: default; opacity: .5; }
-      .status { min-height: 18px; margin: 14px 0 12px; color: #a9aea3; font-size: 11px; letter-spacing: .04em; }
-      .status[data-kind="error"] { color: #f3a5a0; }
-      .status a { color: var(--green); }
-      .table-wrap { max-height: 72vh; overflow: auto; border: 1px solid #343a30; border-radius: 10px; background: #141611; }
-      table { width: 100%; min-width: 600px; table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: 13px; white-space: nowrap; }
-      th, td { overflow: hidden; padding: 13px 16px; border-bottom: 1px solid #272b24; text-overflow: ellipsis; }
-      th { position: sticky; z-index: 1; color: #969d8c; font-size: 10px; font-weight: 750; letter-spacing: .1em; text-transform: uppercase; }
-      .group-head th { top: 0; height: 36px; background: #20231d; }
-      .column-head th { top: 36px; height: 38px; background: #191c17; color: #afb5a8; font-size: 10px; }
-      th:first-child { text-align: left; }
-      th:last-child { text-align: right; }
-      th.strike-head { color: var(--green); text-align: center; }
-      td { color: #d7dad1; font-variant-numeric: tabular-nums; }
-      tbody tr:not(.spot-row) { height: 52px; transition: background .12s ease; }
-      tbody tr:not(.spot-row):hover { background: #1d211a; }
+      select:focus-visible, button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+      .status { min-height: 18px; margin: 14px 0 12px; color: #a0adba; font-size: 11px; letter-spacing: .04em; }
+      .status[data-kind="error"] { color: #f0a3a3; }
+      .status a { color: var(--accent); }
+      .table-wrap { max-height: 72vh; overflow: auto; border: 1px solid #293541; border-radius: 10px; background: #0d131a; }
+      table { width: 100%; min-width: 760px; table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: 13px; white-space: nowrap; }
+      th, td { overflow: hidden; padding: 13px 16px; border-right: 1px solid #242e38; border-bottom: 1px solid #222d38; text-overflow: ellipsis; }
+      th:last-child, td:last-child { border-right: 0; }
+      th { position: sticky; z-index: 1; color: #9baaba; font-size: 10px; font-weight: 750; letter-spacing: .1em; text-transform: uppercase; }
+      .group-head th { top: 0; height: 36px; background: #171f27; }
+      .column-head th { top: 36px; height: 38px; background: #111820; color: #aab7c5; font-size: 10px; }
+      th.call-subhead { background: #172126; }
+      th.put-subhead { background: #11191d; }
+      th.instrument-head { text-align: left; }
+      th.price-head { text-align: right; }
+      th.strike-head { color: var(--accent); text-align: center; }
+      td { color: #d7e0e9; font-variant-numeric: tabular-nums; }
+      tbody tr.option-row { height: 54px; transition: background .12s ease; }
+      tbody tr.option-row:hover td { filter: brightness(1.16); }
       tbody tr:not(.spot-row):last-child td { border-bottom: 0; }
-      .call-head { color: #9fc2ff !important; text-align: left; }
-      .put-head { color: #e6a5ff !important; text-align: right; }
-      td.instrument-cell { text-align: left; }
-      td.instrument-cell:last-child { text-align: right; }
-      .instrument-content { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 8px; }
-      .instrument-name { overflow: hidden; color: #d9ddd3; font-size: 12px; font-weight: 600; text-overflow: ellipsis; }
-      .option-price { flex: 0 0 auto; color: #aeb8a1; font-size: 11px; font-variant-numeric: tabular-nums; font-weight: 650; }
-      .buy-button { flex: 0 0 auto; height: 27px; padding: 0 12px; border: 1px solid #59743b; border-radius: 6px; background: #29351f; color: #c8f169; font-size: 10px; font-weight: 800; letter-spacing: .06em; opacity: 0; pointer-events: none; transition: opacity .12s ease; }
+      th.call-head { color: #a9ddd0 !important; text-align: center; }
+      th.put-head { color: #b6c2ce !important; text-align: center; }
+      td.call-instrument, td.call-price { background: #171f24; }
+      td.put-price, td.put-instrument { background: #12191e; }
+      td.call-instrument, td.put-instrument { position: relative; }
+      td.call-price, td.strike-cell, td.put-price { font-size: 15px; font-weight: 650; }
+      td.call-price { color: #e2e9ed; text-align: right; }
+      td.strike-cell { background: #0d1217; color: #f0f3f6; font-size: 16px; font-weight: 750; text-align: center; }
+      td.put-price { color: #e2e9ed; text-align: left; }
+      td.put-instrument { text-align: right; }
+      .instrument-name { display: block; overflow: hidden; color: #cbd6df; font-size: 11px; font-weight: 550; text-overflow: ellipsis; }
+      .buy-button { position: absolute; top: 50%; right: 8px; height: 26px; padding: 0 10px; transform: translateY(-50%); border: 1px solid #416b60; border-radius: 6px; background: #1b302a; color: #9ce0cb; font-size: 10px; font-weight: 800; letter-spacing: .06em; opacity: 0; pointer-events: none; transition: opacity .12s ease; }
       tr:hover .buy-button { opacity: .9; }
       .buy-button:disabled { cursor: default; opacity: 0; }
       tr:hover .buy-button:disabled { opacity: .9; }
-      tr.spot-row td { height: 58px; padding: 12px 16px; border-top: 1px solid #687e3d; border-bottom: 1px solid #687e3d; background: linear-gradient(90deg, #20271a, #28321d, #20271a); }
-      td.spot-label { color: #b6c496; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
-      td.spot-label { text-align: left; }
-      td.spot-price { color: var(--green); font-size: 18px; font-variant-numeric: tabular-nums; font-weight: 800; text-align: center; }
+      tr.spot-row td { height: 58px; padding: 0; border-top: 1px solid #168dd0; border-bottom: 1px solid #168dd0; background: #101419; }
+      .spot-marker { position: relative; display: flex; min-height: 58px; align-items: center; justify-content: center; }
+      .spot-marker::before { position: absolute; right: 0; left: 0; height: 1px; background: #168dd0; content: ""; }
+      .spot-pill { position: relative; z-index: 1; display: flex; min-height: 44px; align-items: center; justify-content: center; gap: 10px; padding: 0 28px; border: 1px solid #168dd0; border-radius: 999px; background: #11171d; box-shadow: 0 0 20px rgb(22 141 208 / 12%); }
+      .spot-label { color: #39aef0; font-size: 13px; font-weight: 650; }
+      .spot-price { color: #39aef0; font-size: 15px; font-variant-numeric: tabular-nums; font-weight: 750; }
       [hidden] { display: none !important; }
       @media (max-width: 600px) { .shell { padding: 18px 14px; } .panel { padding: 12px; } .nav { gap: 12px; } .nav a { font-size: 11px; } }
     </style>
@@ -79,20 +97,24 @@ export function renderOptionChainPage(): string {
             <label for="expiry">Expiry</label>
             <select id="expiry" disabled><option value="">Loading expiries…</option></select>
             <button id="refresh-price" type="button">Reconnect</button>
-            <span class="feed-status" id="price-status" role="status" aria-live="polite">Sign in for live price</span>
+            <span class="feed-status" id="price-status" data-state="idle" role="status" aria-live="polite"><span class="feed-dot" aria-hidden="true"></span><span class="feed-label">Sign in for live price</span></span>
           </div>
           <p class="status" id="status" role="status" aria-live="polite">Loading local NIFTY expiries…</p>
           <div class="table-wrap" id="table-wrap" hidden>
             <table>
               <colgroup>
-                <col style="width:38%"><col style="width:24%"><col style="width:38%">
+                <col style="width:23%"><col style="width:17%"><col style="width:20%"><col style="width:17%"><col style="width:23%">
               </colgroup>
               <thead><tr class="group-head">
-                <th class="call-head">CALLS</th>
+                <th class="call-head" colspan="2">CALLS</th>
                 <th class="strike-head">STRIKE</th>
-                <th class="put-head">PUTS</th>
+                <th class="put-head" colspan="2">PUTS</th>
               </tr><tr class="column-head">
-                <th>Instrument · LTP</th><th class="strike-head">Strike</th><th>Instrument · LTP</th>
+                <th class="call-subhead instrument-head">Instrument</th>
+                <th class="call-subhead price-head">LTP</th>
+                <th class="strike-head">Strike</th>
+                <th class="put-subhead price-head">LTP</th>
+                <th class="put-subhead instrument-head">Instrument</th>
               </tr></thead>
               <tbody id="rows"></tbody>
             </table>
@@ -120,29 +142,19 @@ export function renderOptionChainPage(): string {
         status.dataset.kind = kind;
       }
 
-      function makeCell(row, value) {
-        const cell = document.createElement("td");
-        cell.textContent = value;
-        row.append(cell);
+      function setFeedStatus(state, text) {
+        priceStatus.dataset.state = state;
+        priceStatus.querySelector(".feed-label").textContent = text;
       }
 
-      function makeInstrumentCell(row, contract) {
+      function makeInstrumentCell(row, contract, side) {
         const cell = document.createElement("td");
-        cell.className = "instrument-cell";
-        const content = document.createElement("span");
-        content.className = "instrument-content";
+        cell.className = side + "-instrument";
         const name = document.createElement("span");
         name.className = "instrument-name";
         name.textContent = contract?.tradingSymbol ?? "—";
-        content.append(name);
+        cell.append(name);
         if (contract) {
-          const price = document.createElement("span");
-          price.className = "option-price";
-          price.dataset.symbol = contract.tradingSymbol;
-          price.textContent = "LTP " + (optionPrices.has(contract.tradingSymbol)
-            ? "₹" + numberFormat.format(optionPrices.get(contract.tradingSymbol))
-            : "—");
-          content.append(price);
           const button = document.createElement("button");
           button.className = "buy-button";
           button.type = "button";
@@ -150,22 +162,33 @@ export function renderOptionChainPage(): string {
           button.textContent = "BUY";
           button.title = "Order placement is not enabled";
           button.setAttribute("aria-label", "Buy " + contract.tradingSymbol + " (not enabled)");
-          content.append(button);
+          cell.append(button);
         }
-        cell.append(content);
+        row.append(cell);
+      }
+
+      function makePriceCell(row, contract, side) {
+        const cell = document.createElement("td");
+        cell.className = side + "-price";
+        const price = document.createElement("span");
+        price.className = "option-price";
+        price.dataset.symbol = contract.tradingSymbol;
+        price.textContent = optionPrices.has(contract.tradingSymbol)
+          ? "₹" + numberFormat.format(optionPrices.get(contract.tradingSymbol))
+          : "—";
+        cell.append(price);
         row.append(cell);
       }
 
       function connectNiftyPriceStream(expiry) {
         marketFeed?.close();
-        priceStatus.textContent = "Connecting…";
+        setFeedStatus("connecting", "Connecting");
         const source = new EventSource(
           "/api/market/nifty/stream?expiry=" + encodeURIComponent(expiry),
         );
         marketFeed = source;
-        source.onopen = () => {
-          priceStatus.textContent = "Connected";
-        };
+        source.onopen = () => setFeedStatus("connecting", "Connecting");
+        source.addEventListener("feed-connected", () => setFeedStatus("live", "Live"));
         source.addEventListener("price", (event) => {
           if (!(event instanceof MessageEvent)) return;
           try {
@@ -176,10 +199,10 @@ export function renderOptionChainPage(): string {
             liveSpotPrice = tick.price;
             const niftyPrice = document.querySelector("#nifty-spot-price");
             if (niftyPrice) niftyPrice.textContent = "₹" + numberFormat.format(tick.price);
-            priceStatus.textContent = "Live";
+            setFeedStatus("live", "Live");
             renderChain();
           } catch {
-            priceStatus.textContent = "Received an invalid NIFTY price update";
+            setFeedStatus("disconnected", "Invalid index update");
           }
         });
         source.addEventListener("option-price", (event) => {
@@ -194,36 +217,37 @@ export function renderOptionChainPage(): string {
               throw new Error("Kotak returned an invalid option price");
             }
             optionPrices.set(tick.tradingSymbol, tick.price);
+            setFeedStatus("live", "Live");
             for (const price of document.querySelectorAll(".option-price")) {
               if (price.dataset.symbol === tick.tradingSymbol) {
                 price.textContent = "LTP ₹" + numberFormat.format(tick.price);
               }
             }
           } catch {
-            priceStatus.textContent = "Received an invalid option price update";
+            setFeedStatus("disconnected", "Invalid option update");
           }
         });
         source.addEventListener("market-error", (event) => {
           if (!(event instanceof MessageEvent)) return;
           try {
             const data = JSON.parse(event.data);
-            priceStatus.textContent = data.error || "Feed disconnected";
+            setFeedStatus("disconnected", data.error || "Feed disconnected");
           } catch {
-            priceStatus.textContent = "Feed disconnected";
+            setFeedStatus("disconnected", "Feed disconnected");
           }
         });
         source.onerror = () => {
-          priceStatus.textContent = "Reconnecting…";
+          setFeedStatus("reconnecting", "Reconnecting");
           void fetch("/api/auth/session", { headers: { Accept: "application/json" } })
             .then((response) => response.json())
             .then((data) => {
               if (data.authenticated !== true) {
                 source.close();
-                priceStatus.textContent = "Sign in for live price";
+                setFeedStatus("idle", "Sign in for live price");
               }
             })
             .catch(() => {
-              priceStatus.textContent = "Could not verify the Kotak Neo session";
+              setFeedStatus("disconnected", "Session check failed");
             });
         };
       }
@@ -271,25 +295,40 @@ export function renderOptionChainPage(): string {
         tableBody.replaceChildren();
         const spotRow = document.createElement("tr");
         spotRow.className = "spot-row";
-        const spotLabel = document.createElement("td");
+        const spotCell = document.createElement("td");
+        spotCell.colSpan = 5;
+        const spotMarker = document.createElement("div");
+        spotMarker.className = "spot-marker";
+        const spotPill = document.createElement("div");
+        spotPill.className = "spot-pill";
+        const spotLabel = document.createElement("span");
         spotLabel.className = "spot-label";
-        spotLabel.textContent = "NIFTY 50";
-        const spotPrice = document.createElement("td");
+        spotLabel.textContent = "Spot price";
+        const spotPrice = document.createElement("span");
         spotPrice.className = "spot-price";
         spotPrice.id = "nifty-spot-price";
         spotPrice.setAttribute("aria-label", "Live NIFTY 50 spot price");
         spotPrice.textContent = "₹" + numberFormat.format(liveSpotPrice);
-        spotRow.append(spotLabel, spotPrice, document.createElement("td"));
+        spotPill.append(spotLabel, spotPrice);
+        spotMarker.append(spotPill);
+        spotCell.append(spotMarker);
+        spotRow.append(spotCell);
 
         for (const [index, strike] of sorted.entries()) {
           if (index === aboveStrikes.length) tableBody.append(spotRow);
           const pair = strikes.get(strike);
           const row = document.createElement("tr");
+          row.className = "option-row";
           const call = pair.CE;
           const put = pair.PE;
-          makeInstrumentCell(row, call);
-          makeCell(row, numberFormat.format(strike));
-          makeInstrumentCell(row, put);
+          makeInstrumentCell(row, call, "call");
+          makePriceCell(row, call, "call");
+          const strikeCell = document.createElement("td");
+          strikeCell.className = "strike-cell";
+          strikeCell.textContent = numberFormat.format(strike);
+          row.append(strikeCell);
+          makePriceCell(row, put, "put");
+          makeInstrumentCell(row, put, "put");
           tableBody.append(row);
         }
         if (sorted.length === 0) tableBody.prepend(spotRow);
@@ -357,12 +396,12 @@ export function renderOptionChainPage(): string {
           if (!response.ok) throw new Error("Could not check your Kotak Neo session.");
           const session = await response.json();
           if (session.authenticated !== true) {
-            priceStatus.textContent = "Sign in for live price";
+            setFeedStatus("idle", "Sign in for live price");
             return;
           }
           connectNiftyPriceStream(expiry);
         } catch (error) {
-          priceStatus.textContent = error instanceof Error ? error.message : "Could not load live NIFTY price.";
+          setFeedStatus("disconnected", error instanceof Error ? error.message : "Could not load live NIFTY price.");
         }
       }
 

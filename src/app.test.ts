@@ -111,9 +111,14 @@ describe("authentication routes", () => {
     assert.match(response.body, /className = "option-price"/);
     assert.match(response.body, /api\/market\/nifty\/stream\?expiry=/);
     assert.match(response.body, /addEventListener\("option-price"/);
+    assert.match(response.body, /addEventListener\("feed-connected"/);
+    assert.match(response.body, /data-state="idle"/);
+    assert.match(response.body, /class="call-head" colspan="2">CALLS/);
+    assert.match(response.body, /class="put-head" colspan="2">PUTS/);
+    assert.match(response.body, /spotPill\.className = "spot-pill"/);
     assert.doesNotMatch(response.body, /<th>Token<\/th>|<th>Lot size<\/th>/);
     assert.match(response.body, /api\/market\/nifty\/stream/);
-    assert.doesNotMatch(response.body, /Refresh quotes|>LTP</);
+    assert.doesNotMatch(response.body, /Refresh quotes/);
   });
 
   it("serves Swagger UI and an OpenAPI document for the API routes", async () => {
@@ -520,6 +525,7 @@ describe("authentication routes", () => {
           onIndexPrice,
           onOptionPrice,
           onError,
+          onConnected,
         ) {
           assert.equal(instruments.length, 12);
           assert.equal(selectOptions(25000).length, 12);
@@ -529,6 +535,7 @@ describe("authentication routes", () => {
             price: 123.45,
             asOf: "2030-01-30T10:00:01.000Z",
           });
+          onConnected?.();
           onError(new Error("Kotak market-data WebSocket disconnected"));
           return () => { streamStopped = true; };
         },
@@ -542,6 +549,7 @@ describe("authentication routes", () => {
 
     assert.equal(response.statusCode, 200);
     assert.match(response.body, /event: price\ndata: \{"price":25000,"asOf":"2030-01-30T10:00:00\.000Z"\}/);
+    assert.match(response.body, /event: feed-connected\ndata: \{"status":"live"\}/);
     assert.match(
       response.body,
       /event: option-price\ndata: \{"tradingSymbol":"NIFTY30JAN2030CE","price":123\.45,"asOf":"2030-01-30T10:00:01\.000Z"\}/,

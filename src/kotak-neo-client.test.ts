@@ -197,6 +197,7 @@ describe("KotakNeoClient", () => {
     const optionTicks: Array<{ tradingSymbol: string; price: number; asOf: string }> = [];
     const indexTicks: Array<{ price: number; asOf: string }> = [];
     const errors: Error[] = [];
+    let connected = false;
     const stop = client.streamNiftyMarketData(
       {
         sid: "session-sid",
@@ -209,6 +210,7 @@ describe("KotakNeoClient", () => {
       (tick) => indexTicks.push(tick),
       (tick) => optionTicks.push(tick),
       (error) => errors.push(error),
+      () => { connected = true; },
     );
 
     assert.ok(socket);
@@ -222,6 +224,7 @@ describe("KotakNeoClient", () => {
         }),
       }),
     );
+    assert.equal(connected, true);
 
     const indexFrame = (price: number) => {
       const frame = new ArrayBuffer(87);
