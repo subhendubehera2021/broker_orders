@@ -44,6 +44,7 @@ describe("loadConfig", () => {
         quotesPath: "script-details/1.0/quotes/neosymbol/{neo_symbols}/{quote_type}",
         niftyIndexToken: "Nifty 50",
         niftyIndexSegment: "nse_cm",
+        logKotakLoginResponses: false,
         requestTimeoutMs: 10000,
       },
     });
@@ -69,6 +70,23 @@ describe("loadConfig", () => {
 
     assert.equal(config.kotakNeo.placeOrderPath, undefined);
     assert.equal(config.kotakNeo.orderSource, undefined);
+  });
+
+  it("enables sanitized Kotak login response logs only when explicitly enabled", () => {
+    assert.equal(
+      loadConfig({ ...validEnvironment, KOTAK_NEO_LOG_LOGIN_RESPONSES: "true" }).kotakNeo
+        .logKotakLoginResponses,
+      true,
+    );
+    assert.equal(
+      loadConfig({ ...validEnvironment, KOTAK_NEO_LOG_LOGIN_RESPONSES: "false" }).kotakNeo
+        .logKotakLoginResponses,
+      false,
+    );
+    assert.throws(
+      () => loadConfig({ ...validEnvironment, KOTAK_NEO_LOG_LOGIN_RESPONSES: "on" }),
+      /KOTAK_NEO_LOG_LOGIN_RESPONSES must be true or false/,
+    );
   });
 
   it("rejects non-HTTPS API URLs", () => {

@@ -116,7 +116,6 @@ describe("authentication routes", () => {
     assert.match(response.body, /selectedOrderContract\?\.tradingSymbol === tick\.tradingSymbol/);
     assert.match(response.body, /api\/options\/nifty\/order/);
     assert.match(response.body, /window\.confirm\(confirmation\)/);
-    assert.match(response.body, /session\.orderReady !== true/);
     assert.match(response.body, /orderType: "SL"/);
     assert.match(response.body, /option-row:hover \.buy-button/);
     assert.match(response.body, /className = "option-price"/);
@@ -212,7 +211,7 @@ describe("authentication routes", () => {
     const sessionResponse = await app.inject("/api/auth/session");
     assert.deepEqual(sessionResponse.json(), {
       authenticated: true,
-      orderReady: false,
+      orderReady: true,
     });
     assert.equal(sessionResponse.body.includes("private-sid"), false);
   });

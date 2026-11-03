@@ -240,13 +240,6 @@ export function renderOptionChainPage(): string {
             setStatus("Sign in before placing an order.", "error");
             return;
           }
-          if (session.orderReady !== true) {
-            setStatus(
-              "Kotak Neo sign-in did not provide the order server ID (hsServerId). Live prices can work, but order placement needs this field. Sign out and sign in again; contact Kotak if it remains missing.",
-              "error",
-            );
-            return;
-          }
           selectedOrderContract = contract;
           orderContractLabel.textContent = contract.tradingSymbol + " · " + expirySelect.value;
           updateOrderLtp();

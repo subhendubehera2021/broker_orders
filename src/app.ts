@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import Fastify, { type FastifyInstance } from "fastify";
+import Fastify, { LogController, type FastifyInstance } from "fastify";
 import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
 import type { AppConfig } from "./config.js";
@@ -89,6 +89,7 @@ export function buildApp({
   const app = Fastify({
     bodyLimit: 1024,
     logger: true,
+    logController: new LogController({ disableRequestLogging: true }),
   });
 
   const client =
@@ -97,7 +98,14 @@ export function buildApp({
       ? new KotakNeoClient({
           ...config.kotakNeo,
           consumerKey: config.kotakNeo.consumerKey,
-        })
+        }, fetch, undefined, config.kotakNeo.logKotakLoginResponses
+          ? (stage, response) => {
+              app.log.info(
+                { stage, response },
+                "Kotak Neo login response (sensitive fields redacted)",
+              );
+            }
+          : undefined)
       : undefined);
 
   app.get("/", async (_request, reply) => {
@@ -202,7 +210,7 @@ export function buildApp({
       },
       async () => ({
         authenticated: Boolean(session),
-        orderReady: Boolean(session?.serverId),
+        orderReady: Boolean(session),
       }),
     );
 
@@ -783,13 +791,6 @@ export function buildApp({
               "Kotak Neo order API is not configured; set KOTAK_NEO_PLACE_ORDER_PATH and KOTAK_NEO_ORDER_SOURCE",
           });
         }
-        if (!session.serverId) {
-          return reply.code(401).send({
-            error:
-              "Kotak Neo did not provide the required order server ID (hsServerId) during sign-in. Live market data may still work; order placement requires this field.",
-          });
-        }
-
         const authenticatedSession = session;
         const body = request.body;
         const isMarketOrder = body.orderType === "MKT" || body.orderType === "SL-M";

@@ -32,6 +32,7 @@ describe("KotakNeoClient", () => {
                 rid: "request-id",
                 hsServerId: "server-id",
                 feedUrl: "https://feed.kotaksecurities.com/apifeed",
+                baseUrl: "https://neo-gw.kotaksecurities.com/xyz",
               },
             };
       return Response.json(body);
@@ -72,6 +73,7 @@ describe("KotakNeoClient", () => {
     assert.deepEqual(session, {
       sid: "trade-sid",
       tradeToken: "trade-token",
+      baseUrl: "https://neo-gw.kotaksecurities.com/xyz/",
       feedUrl: "https://feed.kotaksecurities.com/apifeed",
       user: "TESTUCC",
       rid: "request-id",
@@ -98,6 +100,97 @@ describe("KotakNeoClient", () => {
     });
 
     assert.equal(session.serverId, "login-server-id");
+  });
+
+  it("rejects an untrusted baseUrl returned by Kotak login validation", async () => {
+    let requestCount = 0;
+    const client = new KotakNeoClient(prodConfig, async () => {
+      requestCount += 1;
+      return Response.json({
+        data: requestCount === 1
+          ? { token: "view-token", sid: "view-sid" }
+          : {
+              token: "trade-token",
+              sid: "trade-sid",
+              baseUrl: "https://attacker.example/proxy",
+            },
+      });
+    });
+
+    await assert.rejects(
+      client.login({
+        mobileNumber: "+919999996708",
+        ucc: "TESTUCC",
+        totp: "123456",
+        mpin: "654321",
+      }),
+      /untrusted post-login baseUrl/,
+    );
+    assert.equal(requestCount, 2);
+  });
+
+  it("logs bounded login response fields with session credentials redacted", async () => {
+    const logs: Array<{ stage: string; response: unknown }> = [];
+    let requestCount = 0;
+    const client = new KotakNeoClient(
+      prodConfig,
+      async () => {
+        requestCount += 1;
+        return Response.json({
+          status: "SUCCESS",
+          data:
+            requestCount === 1
+              ? {
+                  token: "view-secret",
+                  sid: "view-sid-secret",
+                  hsServerId: "view-server-secret",
+                  message: "TOTP accepted",
+                }
+              : {
+                  token: "trade-secret",
+                  sid: "trade-sid-secret",
+                  hsServerId: "trade-server-secret",
+                  message: "Login complete",
+                },
+        });
+      },
+      undefined,
+      (stage, response) => logs.push({ stage, response }),
+    );
+
+    await client.login({
+      mobileNumber: "+919999996708",
+      ucc: "TESTUCC",
+      totp: "123456",
+      mpin: "654321",
+    });
+
+    assert.deepEqual(logs, [
+      {
+        stage: "totp-login",
+        response: {
+          status: "SUCCESS",
+          data: {
+            token: "[REDACTED]",
+            sid: "[REDACTED]",
+            hsServerId: "[REDACTED]",
+            message: "TOTP accepted",
+          },
+        },
+      },
+      {
+        stage: "totp-validate",
+        response: {
+          status: "SUCCESS",
+          data: {
+            token: "[REDACTED]",
+            sid: "[REDACTED]",
+            hsServerId: "[REDACTED]",
+            message: "Login complete",
+          },
+        },
+      },
+    ]);
   });
 
   it("authenticates and subscribes to the live NIFTY index WebSocket feed", () => {
@@ -408,13 +501,17 @@ describe("KotakNeoClient", () => {
       trnsTp: "B",
     };
     const response = await client.checkMargin(
-      { sid: "session-sid", tradeToken: "session-token" },
+      {
+        sid: "session-sid",
+        tradeToken: "session-token",
+        baseUrl: "https://neo-gw.kotaksecurities.com/xyz/",
+      },
       input,
     );
 
     assert.equal(
       capturedUrl?.href,
-      "https://mis.kotaksecurities.com/quick/user/check-margin",
+      "https://neo-gw.kotaksecurities.com/xyz/quick/user/check-margin",
     );
     assert.equal(capturedInit?.method, "POST");
     const headers = new Headers(capturedInit?.headers);
@@ -427,7 +524,7 @@ describe("KotakNeoClient", () => {
     assert.deepEqual(response, { data: { margin: "12500.00" } });
   });
 
-  it("submits a live order using the Kotak order form fields and server ID", async () => {
+  it("submits a live order using the trading session, base URL, and Kotak order fields", async () => {
     let capturedUrl: URL | undefined;
     let capturedInit: RequestInit | undefined;
     const client = new KotakNeoClient(prodConfig, async (input, init) => {
@@ -437,7 +534,11 @@ describe("KotakNeoClient", () => {
     });
 
     const response = await client.placeNiftyOptionOrder(
-      { ...testSession, serverId: "server-id" },
+      {
+        ...testSession,
+        serverId: "server-id",
+        baseUrl: "https://neo-gw.kotaksecurities.com/xyz/",
+      },
       {
         tradingSymbol: "NIFTY30JAN2030CE",
         transactionType: "B",
@@ -454,10 +555,7 @@ describe("KotakNeoClient", () => {
       },
     );
 
-    assert.equal(
-      capturedUrl?.href,
-      "https://mis.kotaksecurities.com/quick/order/rule/ms/place?sId=server-id",
-    );
+    assert.equal(capturedUrl?.href, "https://neo-gw.kotaksecurities.com/xyz/quick/order/rule/ms/place?sId=server-id");
     assert.equal(capturedInit?.method, "POST");
     const headers = new Headers(capturedInit?.headers);
     assert.equal(headers.get("auth"), "test-trade-token");
@@ -484,15 +582,19 @@ describe("KotakNeoClient", () => {
     assert.deepEqual(response, { stat: "Ok", nOrdNo: "order-id" });
   });
 
-  it("does not submit orders when the authenticated server ID is missing", async () => {
-    let requestCount = 0;
-    const client = new KotakNeoClient(prodConfig, async () => {
-      requestCount += 1;
+  it("submits using the documented trading session when hsServerId is omitted", async () => {
+    let capturedUrl: URL | undefined;
+    let capturedHeaders: Headers | undefined;
+    const clientWithCapture = new KotakNeoClient(prodConfig, async (input, init) => {
+      capturedUrl = new URL(input.toString());
+      capturedHeaders = new Headers(init?.headers);
       return Response.json({ stat: "Ok" });
     });
 
-    await assert.rejects(
-      client.placeNiftyOptionOrder(testSession, {
+    const response = await clientWithCapture.placeNiftyOptionOrder({
+      ...testSession,
+      baseUrl: "https://neo-gw.kotaksecurities.com/api/",
+    }, {
         tradingSymbol: "NIFTY30JAN2030CE",
         transactionType: "B",
         quantity: "25",
@@ -504,10 +606,13 @@ describe("KotakNeoClient", () => {
         disclosedQuantity: "0",
         marketProtection: "0",
         triggerPrice: "0",
-      }),
-      /required order server ID \(hsServerId\)/,
-    );
-    assert.equal(requestCount, 0);
+      });
+
+    assert.equal(capturedUrl?.href, "https://neo-gw.kotaksecurities.com/api/quick/order/rule/ms/place");
+    assert.equal(capturedUrl?.searchParams.has("sId"), false);
+    assert.equal(capturedHeaders?.get("auth"), "test-trade-token");
+    assert.equal(capturedHeaders?.get("sid"), "test-sid");
+    assert.deepEqual(response, { stat: "Ok" });
   });
 
   it("requests quotes for encoded NIFTY option tokens", async () => {
@@ -521,7 +626,10 @@ describe("KotakNeoClient", () => {
     });
 
     const result = await client.getQuotes(
-      testSession,
+      {
+        ...testSession,
+        baseUrl: "https://neo-gw.kotaksecurities.com/xyz/",
+      },
       [
         { instrumentToken: "123", exchangeSegment: "nse_fo" },
         { instrumentToken: "456", exchangeSegment: "nse_fo" },
@@ -531,7 +639,7 @@ describe("KotakNeoClient", () => {
 
     assert.equal(
       capturedUrl?.href,
-      "https://mis.kotaksecurities.com/script-details/1.0/quotes/neosymbol/nse_fo%7C123%2Cnse_fo%7C456/all",
+      "https://neo-gw.kotaksecurities.com/xyz/script-details/1.0/quotes/neosymbol/nse_fo%7C123%2Cnse_fo%7C456/all",
     );
     assert.equal(capturedInit?.method, "GET");
     const headers = new Headers(capturedInit?.headers);

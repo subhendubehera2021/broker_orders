@@ -72,6 +72,13 @@ single-process starter, not a multi-user session store. Logout only discards
 the local tokens; use Kotak Neo's own session controls to revoke broker-side
 access.
 
+After TOTP/MPIN validation, the service uses Kotak's returned `data.baseUrl`
+for authenticated post-login API requests (quotes, margin, and orders). The
+returned URL must be HTTPS on a `kotaksecurities.com` host; when it is absent,
+the configured `KOTAK_NEO_API_BASE_URL` remains the compatibility fallback.
+If Kotak supplies `data.hsServerId`, the client includes it as the optional
+`sId` query parameter; order submission does not depend on that field.
+
 Retrieve Scrip Master paths through this service (the configured Neo API token
 is attached server-side):
 
@@ -161,6 +168,9 @@ application:
 - `KOTAK_NEO_PLACE_ORDER_PATH` and `KOTAK_NEO_ORDER_SOURCE` — the live order
   endpoint and source identifier. These are optional for application startup
   but must both be set to enable live order placement.
+- `KOTAK_NEO_LOG_LOGIN_RESPONSES` — set to `true` temporarily to log Kotak's
+  TOTP login and validation response fields for diagnostics. Token, session,
+  server ID, and other sensitive values are redacted; defaults to `false`.
 - `KOTAK_NEO_QUOTES_PATH` — quote endpoint template; retain the
   `{neo_symbols}` and `{quote_type}` placeholders.
 - `KOTAK_NEO_REQUEST_TIMEOUT_MS` — upstream request timeout in milliseconds.

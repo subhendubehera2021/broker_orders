@@ -10,6 +10,7 @@ interface LoginInput {
 export interface AuthenticatedSession {
   sid: string;
   tradeToken: string;
+  baseUrl?: string;
   feedUrl?: string;
   user?: string;
   rid?: string;
@@ -75,14 +76,12 @@ export interface PlaceNiftyOptionOrderInput {
 }
 
 interface KotakResponse {
-  data?: {
-    token?: unknown;
-    sid?: unknown;
-    feedUrl?: unknown;
-    rid?: unknown;
-    hsServerId?: unknown;
-  };
+  data?: Record<string, unknown>;
+  [key: string]: unknown;
 }
+
+type LoginResponseStage = "totp-login" | "totp-validate";
+type LoginResponseLogger = (stage: LoginResponseStage, response: unknown) => void;
 
 export class KotakNeoError extends Error {
   constructor(
@@ -100,6 +99,7 @@ export class KotakNeoClient {
     private readonly fetchImpl: typeof fetch = fetch,
     private readonly webSocketFactory: (url: string) => MarketDataSocket = (url) =>
       new WebSocket(url),
+    private readonly loginResponseLogger?: LoginResponseLogger,
   ) {}
 
   async login(input: LoginInput): Promise<AuthenticatedSession> {
@@ -120,6 +120,7 @@ export class KotakNeoClient {
         totp: input.totp,
       },
     );
+    this.loginResponseLogger?.("totp-login", redactKotakResponse(viewResponse));
     const viewToken = requiredString(viewResponse.data?.token);
     const viewSid = requiredString(viewResponse.data?.sid);
 
@@ -133,12 +134,15 @@ export class KotakNeoClient {
       },
       { mpin: input.mpin },
     );
+    this.loginResponseLogger?.("totp-validate", redactKotakResponse(tradeResponse));
     const tradeToken = requiredString(tradeResponse.data?.token);
     const sid = optionalString(tradeResponse.data?.sid) ?? viewSid;
+    const baseUrl = brokerBaseUrl(tradeResponse.data?.baseUrl);
 
     return {
       sid,
       tradeToken,
+      ...(baseUrl ? { baseUrl } : {}),
       feedUrl: optionalString(tradeResponse.data?.feedUrl),
       user: input.ucc,
       rid: optionalString(tradeResponse.data?.rid),
@@ -434,7 +438,7 @@ export class KotakNeoClient {
         "Content-Type": "application/x-www-form-urlencoded",
       },
       body,
-    });
+    }, session.baseUrl);
   }
 
   async getQuotes(
@@ -462,7 +466,7 @@ export class KotakNeoClient {
         "neo-fin-key": this.config.financialKey,
         "Content-Type": "application/x-www-form-urlencoded",
       },
-    });
+    }, session.baseUrl);
   }
 
   async placeNiftyOptionOrder(
@@ -475,13 +479,6 @@ export class KotakNeoClient {
         503,
       );
     }
-    if (!session.serverId) {
-      throw new KotakNeoError(
-        "Kotak Neo did not provide the required order server ID (hsServerId) during sign-in",
-        503,
-      );
-    }
-
     const body = new URLSearchParams({
       am: input.amo,
       dq: input.disclosedQuantity,
@@ -500,8 +497,9 @@ export class KotakNeoClient {
     });
     if (input.tag) body.set("ig", input.tag);
 
-    const path = new URL(this.config.placeOrderPath, ensureTrailingSlash(this.config.apiBaseUrl));
-    path.searchParams.set("sId", session.serverId);
+    const baseUrl = session.baseUrl ?? this.config.apiBaseUrl;
+    const path = new URL(this.config.placeOrderPath, ensureTrailingSlash(baseUrl));
+    if (session.serverId) path.searchParams.set("sId", session.serverId);
     return this.requestJson(path.toString(), {
       method: "POST",
       headers: {
@@ -510,7 +508,7 @@ export class KotakNeoClient {
         "Content-Type": "application/x-www-form-urlencoded",
       },
       body,
-    });
+    }, baseUrl);
   }
 
   private async post(
@@ -528,23 +526,17 @@ export class KotakNeoClient {
     }
 
     const data = isRecord(responseBody.data) ? responseBody.data : undefined;
-    return {
-      data: data
-        ? {
-            token: data.token,
-            sid: data.sid,
-            feedUrl: data.feedUrl,
-            rid: data.rid,
-            hsServerId: data.hsServerId,
-          }
-        : undefined,
-    };
+    return { ...responseBody, ...(data ? { data } : {}) };
   }
 
-  private async requestJson(path: string, init: RequestInit): Promise<unknown> {
+  private async requestJson(
+    path: string,
+    init: RequestInit,
+    baseUrl = this.config.apiBaseUrl,
+  ): Promise<unknown> {
     let response: Response;
     try {
-      response = await this.fetchImpl(new URL(path, ensureTrailingSlash(this.config.apiBaseUrl)), {
+      response = await this.fetchImpl(new URL(path, ensureTrailingSlash(baseUrl)), {
         ...init,
         signal: AbortSignal.timeout(this.config.requestTimeoutMs),
       });
@@ -696,6 +688,57 @@ function requiredString(value: unknown): string {
 
 function optionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function brokerBaseUrl(value: unknown): string | undefined {
+  const rawBaseUrl = optionalString(value);
+  if (!rawBaseUrl) return undefined;
+
+  let url: URL;
+  try {
+    url = new URL(rawBaseUrl);
+  } catch {
+    throw new KotakNeoError("Kotak Neo returned an invalid post-login baseUrl", 502);
+  }
+  if (
+    url.protocol !== "https:" ||
+    (url.hostname !== "kotaksecurities.com" &&
+      !url.hostname.endsWith(".kotaksecurities.com")) ||
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash
+  ) {
+    throw new KotakNeoError("Kotak Neo returned an untrusted post-login baseUrl", 502);
+  }
+  return ensureTrailingSlash(url.toString());
+}
+
+function redactKotakResponse(value: unknown, key = "", depth = 0): unknown {
+  if (
+    key &&
+    /token|sid|server.?id|rid|auth|mpin|totp|mobile|phone|ucc|key|password|feed.?url/i.test(key)
+  ) {
+    return value === undefined || value === null ? value : "[REDACTED]";
+  }
+  if (depth >= 8) return "[TRUNCATED]";
+  if (Array.isArray(value)) {
+    return value.slice(0, 50).map((item) => redactKotakResponse(item, "", depth + 1));
+  }
+  if (isRecord(value)) {
+    return Object.fromEntries(
+      Object.entries(value)
+        .slice(0, 100)
+        .map(([childKey, childValue]) => [
+          childKey,
+          redactKotakResponse(childValue, childKey, depth + 1),
+        ]),
+    );
+  }
+  if (typeof value === "string" && value.length > 1000) {
+    return `${value.slice(0, 1000)}…[TRUNCATED]`;
+  }
+  return value;
 }
 
 function validDivider(value: unknown, fallback: number): number {

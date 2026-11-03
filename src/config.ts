@@ -14,6 +14,7 @@ export interface KotakNeoConfig {
   quotesPath: string;
   niftyIndexToken?: string;
   niftyIndexSegment?: string;
+  logKotakLoginResponses?: boolean;
   requestTimeoutMs: number;
 }
 
@@ -99,6 +100,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       quotesPath,
       niftyIndexToken: env.KOTAK_NEO_NIFTY_INDEX_TOKEN || undefined,
       niftyIndexSegment: env.KOTAK_NEO_NIFTY_INDEX_SEGMENT || undefined,
+      logKotakLoginResponses: parseBoolean(
+        env.KOTAK_NEO_LOG_LOGIN_RESPONSES,
+        "KOTAK_NEO_LOG_LOGIN_RESPONSES",
+        false,
+      ),
       requestTimeoutMs,
     },
   };
@@ -116,6 +122,13 @@ function parseInteger(value: string | undefined, name: string): number {
     throw new Error(`${name} must be configured as an integer`);
   }
   return Number(value);
+}
+
+function parseBoolean(value: string | undefined, name: string, fallback: boolean): boolean {
+  if (value === undefined || value.trim() === "") return fallback;
+  if (/^(true|1|yes)$/i.test(value.trim())) return true;
+  if (/^(false|0|no)$/i.test(value.trim())) return false;
+  throw new Error(`${name} must be true or false`);
 }
 
 function validateRelativePath(value: string, name: string): void {
