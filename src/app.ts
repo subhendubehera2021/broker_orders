@@ -6,6 +6,7 @@ import {
   KotakNeoClient,
   KotakNeoError,
   type AuthenticatedSession,
+  type MarginCheckInput,
 } from "./kotak-neo-client.js";
 import { renderLoginPage } from "./login-page.js";
 
@@ -21,6 +22,8 @@ interface KotakLoginInput extends LoginBody {
 
 interface AuthClient {
   login(input: KotakLoginInput): Promise<AuthenticatedSession>;
+  getScripMaster(): Promise<unknown>;
+  checkMargin?(session: AuthenticatedSession, input: MarginCheckInput): Promise<unknown>;
 }
 
 interface AppOptions {
@@ -56,12 +59,14 @@ export function buildApp({ config, authClient }: AppOptions): FastifyInstance {
         openapi: "3.0.3",
         info: {
           title: "Kotak Neo API",
-          description: "Authentication API for the Kotak Neo trading service.",
+          description: "Authentication and Scrip Master APIs for the Kotak Neo trading service.",
           version: "1.0.0",
         },
         tags: [
           { name: "Health", description: "Service health" },
           { name: "Authentication", description: "Kotak Neo session authentication" },
+          { name: "Scrip Master", description: "Kotak Neo instrument master files" },
+          { name: "Margin", description: "Kotak Neo margin estimates" },
         ],
       },
     });
@@ -188,6 +193,119 @@ export function buildApp({ config, authClient }: AppOptions): FastifyInstance {
         return { authenticated: false };
       },
     );
+
+    api.get(
+      "/api/scrip-master",
+      {
+        schema: {
+          tags: ["Scrip Master"],
+          summary: "Get Scrip Master file paths",
+          description:
+            "Returns the production Scrip Master file paths from Kotak Neo using the configured API token.",
+          response: {
+            200: {
+              type: "object",
+              additionalProperties: true,
+              description: "Kotak Neo Scrip Master response.",
+            },
+            401: errorResponseSchema,
+            429: errorResponseSchema,
+            502: errorResponseSchema,
+            503: errorResponseSchema,
+            504: errorResponseSchema,
+          },
+        },
+      },
+      async (request, reply) => {
+        if (!client || !config.kotakNeo.consumerKey) {
+          return reply.code(503).send({ error: "Kotak Neo API token is not configured" });
+        }
+
+        try {
+          return await client.getScripMaster();
+        } catch (error) {
+          const statusCode = authenticationErrorStatus(error);
+          request.log.error(
+            { statusCode, errorName: error instanceof Error ? error.name : "UnknownError" },
+            "Kotak Neo Scrip Master request failed",
+          );
+          return reply.code(statusCode).send({
+            error: "Kotak Neo Scrip Master request could not be completed",
+          });
+        }
+      },
+    );
+
+    api.post<{ Body: MarginCheckInput }>(
+      "/api/margin",
+      {
+        schema: {
+          tags: ["Margin"],
+          summary: "Check required margin",
+          description:
+            "Requests a margin estimate from Kotak Neo for the supplied order parameters. This does not place an order.",
+          body: {
+            type: "object",
+            required: [
+              "brkName",
+              "brnchId",
+              "exSeg",
+              "prc",
+              "prcTp",
+              "prod",
+              "qty",
+              "tok",
+              "trnsTp",
+            ],
+            additionalProperties: false,
+            properties: {
+              brkName: { type: "string", minLength: 1, maxLength: 20 },
+              brnchId: { type: "string", minLength: 1, maxLength: 32 },
+              exSeg: { type: "string", minLength: 1, maxLength: 20 },
+              prc: { type: "string", pattern: "^\\d+(\\.\\d+)?$" },
+              prcTp: { type: "string", minLength: 1, maxLength: 10 },
+              prod: { type: "string", minLength: 1, maxLength: 20 },
+              qty: { type: "string", pattern: "^[1-9]\\d*$" },
+              tok: { type: "string", minLength: 1, maxLength: 32 },
+              trnsTp: { type: "string", enum: ["B", "S"] },
+            },
+          },
+          response: {
+            200: {
+              type: "object",
+              additionalProperties: true,
+              description: "Kotak Neo margin response.",
+            },
+            401: errorResponseSchema,
+            429: errorResponseSchema,
+            502: errorResponseSchema,
+            503: errorResponseSchema,
+            504: errorResponseSchema,
+          },
+        },
+      },
+      async (request, reply) => {
+        if (!session) {
+          return reply.code(401).send({ error: "Authenticate with Kotak Neo before checking margin" });
+        }
+        if (!client?.checkMargin) {
+          return reply.code(503).send({ error: "Kotak Neo API client is not configured" });
+        }
+
+        try {
+          return await client.checkMargin(session, request.body);
+        } catch (error) {
+          const statusCode = authenticationErrorStatus(error);
+          request.log.error(
+            { statusCode, errorName: error instanceof Error ? error.name : "UnknownError" },
+            "Kotak Neo margin check failed",
+          );
+          return reply.code(statusCode).send({
+            error: "Kotak Neo margin check could not be completed",
+          });
+        }
+      },
+    );
   });
 
   return app;
@@ -199,7 +317,7 @@ const errorResponseSchema = {
   properties: { error: { type: "string" } },
 } as const;
 
-function authenticationErrorStatus(error: unknown): number {
+function authenticationErrorStatus(error: unknown): 401 | 429 | 502 | 503 | 504 {
   if (!(error instanceof KotakNeoError)) {
     return 502;
   }

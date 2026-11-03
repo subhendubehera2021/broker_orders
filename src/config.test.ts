@@ -13,6 +13,8 @@ const validEnvironment: NodeJS.ProcessEnv = {
   KOTAK_NEO_FIN_KEY: "financial-key",
   KOTAK_NEO_TOTP_LOGIN_PATH: "login",
   KOTAK_NEO_TOTP_VALIDATE_PATH: "validate",
+  KOTAK_NEO_SCRIP_MASTER_PATH: "script-details/1.0/masterscrip/file-paths",
+  KOTAK_NEO_MARGIN_PATH: "quick/user/check-margin",
   KOTAK_NEO_REQUEST_TIMEOUT_MS: "10000",
 };
 
@@ -30,6 +32,8 @@ describe("loadConfig", () => {
         financialKey: "financial-key",
         totpLoginPath: "login",
         totpValidatePath: "validate",
+        scripMasterPath: "script-details/1.0/masterscrip/file-paths",
+        marginPath: "quick/user/check-margin",
         requestTimeoutMs: 10000,
       },
     });

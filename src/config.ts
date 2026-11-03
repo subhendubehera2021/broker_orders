@@ -7,6 +7,8 @@ export interface KotakNeoConfig {
   financialKey: string;
   totpLoginPath: string;
   totpValidatePath: string;
+  scripMasterPath: string;
+  marginPath: string;
   requestTimeoutMs: number;
 }
 
@@ -52,8 +54,15 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     env.KOTAK_NEO_TOTP_VALIDATE_PATH,
     "KOTAK_NEO_TOTP_VALIDATE_PATH",
   );
+  const scripMasterPath = requiredValue(
+    env.KOTAK_NEO_SCRIP_MASTER_PATH,
+    "KOTAK_NEO_SCRIP_MASTER_PATH",
+  );
+  const marginPath = requiredValue(env.KOTAK_NEO_MARGIN_PATH, "KOTAK_NEO_MARGIN_PATH");
   validateRelativePath(totpLoginPath, "KOTAK_NEO_TOTP_LOGIN_PATH");
   validateRelativePath(totpValidatePath, "KOTAK_NEO_TOTP_VALIDATE_PATH");
+  validateRelativePath(scripMasterPath, "KOTAK_NEO_SCRIP_MASTER_PATH");
+  validateRelativePath(marginPath, "KOTAK_NEO_MARGIN_PATH");
 
   return {
     host: requiredValue(env.HOST, "HOST"),
@@ -67,6 +76,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       financialKey: requiredValue(env.KOTAK_NEO_FIN_KEY, "KOTAK_NEO_FIN_KEY"),
       totpLoginPath,
       totpValidatePath,
+      scripMasterPath,
+      marginPath,
       requestTimeoutMs,
     },
   };

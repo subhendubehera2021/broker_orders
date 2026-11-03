@@ -17,6 +17,8 @@ const config: AppConfig = {
     financialKey: "test-financial-key",
     totpLoginPath: "test/login",
     totpValidatePath: "test/validate",
+    scripMasterPath: "script-details/1.0/masterscrip/file-paths",
+    marginPath: "quick/user/check-margin",
     requestTimeoutMs: 1000,
   },
 };
@@ -48,6 +50,9 @@ describe("authentication routes", () => {
     assert.match(response.body, /value="TESTUCC" readonly/);
     assert.doesNotMatch(response.body, /654321/);
     assert.doesNotMatch(response.body, /name="mpin"/);
+    assert.match(response.body, /id="margin-form"/);
+    assert.match(response.body, /name="tok" value="11536"/);
+    assert.match(response.body, /fetch\("\/api\/margin"/);
     assert.match(response.body, /fetch\("\/api\/auth\/login"/);
   });
 
@@ -67,6 +72,8 @@ describe("authentication routes", () => {
       "/api/auth/login",
       "/api/auth/logout",
       "/api/auth/session",
+      "/api/margin",
+      "/api/scrip-master",
       "/health",
     ]);
     assert.equal(
@@ -78,6 +85,10 @@ describe("authentication routes", () => {
     const loginSchema = spec.paths["/api/auth/login"].post.requestBody.content["application/json"].schema;
     assert.deepEqual(loginSchema.required, ["totp"]);
     assert.deepEqual(Object.keys(loginSchema.properties), ["totp"]);
+    assert.deepEqual(
+      spec.paths["/api/margin"].post.requestBody.content["application/json"].schema.required,
+      ["brkName", "brnchId", "exSeg", "prc", "prcTp", "prod", "qty", "tok", "trnsTp"],
+    );
   });
 
   it("completes login without returning broker tokens", async () => {
@@ -94,6 +105,9 @@ describe("authentication routes", () => {
             totp: "123456",
           });
           return authenticatedSession;
+        },
+        async getScripMaster() {
+          return { data: { filesPaths: ["https://files.example/scrip-master.zip"] } };
         },
       },
     });
@@ -124,6 +138,9 @@ describe("authentication routes", () => {
         async login() {
           assert.fail("login should not be called for invalid credentials");
         },
+        async getScripMaster() {
+          return { data: { filesPaths: [] } };
+        },
       },
     });
     apps.push(app);
@@ -140,7 +157,10 @@ describe("authentication routes", () => {
   it("clears session state on logout", async () => {
     const app = buildApp({
       config,
-      authClient: { async login() { return authenticatedSession; } },
+      authClient: {
+        async login() { return authenticatedSession; },
+        async getScripMaster() { return { data: { filesPaths: [] } }; },
+      },
     });
     apps.push(app);
 
@@ -188,6 +208,9 @@ describe("authentication routes", () => {
         async login() {
           assert.fail("login should not be called without configured credentials");
         },
+        async getScripMaster() {
+          return { data: { filesPaths: [] } };
+        },
       },
     });
     apps.push(app);
@@ -203,4 +226,132 @@ describe("authentication routes", () => {
       error: "Kotak Neo login settings are not configured",
     });
   });
+
+  it("proxies Scrip Master data without exposing the configured API token", async () => {
+    let requestCount = 0;
+    const app = buildApp({
+      config,
+      authClient: {
+        async login() {
+          return authenticatedSession;
+        },
+        async getScripMaster() {
+          requestCount += 1;
+          return { data: { filesPaths: ["https://files.example/scrip-master.zip"] } };
+        },
+      },
+    });
+    apps.push(app);
+
+    const response = await app.inject("/api/scrip-master");
+
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(response.json(), {
+      data: { filesPaths: ["https://files.example/scrip-master.zip"] },
+    });
+    assert.equal(response.body.includes("test-consumer-key"), false);
+    assert.equal(requestCount, 1);
+  });
+
+  it("requires an authenticated broker session before checking margin", async () => {
+    let marginCalls = 0;
+    const app = buildApp({
+      config,
+      authClient: {
+        async login() { return authenticatedSession; },
+        async getScripMaster() { return { data: { filesPaths: [] } }; },
+        async checkMargin() {
+          marginCalls += 1;
+          return { data: { margin: "12500.00" } };
+        },
+      },
+    });
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/margin",
+      payload: marginInput,
+    });
+
+    assert.equal(response.statusCode, 401);
+    assert.equal(marginCalls, 0);
+  });
+
+  it("checks margin with the active session and the supplied order parameters", async () => {
+    let receivedSession: AuthenticatedSession | undefined;
+    let receivedInput: unknown;
+    const app = buildApp({
+      config,
+      authClient: {
+        async login() { return authenticatedSession; },
+        async getScripMaster() { return { data: { filesPaths: [] } }; },
+        async checkMargin(session, input) {
+          receivedSession = session;
+          receivedInput = input;
+          return { data: { margin: "12500.00" } };
+        },
+      },
+    });
+    apps.push(app);
+
+    await app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      payload: { totp: "123456" },
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/margin",
+      payload: marginInput,
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(response.json(), { data: { margin: "12500.00" } });
+    assert.deepEqual(receivedSession, authenticatedSession);
+    assert.deepEqual(receivedInput, marginInput);
+    assert.equal(response.body.includes("private-trade-token"), false);
+  });
+
+  it("rejects invalid margin input before calling the broker", async () => {
+    let marginCalls = 0;
+    const app = buildApp({
+      config,
+      authClient: {
+        async login() { return authenticatedSession; },
+        async getScripMaster() { return { data: { filesPaths: [] } }; },
+        async checkMargin() {
+          marginCalls += 1;
+          return {};
+        },
+      },
+    });
+    apps.push(app);
+    await app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      payload: { totp: "123456" },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/margin",
+      payload: { ...marginInput, trnsTp: "BUY" },
+    });
+
+    assert.equal(response.statusCode, 400);
+    assert.equal(marginCalls, 0);
+  });
 });
+
+const marginInput = {
+  brkName: "KOTAK",
+  brnchId: "ONLINE",
+  exSeg: "nse_cm",
+  prc: "12500",
+  prcTp: "L",
+  prod: "CNC",
+  qty: "1",
+  tok: "11536",
+  trnsTp: "B",
+};

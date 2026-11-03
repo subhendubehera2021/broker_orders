@@ -8,6 +8,8 @@ const prodConfig = {
   financialKey: "test-prod-financial-key",
   totpLoginPath: "login/1.0/tradeApiLogin",
   totpValidatePath: "login/1.0/tradeApiValidate",
+  scripMasterPath: "script-details/1.0/masterscrip/file-paths",
+  marginPath: "quick/user/check-margin",
   requestTimeoutMs: 1000,
 };
 
@@ -68,5 +70,71 @@ describe("KotakNeoClient", () => {
       rid: "request-id",
       serverId: "server-id",
     });
+  });
+
+  it("fetches Scrip Master paths with an authorization header", async () => {
+    let capturedUrl: URL | undefined;
+    let capturedInit: RequestInit | undefined;
+    const client = new KotakNeoClient(prodConfig, async (input, init) => {
+      capturedUrl = new URL(input.toString());
+      capturedInit = init;
+      return Response.json({
+        data: { filesPaths: ["https://files.example/scrip-master.zip"] },
+      });
+    });
+
+    const response = await client.getScripMaster();
+
+    assert.equal(
+      capturedUrl?.href,
+      "https://mis.kotaksecurities.com/script-details/1.0/masterscrip/file-paths",
+    );
+    assert.equal(capturedInit?.method, "GET");
+    const headers = new Headers(capturedInit?.headers);
+    assert.equal(headers.get("authorization"), "consumer-key");
+    assert.equal(headers.get("content-type"), "application/x-www-form-urlencoded");
+    assert.deepEqual(response, {
+      data: { filesPaths: ["https://files.example/scrip-master.zip"] },
+    });
+  });
+
+  it("posts margin parameters as jData with the authenticated session headers", async () => {
+    let capturedUrl: URL | undefined;
+    let capturedInit: RequestInit | undefined;
+    const client = new KotakNeoClient(prodConfig, async (input, init) => {
+      capturedUrl = new URL(input.toString());
+      capturedInit = init;
+      return Response.json({ data: { margin: "12500.00" } });
+    });
+
+    const input = {
+      brkName: "KOTAK",
+      brnchId: "ONLINE",
+      exSeg: "nse_cm",
+      prc: "12500",
+      prcTp: "L",
+      prod: "CNC",
+      qty: "1",
+      tok: "11536",
+      trnsTp: "B",
+    };
+    const response = await client.checkMargin(
+      { sid: "session-sid", tradeToken: "session-token" },
+      input,
+    );
+
+    assert.equal(
+      capturedUrl?.href,
+      "https://mis.kotaksecurities.com/quick/user/check-margin",
+    );
+    assert.equal(capturedInit?.method, "POST");
+    const headers = new Headers(capturedInit?.headers);
+    assert.equal(headers.get("auth"), "session-token");
+    assert.equal(headers.get("sid"), "session-sid");
+    assert.equal(headers.get("neo-fin-key"), "test-prod-financial-key");
+    assert.equal(headers.get("content-type"), "application/x-www-form-urlencoded");
+    const body = new URLSearchParams(String(capturedInit?.body));
+    assert.deepEqual(JSON.parse(body.get("jData") ?? "null"), input);
+    assert.deepEqual(response, { data: { margin: "12500.00" } });
   });
 });

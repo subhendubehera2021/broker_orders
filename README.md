@@ -1,8 +1,8 @@
 # Kotak Neo API
 
 A Node.js, TypeScript, and Fastify starter service for Kotak Neo authentication.
-It implements the TOTP login and MPIN validation flow; order placement, market
-data, and portfolio endpoints are not included yet.
+It implements TOTP login, Scrip Master file paths, and an authenticated margin
+estimate; it does not place orders.
 
 ## Requirements
 
@@ -38,6 +38,9 @@ stays server-side; only the current TOTP is submitted by the browser.
   server-side mobile number, UCC, and MPIN to complete authentication.
 - `GET /api/auth/session` — check whether this process has an authenticated
   session. Broker tokens are never returned.
+- `GET /api/scrip-master` — retrieve Scrip Master file paths from Kotak Neo.
+- `POST /api/margin` — check the required margin for the supplied order details
+  using the current authenticated session. This does not place an order.
 - `POST /api/auth/logout` — clear the in-memory session from this process. This
   does not revoke the session with Kotak Neo.
 
@@ -53,6 +56,26 @@ single-process starter, not a multi-user session store. Logout only discards
 the local tokens; use Kotak Neo's own session controls to revoke broker-side
 access.
 
+Retrieve Scrip Master paths through this service (the configured Neo API token
+is attached server-side):
+
+```sh
+curl http://127.0.0.1:3000/api/scrip-master
+```
+
+The login screen includes a margin calculator after authentication. The
+equivalent API request accepts the order fields from Kotak Neo's `jData` as
+JSON:
+
+```sh
+curl http://127.0.0.1:3000/api/margin \
+  -H 'Content-Type: application/json' \
+  --data '{"brkName":"KOTAK","brnchId":"ONLINE","exSeg":"nse_cm","prc":"12500","prcTp":"L","prod":"CNC","qty":"1","tok":"11536","trnsTp":"B"}'
+```
+
+The service sends this to Kotak Neo as a form-encoded `jData` field and adds
+the current session token, session ID, and financial key server-side.
+
 ## Configuration
 
 Copy `.env.example` to `.env` and set the values supplied for your Kotak Neo
@@ -67,6 +90,9 @@ application:
 - `KOTAK_NEO_API_BASE_URL` — the broker API base URL.
 - `KOTAK_NEO_TOTP_LOGIN_PATH` and `KOTAK_NEO_TOTP_VALIDATE_PATH` — the
   environment-specific authentication paths.
+- `KOTAK_NEO_SCRIP_MASTER_PATH` — the Scrip Master file-path endpoint.
+- `KOTAK_NEO_MARGIN_PATH` — the check-margin endpoint.
+- `KOTAK_NEO_MARGIN_PATH` — the check-margin endpoint.
 - `KOTAK_NEO_REQUEST_TIMEOUT_MS` — upstream request timeout in milliseconds.
 - `HOST` and `PORT` — service bind address and port.
 

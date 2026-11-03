@@ -154,6 +154,27 @@ const loginPageTemplate = `<!doctype html>
       .session-copy { margin: 13px 0 0; color: var(--muted); font-size: 12px; line-height: 1.7; }
       .logout { border: 1px solid #383d33; background: #22261f; color: #e5e9dd; }
       .logout:hover:not(:disabled) { background: #2b3027; }
+      .margin-panel { margin-top: 24px; padding-top: 23px; border-top: 1px solid var(--line); }
+      .margin-title { margin: 0; font-size: 16px; font-weight: 620; letter-spacing: -.025em; }
+      .margin-description { margin: 7px 0 16px; color: var(--muted); font-size: 11px; line-height: 1.6; }
+      .margin-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 12px; }
+      .margin-grid .field { margin-top: 12px; }
+      .margin-grid input, .margin-grid select { height: 42px; }
+      .margin-grid select {
+        width: 100%;
+        padding: 0 13px;
+        border: 1px solid #34382f;
+        border-radius: 8px;
+        outline: none;
+        background: #11130f;
+        color: #f3f4ee;
+        font: inherit;
+        font-size: 13px;
+      }
+      .margin-grid select:focus { border-color: #9cbe57; box-shadow: 0 0 0 3px rgb(200 241 105 / 10%); }
+      .margin-result { margin-top: 16px; padding: 14px; border: 1px solid #34382f; border-radius: 8px; background: #11130f; }
+      .margin-result-title { margin: 0 0 9px; color: var(--green); font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+      .margin-result pre { max-height: 260px; margin: 0; overflow: auto; color: #d7dad1; font: 11px/1.65 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
       footer { display: flex; justify-content: space-between; gap: 20px; padding: 10px 7% 0; color: #63685e; font-size: 10px; }
       footer a { color: #92988a; text-decoration: none; }
       footer a:hover { color: var(--green); }
@@ -177,6 +198,7 @@ const loginPageTemplate = `<!doctype html>
         .eyebrow { margin-bottom: 17px; }
         .intro-copy { font-size: 13px; }
         .card { padding: 24px 20px; }
+        .margin-grid { grid-template-columns: 1fr; }
         footer { font-size: 9px; }
       }
       @media (prefers-reduced-motion: reduce) {
@@ -243,7 +265,60 @@ const loginPageTemplate = `<!doctype html>
 
           <div class="session-panel" id="session-panel" hidden>
             <div class="session-state">Kotak Neo session active</div>
-            <p class="session-copy">Your account is connected. You can safely close this page when you’re done.</p>
+            <p class="session-copy">Your account is connected. Check required margin for an order without placing it.</p>
+            <section class="margin-panel" aria-labelledby="margin-title">
+              <h3 class="margin-title" id="margin-title">Margin calculator</h3>
+              <p class="margin-description">Enter the instrument and order details. This sends a margin estimate request only; no order will be placed.</p>
+              <form id="margin-form">
+                <div class="margin-grid">
+                  <div class="field">
+                    <label for="brk-name">Broker</label>
+                    <input id="brk-name" name="brkName" value="KOTAK" maxlength="20" required>
+                  </div>
+                  <div class="field">
+                    <label for="branch-id">Branch</label>
+                    <input id="branch-id" name="brnchId" value="ONLINE" maxlength="32" required>
+                  </div>
+                  <div class="field">
+                    <label for="exchange-segment">Exchange segment</label>
+                    <input id="exchange-segment" name="exSeg" value="nse_cm" maxlength="20" required>
+                  </div>
+                  <div class="field">
+                    <label for="instrument-token">Instrument token</label>
+                    <input id="instrument-token" name="tok" value="11536" maxlength="32" required>
+                  </div>
+                  <div class="field">
+                    <label for="price">Price</label>
+                    <input id="price" name="prc" type="number" min="0.01" step="any" value="12500" required>
+                  </div>
+                  <div class="field">
+                    <label for="price-type">Price type</label>
+                    <input id="price-type" name="prcTp" value="L" maxlength="10" required>
+                  </div>
+                  <div class="field">
+                    <label for="product">Product</label>
+                    <input id="product" name="prod" value="CNC" maxlength="20" required>
+                  </div>
+                  <div class="field">
+                    <label for="quantity">Quantity</label>
+                    <input id="quantity" name="qty" type="number" min="1" step="1" value="1" required>
+                  </div>
+                  <div class="field">
+                    <label for="transaction-type">Transaction</label>
+                    <select id="transaction-type" name="trnsTp" required>
+                      <option value="B">Buy</option>
+                      <option value="S">Sell</option>
+                    </select>
+                  </div>
+                </div>
+                <p class="message" id="margin-message" role="status" aria-live="polite"></p>
+                <button class="submit" id="margin-submit" type="submit">Check required margin</button>
+              </form>
+              <div class="margin-result" id="margin-result" hidden>
+                <p class="margin-result-title">Kotak Neo response</p>
+                <pre id="margin-output"></pre>
+              </div>
+            </section>
             <button class="logout" id="logout-button" type="button">Disconnect this session</button>
           </div>
 
@@ -264,10 +339,20 @@ const loginPageTemplate = `<!doctype html>
       const submitLabel = document.querySelector("#submit-label");
       const sessionPanel = document.querySelector("#session-panel");
       const logoutButton = document.querySelector("#logout-button");
+      const marginForm = document.querySelector("#margin-form");
+      const marginMessage = document.querySelector("#margin-message");
+      const marginSubmit = document.querySelector("#margin-submit");
+      const marginResult = document.querySelector("#margin-result");
+      const marginOutput = document.querySelector("#margin-output");
 
       function showMessage(text, kind = "error") {
         message.textContent = text;
         message.dataset.kind = kind;
+      }
+
+      function showMarginMessage(text, kind = "error") {
+        marginMessage.textContent = text;
+        marginMessage.dataset.kind = kind;
       }
 
       function setAuthenticated(authenticated) {
@@ -289,6 +374,33 @@ const loginPageTemplate = `<!doctype html>
           showMessage("Could not check your session. Refresh the page to try again.");
         }
       }
+
+      marginForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        showMarginMessage("");
+        marginResult.hidden = true;
+        if (!marginForm.reportValidity()) return;
+
+        marginSubmit.disabled = true;
+        marginSubmit.textContent = "Calculating…";
+        try {
+          const values = Object.fromEntries(new FormData(marginForm).entries());
+          const response = await fetch("/api/margin", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify(values),
+          });
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.error || "Margin check failed. Please try again.");
+          marginOutput.textContent = JSON.stringify(result, null, 2);
+          marginResult.hidden = false;
+        } catch (error) {
+          showMarginMessage(error instanceof Error ? error.message : "Margin check failed. Please try again.");
+        } finally {
+          marginSubmit.disabled = false;
+          marginSubmit.textContent = "Check required margin";
+        }
+      });
 
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
@@ -324,6 +436,8 @@ const loginPageTemplate = `<!doctype html>
           const response = await fetch("/api/auth/logout", { method: "POST" });
           if (!response.ok) throw new Error("Disconnect failed. Please try again.");
           setAuthenticated(false);
+          marginResult.hidden = true;
+          marginOutput.textContent = "";
           showMessage("Local session disconnected.", "info");
         } catch (error) {
           showMessage(error instanceof Error ? error.message : "Disconnect failed. Please try again.");

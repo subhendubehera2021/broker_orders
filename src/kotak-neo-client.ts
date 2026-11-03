@@ -14,6 +14,18 @@ export interface AuthenticatedSession {
   serverId?: string;
 }
 
+export interface MarginCheckInput {
+  brkName: string;
+  brnchId: string;
+  exSeg: string;
+  prc: string;
+  prcTp: string;
+  prod: string;
+  qty: string;
+  tok: string;
+  trnsTp: string;
+}
+
 interface KotakResponse {
   data?: {
     token?: unknown;
@@ -81,39 +93,46 @@ export class KotakNeoClient {
     };
   }
 
+  async getScripMaster(): Promise<unknown> {
+    return this.requestJson(this.config.scripMasterPath, {
+      method: "GET",
+      headers: {
+        Authorization: this.config.consumerKey,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+    });
+  }
+
+  async checkMargin(
+    session: AuthenticatedSession,
+    input: MarginCheckInput,
+  ): Promise<unknown> {
+    const body = new URLSearchParams({
+      jData: JSON.stringify(input),
+    });
+
+    return this.requestJson(this.config.marginPath, {
+      method: "POST",
+      headers: {
+        Auth: session.tradeToken,
+        Sid: session.sid,
+        "neo-fin-key": this.config.financialKey,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body,
+    });
+  }
+
   private async post(
     path: string,
     headers: Record<string, string>,
     body: Record<string, string>,
   ): Promise<KotakResponse> {
-    let response: Response;
-    try {
-      response = await this.fetchImpl(new URL(path, ensureTrailingSlash(this.config.apiBaseUrl)), {
-        method: "POST",
-        headers,
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(this.config.requestTimeoutMs),
-      });
-    } catch (error) {
-      if (error instanceof Error && error.name === "TimeoutError") {
-        throw new KotakNeoError("Kotak Neo request timed out", 504);
-      }
-      throw new KotakNeoError("Unable to reach Kotak Neo", 503);
-    }
-
-    if (!response.ok) {
-      throw new KotakNeoError("Kotak Neo rejected the authentication request", response.status);
-    }
-
-    let responseBody: unknown;
-    try {
-      responseBody = await response.json();
-    } catch (error) {
-      if (error instanceof SyntaxError) {
-        throw new KotakNeoError("Kotak Neo returned an invalid response", 502);
-      }
-      throw error;
-    }
+    const responseBody = await this.requestJson(path, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+    });
     if (!isRecord(responseBody)) {
       throw new KotakNeoError("Kotak Neo returned an invalid response", 502);
     }
@@ -129,6 +148,40 @@ export class KotakNeoClient {
           }
         : undefined,
     };
+  }
+
+  private async requestJson(path: string, init: RequestInit): Promise<unknown> {
+    let response: Response;
+    try {
+      response = await this.fetchImpl(new URL(path, ensureTrailingSlash(this.config.apiBaseUrl)), {
+        ...init,
+        signal: AbortSignal.timeout(this.config.requestTimeoutMs),
+      });
+    } catch (error) {
+      if (error instanceof Error && error.name === "TimeoutError") {
+        throw new KotakNeoError("Kotak Neo request timed out", 504);
+      }
+      throw new KotakNeoError("Unable to reach Kotak Neo", 503);
+    }
+
+    if (!response.ok) {
+      throw new KotakNeoError("Kotak Neo rejected the API request", response.status);
+    }
+
+    let responseBody: unknown;
+    try {
+      responseBody = await response.json();
+    } catch (error) {
+      if (error instanceof SyntaxError) {
+        throw new KotakNeoError("Kotak Neo returned an invalid response", 502);
+      }
+      throw error;
+    }
+    if (!isRecord(responseBody)) {
+      throw new KotakNeoError("Kotak Neo returned an invalid response", 502);
+    }
+
+    return responseBody;
   }
 }
 
