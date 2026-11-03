@@ -1,0 +1,91 @@
+export interface KotakNeoConfig {
+  apiBaseUrl: string;
+  consumerKey?: string;
+  financialKey: string;
+  totpLoginPath: string;
+  totpValidatePath: string;
+  requestTimeoutMs: number;
+}
+
+export interface AppConfig {
+  host: string;
+  port: number;
+  kotakNeo: KotakNeoConfig;
+}
+
+export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
+  const port = parseInteger(env.PORT, "PORT");
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error("PORT must be an integer between 1 and 65535");
+  }
+
+  const requestTimeoutMs = parseInteger(
+    env.KOTAK_NEO_REQUEST_TIMEOUT_MS,
+    "KOTAK_NEO_REQUEST_TIMEOUT_MS",
+  );
+  if (requestTimeoutMs < 1) {
+    throw new Error("KOTAK_NEO_REQUEST_TIMEOUT_MS must be greater than zero");
+  }
+
+  const apiBaseUrl = requiredValue(env.KOTAK_NEO_API_BASE_URL, "KOTAK_NEO_API_BASE_URL");
+  let parsedBaseUrl: URL;
+  try {
+    parsedBaseUrl = new URL(apiBaseUrl);
+  } catch {
+    throw new Error("KOTAK_NEO_API_BASE_URL must be a valid HTTPS URL");
+  }
+  if (
+    parsedBaseUrl.protocol !== "https:" ||
+    parsedBaseUrl.username ||
+    parsedBaseUrl.password ||
+    parsedBaseUrl.search ||
+    parsedBaseUrl.hash
+  ) {
+    throw new Error("KOTAK_NEO_API_BASE_URL must be a valid HTTPS URL without credentials");
+  }
+
+  const totpLoginPath = requiredValue(env.KOTAK_NEO_TOTP_LOGIN_PATH, "KOTAK_NEO_TOTP_LOGIN_PATH");
+  const totpValidatePath = requiredValue(
+    env.KOTAK_NEO_TOTP_VALIDATE_PATH,
+    "KOTAK_NEO_TOTP_VALIDATE_PATH",
+  );
+  validateRelativePath(totpLoginPath, "KOTAK_NEO_TOTP_LOGIN_PATH");
+  validateRelativePath(totpValidatePath, "KOTAK_NEO_TOTP_VALIDATE_PATH");
+
+  return {
+    host: requiredValue(env.HOST, "HOST"),
+    port,
+    kotakNeo: {
+      apiBaseUrl,
+      consumerKey: env.KOTAK_NEO_CONSUMER_KEY || undefined,
+      financialKey: requiredValue(env.KOTAK_NEO_FIN_KEY, "KOTAK_NEO_FIN_KEY"),
+      totpLoginPath,
+      totpValidatePath,
+      requestTimeoutMs,
+    },
+  };
+}
+
+function requiredValue(value: string | undefined, name: string): string {
+  if (!value?.trim()) {
+    throw new Error(`${name} must be configured`);
+  }
+  return value.trim();
+}
+
+function parseInteger(value: string | undefined, name: string): number {
+  if (!value || !/^\d+$/.test(value) || !Number.isSafeInteger(Number(value))) {
+    throw new Error(`${name} must be configured as an integer`);
+  }
+  return Number(value);
+}
+
+function validateRelativePath(value: string, name: string): void {
+  if (value.startsWith("/") || value.includes("?") || value.includes("#")) {
+    throw new Error(`${name} must be a relative path without query or fragment`);
+  }
+  const resolved = new URL(value, "https://config-validation.invalid/");
+  if (resolved.origin !== "https://config-validation.invalid") {
+    throw new Error(`${name} must be a relative path`);
+  }
+}
