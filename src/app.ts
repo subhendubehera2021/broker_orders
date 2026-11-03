@@ -9,12 +9,15 @@ import {
   type AuthenticatedSession,
   type MarginCheckInput,
   type NiftyIndexTick,
+  type NiftyOptionMarketInstrument,
+  type NiftyOptionPriceTick,
 } from "./kotak-neo-client.js";
 import { renderLoginPage } from "./login-page.js";
 import { renderMarginPage } from "./margin-page.js";
 import { renderNseFoScripMasterPage } from "./scrip-master-page.js";
 import {
   parseNiftyOptionContracts,
+  selectNearbyNiftyOptionContracts,
   sortExpiryLabels,
   type NiftyOptionContract,
 } from "./option-chain.js";
@@ -37,6 +40,14 @@ interface AuthClient {
   streamNiftyIndexPrice?(
     session: AuthenticatedSession,
     onPrice: (tick: NiftyIndexTick) => void,
+    onError: (error: Error) => void,
+  ): () => void;
+  streamNiftyMarketData?(
+    session: AuthenticatedSession,
+    optionInstruments: NiftyOptionMarketInstrument[],
+    selectOptions: (spotPrice: number) => NiftyOptionMarketInstrument[],
+    onIndexPrice: (tick: NiftyIndexTick) => void,
+    onOptionPrice: (tick: NiftyOptionPriceTick) => void,
     onError: (error: Error) => void,
   ): () => void;
   checkMargin?(session: AuthenticatedSession, input: MarginCheckInput): Promise<unknown>;
@@ -169,17 +180,24 @@ export function buildApp({
       }),
     );
 
-    api.get(
+    api.get<{ Querystring: { expiry?: string } }>(
       "/api/market/nifty/stream",
       {
         schema: {
           tags: ["Options"],
-          summary: "Stream live NIFTY index prices over Server-Sent Events",
+          summary: "Stream live NIFTY and optional option prices",
+          querystring: {
+            type: "object",
+            additionalProperties: false,
+            properties: { expiry: { type: "string", pattern: "^\\d{2}[A-Z]{3}\\d{4}$" } },
+          },
           response: {
             200: {
               type: "string",
-              description: "Server-Sent Events containing NIFTY index price updates.",
+              description:
+                "Server-Sent Events with NIFTY index prices and, when expiry is supplied, current option prices.",
             },
+            400: errorResponseSchema,
             401: errorResponseSchema,
             503: errorResponseSchema,
           },
@@ -187,9 +205,44 @@ export function buildApp({
       },
       async (request, reply) => {
         if (!session) {
-          return reply.code(401).send({ error: "Sign in to Kotak Neo to stream the live NIFTY price" });
+          return reply.code(401).send({ error: "Sign in to Kotak Neo to stream live market prices" });
         }
-        if (!client?.streamNiftyIndexPrice) {
+
+        const expiry = request.query.expiry;
+        let optionContracts: NiftyOptionContract[] = [];
+        if (expiry) {
+          try {
+            optionContracts = (await getNiftyContracts()).filter(
+              (contract) => contract.expiry === expiry,
+            );
+            if (optionContracts.length === 0) {
+              return reply.code(400).send({ error: "No NIFTY option contracts found for that expiry" });
+            }
+          } catch (error) {
+            const statusCode = brokerRequestStatus(error);
+            request.log.error(
+              {
+                statusCode,
+                errorName: error instanceof Error ? error.name : "UnknownError",
+                ...(error instanceof KotakNeoError
+                  ? { errorMessage: error.message, upstreamStatusCode: error.statusCode }
+                  : {}),
+              },
+              "NIFTY option stream contracts could not be loaded",
+            );
+            return reply.code(statusCode).send({
+              error:
+                error instanceof KotakNeoError
+                  ? error.message
+                  : "NIFTY option stream contracts could not be loaded",
+            });
+          }
+        }
+        if (
+          expiry
+            ? !client?.streamNiftyMarketData
+            : !client?.streamNiftyIndexPrice
+        ) {
           return reply.code(503).send({ error: "Kotak Neo market-data WebSocket is not configured" });
         }
 
@@ -218,37 +271,59 @@ export function buildApp({
           stopFeed?.();
           if (!response.destroyed && !response.writableEnded) response.end();
         };
+        const writeEvent = (name: string, value: unknown) => {
+          if (!closed && !response.destroyed) {
+            response.write(`event: ${name}\ndata: ${JSON.stringify(value)}\n\n`);
+          }
+        };
         activeNiftyStreams.add(closeStream);
         response.once("close", closeStream);
 
         try {
-          stopFeed = client.streamNiftyIndexPrice(
-            authenticatedSession,
-            (tick) => {
-              if (!closed && !response.destroyed) {
-                response.write(`event: price\ndata: ${JSON.stringify(tick)}\n\n`);
-              }
-            },
-            (error) => {
-              request.log.error(
-                { errorName: error.name, errorMessage: error.message },
-                "NIFTY live WebSocket stream failed",
-              );
-              if (!closed && !response.destroyed) {
-                response.write(`event: market-error\ndata: ${JSON.stringify({ error: error.message })}\n\n`);
+          if (expiry && client?.streamNiftyMarketData) {
+            const optionInstruments = optionContracts.map(({ instrumentToken, tradingSymbol }) => ({
+              instrumentToken,
+              tradingSymbol,
+            }));
+            stopFeed = client.streamNiftyMarketData(
+              authenticatedSession,
+              optionInstruments,
+              (spotPrice) =>
+                selectNearbyNiftyOptionContracts(optionContracts, spotPrice).map(
+                  ({ instrumentToken, tradingSymbol }) => ({ instrumentToken, tradingSymbol }),
+                ),
+              (tick) => writeEvent("price", tick),
+              (tick) => writeEvent("option-price", tick),
+              (error) => {
+                request.log.error(
+                  { errorName: error.name, errorMessage: error.message },
+                  "NIFTY option market-data WebSocket stream failed",
+                );
+                writeEvent("market-error", { error: error.message });
                 closeStream();
-              }
-            },
-          );
-          if (closed) stopFeed();
+              },
+            );
+          } else if (client?.streamNiftyIndexPrice) {
+            stopFeed = client.streamNiftyIndexPrice(
+              authenticatedSession,
+              (tick) => writeEvent("price", tick),
+              (error) => {
+                request.log.error(
+                  { errorName: error.name, errorMessage: error.message },
+                  "NIFTY live WebSocket stream failed",
+                );
+                writeEvent("market-error", { error: error.message });
+                closeStream();
+              },
+            );
+          }
+          if (closed) stopFeed?.();
         } catch (error) {
           request.log.error(
             { errorName: error instanceof Error ? error.name : "UnknownError" },
             "NIFTY live WebSocket stream could not start",
           );
-          response.write(
-            `event: market-error\ndata: ${JSON.stringify({ error: "NIFTY live price stream could not start" })}\n\n`,
-          );
+          writeEvent("market-error", { error: "NIFTY live price stream could not start" });
           closeStream();
         }
         return reply;

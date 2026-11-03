@@ -21,6 +21,17 @@ export interface NiftyIndexTick {
   asOf: string;
 }
 
+export interface NiftyOptionMarketInstrument {
+  instrumentToken: string;
+  tradingSymbol: string;
+}
+
+export interface NiftyOptionPriceTick {
+  tradingSymbol: string;
+  price: number;
+  asOf: string;
+}
+
 interface MarketDataSocket {
   readyState: number;
   onopen: ((event: Event) => void) | null;
@@ -125,6 +136,17 @@ export class KotakNeoClient {
     onPrice: (tick: NiftyIndexTick) => void,
     onError: (error: Error) => void,
   ): () => void {
+    return this.streamNiftyMarketData(session, [], () => [], onPrice, () => {}, onError);
+  }
+
+  streamNiftyMarketData(
+    session: AuthenticatedSession,
+    optionInstruments: NiftyOptionMarketInstrument[],
+    selectOptions: (spotPrice: number) => NiftyOptionMarketInstrument[],
+    onIndexPrice: (tick: NiftyIndexTick) => void,
+    onOptionPrice: (tick: NiftyOptionPriceTick) => void,
+    onError: (error: Error) => void,
+  ): () => void {
     if (!session.feedUrl || !session.user) {
       onError(new KotakNeoError("Kotak market-data feed details are missing; sign in again", 503));
       return () => {};
@@ -140,17 +162,84 @@ export class KotakNeoClient {
 
     let stopped = false;
     let authenticated = false;
-    let divider = 100;
+    let indexDivider = 100;
+    let optionDivider = 100;
     let errorReported = false;
+    let subscribedOptions = new Map<string, NiftyOptionMarketInstrument>();
+    const optionInstrumentsByToken = new Map(
+      optionInstruments.map((instrument) => [
+        Number(instrument.instrumentToken),
+        instrument,
+      ]),
+    );
 
     const reportError = (error: Error) => {
       if (stopped || errorReported) return;
       errorReported = true;
       onError(error);
     };
+    const updateOptionSubscriptions = (spotPrice: number) => {
+      if (optionInstruments.length === 0) return;
+      const selectedOptions = selectOptions(spotPrice);
+      const nextOptions = new Map(
+        selectedOptions.map((instrument) => [instrument.instrumentToken, instrument]),
+      );
+      if (
+        nextOptions.size === subscribedOptions.size &&
+        [...nextOptions.keys()].every((token) => subscribedOptions.has(token))
+      ) {
+        return;
+      }
+
+      const removed = [...subscribedOptions.keys()].filter((token) => !nextOptions.has(token));
+      const added = [...nextOptions.keys()].filter((token) => !subscribedOptions.has(token));
+      if (removed.length > 0) {
+        socket.send(
+          JSON.stringify({
+            event: "unsubscribeScripsLite",
+            inputtoken: removed.map((token) => `nse_fo|${token}`).join(","),
+          }),
+        );
+      }
+      if (added.length > 0) {
+        const inputtoken = added.map((token) => `nse_fo|${token}`).join(",");
+        socket.send(JSON.stringify({ event: "subscribeScripsLite", inputtoken }));
+        socket.send(JSON.stringify({ event: "snapshotScripsLite", inputtoken }));
+      }
+      subscribedOptions = nextOptions;
+    };
     const emitFrame = (frame: ArrayBuffer) => {
-      for (const price of parseNiftyIndexFrame(frame, divider)) {
-        onPrice({ price, asOf: new Date().toISOString() });
+      const view = new DataView(frame);
+      let offset = 0;
+      while (offset + 2 <= view.byteLength) {
+        const packetLength = view.getUint16(offset, true);
+        if (packetLength < 9 || offset + packetLength > view.byteLength) break;
+
+        const messageCode = view.getUint16(offset + 2, true);
+        const exchangeId = view.getInt8(offset + 4);
+        const level = view.getUint8(offset + 5);
+        const asOf = new Date().toISOString();
+        if (messageCode === 7207 && packetLength >= 87 && exchangeId === 1) {
+          const price = view.getInt32(offset + 29, true) / indexDivider;
+          if (Number.isFinite(price) && price > 0) {
+            onIndexPrice({ price, asOf });
+            updateOptionSubscriptions(price);
+          }
+        } else if (messageCode === 7208 && packetLength >= 54 && exchangeId === 2 && level === 1) {
+          const token = view.getUint32(offset + 9, true);
+          const instrument = optionInstrumentsByToken.get(token);
+          const price = view.getUint32(offset + 21, true) / optionDivider;
+          if (
+            instrument &&
+            subscribedOptions.has(instrument.instrumentToken) &&
+            Number.isFinite(price) &&
+            price > 0
+          ) {
+            onOptionPrice({ tradingSymbol: instrument.tradingSymbol, price, asOf });
+          }
+        }
+
+        offset += packetLength;
       }
     };
 
@@ -187,10 +276,9 @@ export class KotakNeoClient {
           if (messageCode === 1119 || messageCode === 1117) {
             const exchanges = isRecord(message.exchanges) ? message.exchanges : undefined;
             const nseCash = exchanges && isRecord(exchanges.nse_cm) ? exchanges.nse_cm : undefined;
-            const receivedDivider = Number(nseCash?.divider);
-            if (Number.isFinite(receivedDivider) && receivedDivider > 0) {
-              divider = receivedDivider;
-            }
+            const nseFo = exchanges && isRecord(exchanges.nse_fo) ? exchanges.nse_fo : undefined;
+            indexDivider = validDivider(nseCash?.divider, indexDivider);
+            optionDivider = validDivider(nseFo?.divider, optionDivider);
             if (messageCode === 1117) {
               if (message.format !== "native_batch") {
                 reportError(new KotakNeoError("Kotak market-data feed returned an unsupported format", 502));
@@ -209,7 +297,7 @@ export class KotakNeoClient {
             return;
           }
           if (messageCode === 1109 && Number(message.error_code) !== 0) {
-            reportError(new KotakNeoError("Kotak rejected the NIFTY index subscription", 502));
+            reportError(new KotakNeoError("Kotak rejected the market-data subscription", 502));
           }
           return;
         }
@@ -531,30 +619,6 @@ function toWebSocketUrl(value: string): string {
   return url.toString();
 }
 
-function parseNiftyIndexFrame(frame: ArrayBuffer, divider: number): number[] {
-  const view = new DataView(frame);
-  const prices: number[] = [];
-  let offset = 0;
-
-  while (offset + 2 <= view.byteLength) {
-    const packetLength = view.getUint16(offset, true);
-    if (packetLength < 9 || offset + packetLength > view.byteLength) break;
-
-    if (
-      packetLength >= 87 &&
-      view.getUint16(offset + 2, true) === 7207 &&
-      view.getInt8(offset + 4) === 1
-    ) {
-      const price = view.getInt32(offset + 29, true) / divider;
-      if (Number.isFinite(price) && price > 0) prices.push(price);
-    }
-
-    offset += packetLength;
-  }
-
-  return prices;
-}
-
 function requiredString(value: unknown): string {
   const result = optionalString(value);
   if (!result) {
@@ -565,4 +629,9 @@ function requiredString(value: unknown): string {
 
 function optionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function validDivider(value: unknown, fallback: number): number {
+  const divider = Number(value);
+  return Number.isFinite(divider) && divider > 0 ? divider : fallback;
 }

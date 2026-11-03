@@ -44,13 +44,15 @@ stays server-side; only the current TOTP is submitted by the browser.
 - `GET /api/auth/session` — check whether this process has an authenticated
   session. Broker tokens are never returned.
 - `GET /api/market/nifty/stream` — stream live NIFTY 50 index prices from the
-  Kotak Neo market-data WebSocket, relayed as Server-Sent Events.
+  Kotak Neo market-data WebSocket, relayed as Server-Sent Events. Add
+  `?expiry=DDMMMYYYY` to stream live prices for the currently displayed NIFTY
+  options too.
 - `GET /api/scrip-master` — retrieve Scrip Master file paths from Kotak Neo.
 - `GET /api/scrip-master/nse-fo` — retrieve the NSE F&O Scrip Master CSV.
 - `GET /api/options/nifty/expiries` — list NIFTY option expiries from the
   local NSE F&O CSV.
 - `GET /api/options/nifty/chain?expiry=DDMMMYYYY` — get local contract details
-  for a selected NIFTY expiry; no prices or live quotes are included.
+  for a selected NIFTY expiry.
 - `POST /api/margin` — check the required margin for the supplied order details
   using the current authenticated session. This does not place an order.
 - `POST /api/auth/logout` — clear the in-memory session from this process. This
@@ -84,14 +86,14 @@ Open the NIFTY option chain at
 signing in to browse contracts. Contract details and expiries are read from the
 local [`src/nse_fo.csv`](./src/nse_fo.csv) file. The page also displays the live
 NIFTY 50 index price from Kotak Neo's WebSocket feed; sign in first to enable
-it. Only the index price is live—option contract prices are not loaded. The
-stream uses the account-specific `feedUrl` returned during login and the
-configured `KOTAK_NEO_NIFTY_INDEX_TOKEN` and
+live market data. The stream uses the account-specific `feedUrl` returned
+during login and the configured `KOTAK_NEO_NIFTY_INDEX_TOKEN` and
 `KOTAK_NEO_NIFTY_INDEX_SEGMENT` values (`Nifty 50` and `nse_cm` in `.env.example`).
-For the selected expiry, the page displays the three nearest strike prices
-below and above the live NIFTY price (six call contracts and six put contracts).
-The contracts are loaded through `/api/options/nifty/chain` and filtered around
-the latest index tick in the browser.
+For the selected expiry, the page displays live LTPs for the three nearest
+strike prices below and above the live NIFTY price (six calls and six puts).
+The contracts are loaded through `/api/options/nifty/chain`; the market stream
+subscribes only to the currently displayed option tokens and follows the
+nearest strikes as NIFTY moves. Prices use Kotak Neo's NSE F&O WebSocket feed.
 Replace the CSV with an updated NSE F&O Scrip Master when you need new
 contracts. The page groups calls and puts by strike and supports expiry
 selection. Streaming follows Kotak's

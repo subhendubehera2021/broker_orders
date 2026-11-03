@@ -108,6 +108,9 @@ describe("authentication routes", () => {
     assert.match(response.body, /button\.textContent = "BUY"/);
     assert.match(response.body, /button\.disabled = true/);
     assert.match(response.body, /tr:hover \.buy-button/);
+    assert.match(response.body, /className = "option-price"/);
+    assert.match(response.body, /api\/market\/nifty\/stream\?expiry=/);
+    assert.match(response.body, /addEventListener\("option-price"/);
     assert.doesNotMatch(response.body, /<th>Token<\/th>|<th>Lot size<\/th>/);
     assert.match(response.body, /api\/market\/nifty\/stream/);
     assert.doesNotMatch(response.body, /Refresh quotes|>LTP</);
@@ -490,6 +493,59 @@ describe("authentication routes", () => {
     assert.match(String(response.headers["content-type"] ?? ""), /text\/event-stream/);
     assert.match(response.body, /event: price\ndata: \{"price":24250\.75,"asOf":"2030-01-30T10:00:00\.000Z"\}/);
     assert.match(response.body, /event: market-error/);
+    assert.equal(streamStopped, true);
+  });
+
+  it("streams selected NIFTY option prices from the authenticated market feed", async () => {
+    const expiryEpoch = String(Date.UTC(2030, 0, 30) / 1000 - 315_511_200);
+    const strikes = [24850, 24900, 24950, 25050, 25100, 25150];
+    const rows = strikes.flatMap((strike, index) => [
+      `${100 + index * 2},OPTIDX,NIFTY,NIFTY30JAN2030CE${index || ""},CE,${expiryEpoch},${strike * 100},25`,
+      `${101 + index * 2},OPTIDX,NIFTY,NIFTY30JAN2030PE${index || ""},PE,${expiryEpoch},${strike * 100},25`,
+    ]);
+    const csv = [
+      "pSymbol,pInstType,pSymbolName,pTrdSymbol,pOptionType,pExpiryDate,dStrikePrice;,lLotSize",
+      ...rows,
+    ].join("\n");
+    let streamStopped = false;
+    const app = buildApp({
+      config,
+      authClient: {
+        async login() { return authenticatedSession; },
+        async getScripMaster() { return { data: { filesPaths: [] } }; },
+        streamNiftyMarketData(
+          _session,
+          instruments,
+          selectOptions,
+          onIndexPrice,
+          onOptionPrice,
+          onError,
+        ) {
+          assert.equal(instruments.length, 12);
+          assert.equal(selectOptions(25000).length, 12);
+          onIndexPrice({ price: 25000, asOf: "2030-01-30T10:00:00.000Z" });
+          onOptionPrice({
+            tradingSymbol: "NIFTY30JAN2030CE",
+            price: 123.45,
+            asOf: "2030-01-30T10:00:01.000Z",
+          });
+          onError(new Error("Kotak market-data WebSocket disconnected"));
+          return () => { streamStopped = true; };
+        },
+      },
+      optionChainCsvLoader: async () => csv,
+    });
+    apps.push(app);
+
+    await app.inject({ method: "POST", url: "/api/auth/login", payload: { totp: "123456" } });
+    const response = await app.inject("/api/market/nifty/stream?expiry=30JAN2030");
+
+    assert.equal(response.statusCode, 200);
+    assert.match(response.body, /event: price\ndata: \{"price":25000,"asOf":"2030-01-30T10:00:00\.000Z"\}/);
+    assert.match(
+      response.body,
+      /event: option-price\ndata: \{"tradingSymbol":"NIFTY30JAN2030CE","price":123\.45,"asOf":"2030-01-30T10:00:01\.000Z"\}/,
+    );
     assert.equal(streamStopped, true);
   });
 

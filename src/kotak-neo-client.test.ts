@@ -160,6 +160,116 @@ describe("KotakNeoClient", () => {
     assert.equal(socket.readyState, 3);
   });
 
+  it("streams live option prices and adjusts subscriptions as NIFTY moves", () => {
+    const sent: string[] = [];
+    let socket:
+      | {
+          readyState: number;
+          onopen: ((event: Event) => void) | null;
+          onmessage: ((event: MessageEvent) => void) | null;
+          onerror: ((event: Event) => void) | null;
+          onclose: ((event: CloseEvent) => void) | null;
+          send(data: string): void;
+          close(): void;
+        }
+      | undefined;
+    const client = new KotakNeoClient(
+      { ...prodConfig, niftyIndexToken: "Nifty 50", niftyIndexSegment: "nse_cm" },
+      fetch,
+      () => {
+        socket = {
+          readyState: 0,
+          onopen: null,
+          onmessage: null,
+          onerror: null,
+          onclose: null,
+          send(data) { sent.push(data); },
+          close() { if (socket) socket.readyState = 3; },
+        };
+        return socket;
+      },
+    );
+    const instruments = [
+      { instrumentToken: "100", tradingSymbol: "NIFTY30JAN2030CE" },
+      { instrumentToken: "101", tradingSymbol: "NIFTY30JAN2030PE" },
+      { instrumentToken: "102", tradingSymbol: "NIFTY30JAN2030CE2" },
+    ];
+    const optionTicks: Array<{ tradingSymbol: string; price: number; asOf: string }> = [];
+    const indexTicks: Array<{ price: number; asOf: string }> = [];
+    const errors: Error[] = [];
+    const stop = client.streamNiftyMarketData(
+      {
+        sid: "session-sid",
+        tradeToken: "trade-token",
+        feedUrl: "https://feed.kotaksecurities.com/apifeed",
+        user: "TESTUCC",
+      },
+      instruments,
+      (spotPrice) => spotPrice < 24300 ? instruments.slice(0, 2) : instruments.slice(1),
+      (tick) => indexTicks.push(tick),
+      (tick) => optionTicks.push(tick),
+      (error) => errors.push(error),
+    );
+
+    assert.ok(socket);
+    socket.onopen?.(new Event("open"));
+    socket.onmessage?.(
+      new MessageEvent("message", {
+        data: JSON.stringify({
+          message_code: 1117,
+          format: "native_batch",
+          exchanges: { nse_cm: { divider: 100 }, nse_fo: { divider: 100 } },
+        }),
+      }),
+    );
+
+    const indexFrame = (price: number) => {
+      const frame = new ArrayBuffer(87);
+      const view = new DataView(frame);
+      view.setUint16(0, 87, true);
+      view.setUint16(2, 7207, true);
+      view.setInt8(4, 1);
+      view.setInt32(29, price, true);
+      return frame;
+    };
+    socket.onmessage?.(new MessageEvent("message", { data: indexFrame(2_429_000) }));
+    assert.deepEqual(
+      sent.slice(1).map((message) => JSON.parse(message)),
+      [
+        { event: "subscribeIndices", inputtoken: "nse_cm|Nifty 50" },
+        { event: "snapshotIndices", inputtoken: "nse_cm|Nifty 50" },
+        { event: "subscribeScripsLite", inputtoken: "nse_fo|100,nse_fo|101" },
+        { event: "snapshotScripsLite", inputtoken: "nse_fo|100,nse_fo|101" },
+      ],
+    );
+
+    socket.onmessage?.(new MessageEvent("message", { data: indexFrame(2_430_000) }));
+    assert.deepEqual(sent.slice(-3).map((message) => JSON.parse(message)), [
+      { event: "unsubscribeScripsLite", inputtoken: "nse_fo|100" },
+      { event: "subscribeScripsLite", inputtoken: "nse_fo|102" },
+      { event: "snapshotScripsLite", inputtoken: "nse_fo|102" },
+    ]);
+
+    const optionFrame = new ArrayBuffer(54);
+    const optionView = new DataView(optionFrame);
+    optionView.setUint16(0, 54, true);
+    optionView.setUint16(2, 7208, true);
+    optionView.setInt8(4, 2);
+    optionView.setUint8(5, 1);
+    optionView.setUint32(9, 102, true);
+    optionView.setUint32(21, 12_345, true);
+    socket.onmessage?.(new MessageEvent("message", { data: optionFrame }));
+
+    assert.equal(indexTicks.length, 2);
+    assert.equal(indexTicks[0]?.price, 24290);
+    assert.deepEqual(optionTicks.map(({ tradingSymbol, price }) => ({ tradingSymbol, price })), [
+      { tradingSymbol: "NIFTY30JAN2030CE2", price: 123.45 },
+    ]);
+    assert.deepEqual(errors, []);
+    stop();
+    assert.equal(socket.readyState, 3);
+  });
+
   it("fetches Scrip Master paths with an authorization header", async () => {
     let capturedUrl: URL | undefined;
     let capturedInit: RequestInit | undefined;
