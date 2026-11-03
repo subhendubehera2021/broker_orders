@@ -10,6 +10,7 @@ import {
 } from "./kotak-neo-client.js";
 import { renderLoginPage } from "./login-page.js";
 import { renderMarginPage } from "./margin-page.js";
+import { renderNseFoScripMasterPage } from "./scrip-master-page.js";
 
 interface LoginBody {
   totp: string;
@@ -24,6 +25,7 @@ interface KotakLoginInput extends LoginBody {
 interface AuthClient {
   login(input: KotakLoginInput): Promise<AuthenticatedSession>;
   getScripMaster(): Promise<unknown>;
+  getNseFoScripMaster?(): Promise<string>;
   checkMargin?(session: AuthenticatedSession, input: MarginCheckInput): Promise<unknown>;
 }
 
@@ -59,6 +61,13 @@ export function buildApp({ config, authClient }: AppOptions): FastifyInstance {
       .header("Cache-Control", "no-store")
       .type("text/html; charset=utf-8")
       .send(renderMarginPage());
+  });
+
+  app.get("/scrip-master", async (_request, reply) => {
+    return reply
+      .header("Cache-Control", "no-store")
+      .type("text/html; charset=utf-8")
+      .send(renderNseFoScripMasterPage());
   });
 
   app.register(async (api) => {
@@ -239,6 +248,68 @@ export function buildApp({ config, authClient }: AppOptions): FastifyInstance {
           );
           return reply.code(statusCode).send({
             error: "Kotak Neo Scrip Master request could not be completed",
+          });
+        }
+      },
+    );
+
+    api.get(
+      "/api/scrip-master/nse-fo",
+      {
+        schema: {
+          tags: ["Scrip Master"],
+          summary: "Download NSE F&O Scrip Master CSV",
+          description:
+            "Returns Kotak Neo's NSE F&O instrument master CSV. The file is fetched from the official Scrip Master host and limited to 100 MiB.",
+          response: {
+            200: {
+              description: "NSE F&O Scrip Master CSV.",
+              content: {
+                "text/csv": {
+                  schema: { type: "string" },
+                },
+              },
+            },
+            401: errorResponseSchema,
+            429: errorResponseSchema,
+            502: errorResponseSchema,
+            503: errorResponseSchema,
+            504: errorResponseSchema,
+          },
+        },
+      },
+      async (request, reply) => {
+        if (!client || !config.kotakNeo.consumerKey) {
+          return reply.code(503).send({ error: "Kotak Neo API token is not configured" });
+        }
+        if (!client.getNseFoScripMaster) {
+          return reply.code(503).send({ error: "NSE F&O Scrip Master is not configured" });
+        }
+
+        try {
+          const csv = await client.getNseFoScripMaster();
+          return reply
+            .header("Cache-Control", "no-store")
+            .header("Content-Disposition", 'inline; filename="nse_fo.csv"')
+            .type("text/csv; charset=utf-8")
+            .send(csv);
+        } catch (error) {
+          const statusCode = authenticationErrorStatus(error);
+          request.log.error(
+            {
+              statusCode,
+              errorName: error instanceof Error ? error.name : "UnknownError",
+              ...(error instanceof KotakNeoError
+                ? { errorMessage: error.message, upstreamStatusCode: error.statusCode }
+                : {}),
+            },
+            "Kotak Neo NSE F&O Scrip Master request failed",
+          );
+          return reply.code(statusCode).send({
+            error:
+              error instanceof KotakNeoError
+                ? error.message
+                : "Kotak Neo NSE F&O Scrip Master could not be loaded",
           });
         }
       },

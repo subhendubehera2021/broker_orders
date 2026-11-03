@@ -3,7 +3,7 @@ import { afterEach, describe, it } from "node:test";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "./app.js";
 import type { AppConfig } from "./config.js";
-import type { AuthenticatedSession } from "./kotak-neo-client.js";
+import { KotakNeoError, type AuthenticatedSession } from "./kotak-neo-client.js";
 
 const config: AppConfig = {
   host: "127.0.0.1",
@@ -70,6 +70,20 @@ describe("authentication routes", () => {
     assert.match(response.body, /Go to sign in/);
   });
 
+  it("serves the separate NSE F&O Scrip Master page", async () => {
+    const app = buildApp({ config });
+    apps.push(app);
+
+    const response = await app.inject("/scrip-master");
+
+    assert.equal(response.statusCode, 200);
+    assert.match(String(response.headers["content-type"] ?? ""), /text\/html/);
+    assert.equal(response.headers["cache-control"], "no-store");
+    assert.match(response.body, /NSE F&amp;O Scrip Master/);
+    assert.match(response.body, /\/api\/scrip-master\/nse-fo/);
+    assert.match(response.body, /Search all instrument fields/);
+  });
+
   it("serves Swagger UI and an OpenAPI document for the API routes", async () => {
     const app = buildApp({ config });
     apps.push(app);
@@ -88,6 +102,7 @@ describe("authentication routes", () => {
       "/api/auth/session",
       "/api/margin",
       "/api/scrip-master",
+      "/api/scrip-master/nse-fo",
       "/health",
     ]);
     assert.equal(
@@ -265,6 +280,47 @@ describe("authentication routes", () => {
     });
     assert.equal(response.body.includes("test-consumer-key"), false);
     assert.equal(requestCount, 1);
+  });
+
+  it("serves the NSE F&O CSV through the Scrip Master API", async () => {
+    const csv = "token,symbol\n12345,NIFTY\n";
+    const app = buildApp({
+      config,
+      authClient: {
+        async login() { return authenticatedSession; },
+        async getScripMaster() { return { data: { filesPaths: [] } }; },
+        async getNseFoScripMaster() { return csv; },
+      },
+    });
+    apps.push(app);
+
+    const response = await app.inject("/api/scrip-master/nse-fo");
+
+    assert.equal(response.statusCode, 200);
+    assert.match(String(response.headers["content-type"] ?? ""), /text\/csv/);
+    assert.match(String(response.headers["content-disposition"] ?? ""), /nse_fo\.csv/);
+    assert.equal(response.body, csv);
+  });
+
+  it("returns a useful Scrip Master download error without exposing upstream response data", async () => {
+    const app = buildApp({
+      config,
+      authClient: {
+        async login() { return authenticatedSession; },
+        async getScripMaster() { return { data: { filesPaths: [] } }; },
+        async getNseFoScripMaster() {
+          throw new KotakNeoError("Kotak Neo did not provide the NSE F&O Scrip Master file", 502);
+        },
+      },
+    });
+    apps.push(app);
+
+    const response = await app.inject("/api/scrip-master/nse-fo");
+
+    assert.equal(response.statusCode, 502);
+    assert.deepEqual(response.json(), {
+      error: "Kotak Neo did not provide the NSE F&O Scrip Master file",
+    });
   });
 
   it("requires an authenticated broker session before checking margin", async () => {

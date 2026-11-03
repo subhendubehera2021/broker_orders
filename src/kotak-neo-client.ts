@@ -103,6 +103,63 @@ export class KotakNeoClient {
     });
   }
 
+  async getNseFoScripMaster(): Promise<string> {
+    const masterResponse = await this.getScripMaster();
+    const fileUrl = nseFoFileUrl(masterResponse);
+
+    let response: Response;
+    try {
+      response = await this.fetchImpl(fileUrl, {
+        method: "GET",
+        headers: { Accept: "text/csv" },
+        redirect: "error",
+        signal: AbortSignal.timeout(this.config.requestTimeoutMs),
+      });
+    } catch (error) {
+      if (error instanceof Error && error.name === "TimeoutError") {
+        throw new KotakNeoError("Kotak Neo Scrip Master download timed out", 504);
+      }
+      throw new KotakNeoError("Unable to download Kotak Neo Scrip Master", 503);
+    }
+
+    if (!response.ok) {
+      throw new KotakNeoError(
+        `Kotak Neo rejected the Scrip Master download (HTTP ${response.status})`,
+        response.status,
+      );
+    }
+
+    const contentLength = Number(response.headers.get("content-length"));
+    if (Number.isFinite(contentLength) && contentLength > MAX_SCRIP_MASTER_BYTES) {
+      throw new KotakNeoError("Kotak Neo Scrip Master file is too large", 502);
+    }
+    if (!response.body) {
+      throw new KotakNeoError("Kotak Neo returned an empty Scrip Master file", 502);
+    }
+
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let totalBytes = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > MAX_SCRIP_MASTER_BYTES) {
+        await reader.cancel();
+        throw new KotakNeoError("Kotak Neo Scrip Master file is too large", 502);
+      }
+      chunks.push(value);
+    }
+
+    const bytes = new Uint8Array(totalBytes);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return new TextDecoder().decode(bytes);
+  }
+
   async checkMargin(
     session: AuthenticatedSession,
     input: MarginCheckInput,
@@ -182,6 +239,45 @@ export class KotakNeoClient {
     }
 
     return responseBody;
+  }
+}
+
+const MAX_SCRIP_MASTER_BYTES = 100 * 1024 * 1024;
+const SCRIP_MASTER_HOST = "lapi.kotaksecurities.com";
+
+function nseFoFileUrl(value: unknown): URL {
+  if (!isRecord(value)) {
+    throw new KotakNeoError("Kotak Neo returned invalid Scrip Master paths", 502);
+  }
+  const data = isRecord(value.data) ? value.data : value;
+  const filesPaths = data.filesPaths;
+  if (!Array.isArray(filesPaths)) {
+    throw new KotakNeoError("Kotak Neo returned invalid Scrip Master paths", 502);
+  }
+
+  const path = filesPaths.find(isNseFoFilePath);
+  if (!path) {
+    throw new KotakNeoError("Kotak Neo did not provide the NSE F&O Scrip Master file", 502);
+  }
+
+  let url: URL;
+  try {
+    url = new URL(path);
+  } catch {
+    throw new KotakNeoError("Kotak Neo returned an invalid NSE F&O file URL", 502);
+  }
+  if (url.protocol !== "https:" || url.hostname !== SCRIP_MASTER_HOST) {
+    throw new KotakNeoError("Kotak Neo returned an untrusted NSE F&O file URL", 502);
+  }
+  return url;
+}
+
+function isNseFoFilePath(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  try {
+    return /\/nse_fo\.csv$/i.test(new URL(value).pathname);
+  } catch {
+    return false;
   }
 }
 

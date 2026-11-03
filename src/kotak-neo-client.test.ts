@@ -98,6 +98,71 @@ describe("KotakNeoClient", () => {
     });
   });
 
+  it("downloads the NSE F&O CSV from the official Scrip Master host", async () => {
+    const requests: Array<{ url: URL; init: RequestInit }> = [];
+    const csv = "token,symbol\n12345,NIFTY\n";
+    const client = new KotakNeoClient(prodConfig, async (input, init) => {
+      const url = new URL(input.toString());
+      requests.push({ url, init: init ?? {} });
+      if (url.pathname.endsWith("/file-paths")) {
+        return Response.json({
+          data: {
+            filesPaths: [
+              "https://lapi.kotaksecurities.com/wso2-scripmaster/v1/prod/today/transformed/nse_fo.csv",
+            ],
+          },
+        });
+      }
+      return new Response(csv, { headers: { "content-type": "text/csv" } });
+    });
+
+    assert.equal(await client.getNseFoScripMaster(), csv);
+    assert.equal(requests.length, 2);
+    assert.equal(
+      requests[1]?.url.href,
+      "https://lapi.kotaksecurities.com/wso2-scripmaster/v1/prod/today/transformed/nse_fo.csv",
+    );
+    assert.equal(requests[1]?.init.method, "GET");
+  });
+
+  it("accepts an NSE F&O Scrip Master larger than the previous 25 MiB limit", async () => {
+    const largeFile = new Uint8Array(26 * 1024 * 1024).fill(65);
+    const client = new KotakNeoClient(prodConfig, async (input) => {
+      const url = new URL(input.toString());
+      if (url.pathname.endsWith("/file-paths")) {
+        return Response.json({
+          data: {
+            filesPaths: [
+              "https://lapi.kotaksecurities.com/wso2-scripmaster/v1/prod/today/transformed/nse_fo.csv",
+            ],
+          },
+        });
+      }
+      return new Response(largeFile, {
+        headers: { "content-length": String(largeFile.byteLength) },
+      });
+    });
+
+    const csv = await client.getNseFoScripMaster();
+
+    assert.equal(csv.length, largeFile.byteLength);
+    assert.equal(csv[0], "A");
+    assert.equal(csv.at(-1), "A");
+  });
+
+  it("rejects Scrip Master download URLs outside the official host", async () => {
+    let requestCount = 0;
+    const client = new KotakNeoClient(prodConfig, async () => {
+      requestCount += 1;
+      return Response.json({
+        data: { filesPaths: ["https://attacker.example/nse_fo.csv"] },
+      });
+    });
+
+    await assert.rejects(client.getNseFoScripMaster(), /untrusted NSE F&O file URL/);
+    assert.equal(requestCount, 1);
+  });
+
   it("posts margin parameters as jData with the authenticated session headers", async () => {
     let capturedUrl: URL | undefined;
     let capturedInit: RequestInit | undefined;
