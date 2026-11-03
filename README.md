@@ -1,8 +1,7 @@
 # Kotak Neo API
 
-A Node.js, TypeScript, and Fastify starter service for Kotak Neo authentication.
-It implements TOTP login, Scrip Master file paths, and an authenticated margin
-estimate; it does not place orders.
+A Node.js, TypeScript, and Fastify service for Kotak Neo authentication, NIFTY
+option market data, margin estimates, and validated live NIFTY option orders.
 
 ## Requirements
 
@@ -55,6 +54,9 @@ stays server-side; only the current TOTP is submitted by the browser.
   for a selected NIFTY expiry.
 - `POST /api/margin` — check the required margin for the supplied order details
   using the current authenticated session. This does not place an order.
+- `POST /api/options/nifty/order` — submit a live NIFTY option order. Requires an
+  authenticated Kotak Neo session and a contract in the local NSE F&O Scrip
+  Master.
 - `POST /api/auth/logout` — clear the in-memory session from this process. This
   does not revoke the session with Kotak Neo.
 
@@ -114,6 +116,30 @@ curl http://127.0.0.1:3000/api/margin \
 The service sends this to Kotak Neo as a form-encoded `jData` field and adds
 the current session token, session ID, and financial key server-side.
 
+## Live NIFTY option orders
+
+`POST /api/options/nifty/order` places a real order with Kotak Neo. The endpoint
+only accepts a NIFTY option whose exact expiry and trading symbol are present in
+the local `src/nse_fo.csv` Scrip Master. Quantity is in units and must be a
+multiple of that contract's lot size. Supported products are `NRML` and `MIS`;
+order types are `L`, `MKT`, `SL`, and `SL-M`.
+
+Example limit-order request:
+
+```sh
+curl http://127.0.0.1:3000/api/options/nifty/order \
+  -H 'Content-Type: application/json' \
+  --data '{"expiry":"03NOV2026","tradingSymbol":"NIFTY03NOV2026CE","transactionType":"B","quantity":"75","product":"MIS","orderType":"L","price":"100","validity":"DAY"}'
+```
+
+Replace the example symbol and quantity with a contract and lot multiple from
+the selected local expiry. The server supplies Kotak's exchange segment and
+order defaults, and does not expose broker tokens to the browser. Order
+submission has no automatic retry or idempotency guarantee: if the API returns
+502, 503, or 504, the request may have reached Kotak despite the uncertain
+response. Check the Kotak Neo order book before submitting it again. The option
+chain's BUY buttons remain disabled; this endpoint is not wired to the UI.
+
 ## Configuration
 
 Copy `.env.example` to `.env` and set the values supplied for your Kotak Neo
@@ -130,6 +156,9 @@ application:
   environment-specific authentication paths.
 - `KOTAK_NEO_SCRIP_MASTER_PATH` — the Scrip Master file-path endpoint.
 - `KOTAK_NEO_MARGIN_PATH` — the check-margin endpoint.
+- `KOTAK_NEO_PLACE_ORDER_PATH` and `KOTAK_NEO_ORDER_SOURCE` — the live order
+  endpoint and source identifier. These are optional for application startup
+  but must both be set to enable live order placement.
 - `KOTAK_NEO_QUOTES_PATH` — quote endpoint template; retain the
   `{neo_symbols}` and `{quote_type}` placeholders.
 - `KOTAK_NEO_REQUEST_TIMEOUT_MS` — upstream request timeout in milliseconds.

@@ -10,6 +10,8 @@ const prodConfig = {
   totpValidatePath: "login/1.0/tradeApiValidate",
   scripMasterPath: "script-details/1.0/masterscrip/file-paths",
   marginPath: "quick/user/check-margin",
+  placeOrderPath: "quick/order/rule/ms/place",
+  orderSource: "NEOTRADEAPI",
   quotesPath: "script-details/1.0/quotes/neosymbol/{neo_symbols}/{quote_type}",
   requestTimeoutMs: 1000,
 };
@@ -402,6 +404,89 @@ describe("KotakNeoClient", () => {
     const body = new URLSearchParams(String(capturedInit?.body));
     assert.deepEqual(JSON.parse(body.get("jData") ?? "null"), input);
     assert.deepEqual(response, { data: { margin: "12500.00" } });
+  });
+
+  it("submits a live order using the Kotak order form fields and server ID", async () => {
+    let capturedUrl: URL | undefined;
+    let capturedInit: RequestInit | undefined;
+    const client = new KotakNeoClient(prodConfig, async (input, init) => {
+      capturedUrl = new URL(input.toString());
+      capturedInit = init;
+      return Response.json({ stat: "Ok", nOrdNo: "order-id" });
+    });
+
+    const response = await client.placeNiftyOptionOrder(
+      { ...testSession, serverId: "server-id" },
+      {
+        tradingSymbol: "NIFTY30JAN2030CE",
+        transactionType: "B",
+        quantity: "50",
+        product: "MIS",
+        orderType: "L",
+        price: "100",
+        validity: "DAY",
+        amo: "NO",
+        disclosedQuantity: "0",
+        marketProtection: "0",
+        triggerPrice: "0",
+        tag: "test-order",
+      },
+    );
+
+    assert.equal(
+      capturedUrl?.href,
+      "https://mis.kotaksecurities.com/quick/order/rule/ms/place?sId=server-id",
+    );
+    assert.equal(capturedInit?.method, "POST");
+    const headers = new Headers(capturedInit?.headers);
+    assert.equal(headers.get("auth"), "test-trade-token");
+    assert.equal(headers.get("sid"), "test-sid");
+    assert.equal(headers.get("content-type"), "application/x-www-form-urlencoded");
+    const body = new URLSearchParams(String(capturedInit?.body));
+    assert.deepEqual(Object.fromEntries(body), {
+      am: "NO",
+      dq: "0",
+      es: "nse_fo",
+      mp: "0",
+      pc: "MIS",
+      pf: "N",
+      pr: "100",
+      pt: "L",
+      qt: "50",
+      rt: "DAY",
+      tp: "0",
+      ts: "NIFTY30JAN2030CE",
+      tt: "B",
+      os: "NEOTRADEAPI",
+      ig: "test-order",
+    });
+    assert.deepEqual(response, { stat: "Ok", nOrdNo: "order-id" });
+  });
+
+  it("does not submit orders when the authenticated server ID is missing", async () => {
+    let requestCount = 0;
+    const client = new KotakNeoClient(prodConfig, async () => {
+      requestCount += 1;
+      return Response.json({ stat: "Ok" });
+    });
+
+    await assert.rejects(
+      client.placeNiftyOptionOrder(testSession, {
+        tradingSymbol: "NIFTY30JAN2030CE",
+        transactionType: "B",
+        quantity: "25",
+        product: "MIS",
+        orderType: "MKT",
+        price: "0",
+        validity: "DAY",
+        amo: "NO",
+        disclosedQuantity: "0",
+        marketProtection: "0",
+        triggerPrice: "0",
+      }),
+      /order session details are missing/,
+    );
+    assert.equal(requestCount, 0);
   });
 
   it("requests quotes for encoded NIFTY option tokens", async () => {

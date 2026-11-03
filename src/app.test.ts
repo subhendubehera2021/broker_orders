@@ -19,6 +19,8 @@ const config: AppConfig = {
     totpValidatePath: "test/validate",
     scripMasterPath: "script-details/1.0/masterscrip/file-paths",
     marginPath: "quick/user/check-margin",
+    placeOrderPath: "quick/order/rule/ms/place",
+    orderSource: "NEOTRADEAPI",
     quotesPath: "script-details/1.0/quotes/neosymbol/{neo_symbols}/{quote_type}",
     niftyIndexToken: "Nifty 50",
     niftyIndexSegment: "nse_cm",
@@ -141,6 +143,7 @@ describe("authentication routes", () => {
       "/api/market/nifty/stream",
       "/api/options/nifty/chain",
       "/api/options/nifty/expiries",
+      "/api/options/nifty/order",
       "/api/scrip-master",
       "/api/scrip-master/nse-fo",
       "/health",
@@ -157,6 +160,10 @@ describe("authentication routes", () => {
     assert.deepEqual(
       spec.paths["/api/margin"].post.requestBody.content["application/json"].schema.required,
       ["brkName", "brnchId", "exSeg", "prc", "prcTp", "prod", "qty", "tok", "trnsTp"],
+    );
+    assert.deepEqual(
+      spec.paths["/api/options/nifty/order"].post.requestBody.content["application/json"].schema.required,
+      ["expiry", "tradingSymbol", "transactionType", "quantity", "product", "orderType", "price", "validity"],
     );
   });
 
@@ -578,6 +585,179 @@ describe("authentication routes", () => {
     assert.equal(response.statusCode, 400);
     assert.deepEqual(response.json(), {
       error: "No NIFTY option contracts found for that expiry",
+    });
+  });
+
+  it("requires authentication before placing a NIFTY option order", async () => {
+    let orderCalls = 0;
+    const app = buildApp({
+      config,
+      authClient: {
+        async login() { return authenticatedSession; },
+        async getScripMaster() { return { data: { filesPaths: [] } }; },
+        async placeNiftyOptionOrder() {
+          orderCalls += 1;
+          return { stat: "Ok" };
+        },
+      },
+    });
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/options/nifty/order",
+      payload: {
+        expiry: "30JAN2030",
+        tradingSymbol: "NIFTY30JAN2030CE",
+        transactionType: "B",
+        quantity: "25",
+        product: "MIS",
+        orderType: "L",
+        price: "100",
+        validity: "DAY",
+      },
+    });
+
+    assert.equal(response.statusCode, 401);
+    assert.equal(orderCalls, 0);
+  });
+
+  it("returns a clear configuration error when live order settings are absent", async () => {
+    const { placeOrderPath: _placeOrderPath, orderSource: _orderSource, ...kotakNeo } =
+      config.kotakNeo;
+    const app = buildApp({
+      config: { ...config, kotakNeo },
+      authClient: {
+        async login() { return authenticatedSession; },
+        async getScripMaster() { return { data: { filesPaths: [] } }; },
+      },
+    });
+    apps.push(app);
+
+    await app.inject({ method: "POST", url: "/api/auth/login", payload: { totp: "123456" } });
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/options/nifty/order",
+      payload: {
+        expiry: "30JAN2030",
+        tradingSymbol: "NIFTY30JAN2030CE",
+        transactionType: "B",
+        quantity: "25",
+        product: "MIS",
+        orderType: "L",
+        price: "100",
+        validity: "DAY",
+      },
+    });
+
+    assert.equal(response.statusCode, 503);
+    assert.match(response.json().error, /KOTAK_NEO_PLACE_ORDER_PATH and KOTAK_NEO_ORDER_SOURCE/);
+  });
+
+  it("rejects orders for unlisted contracts and quantities that are not whole lots", async () => {
+    const expiryEpoch = String(Date.UTC(2030, 0, 30) / 1000 - 315_511_200);
+    const csv = [
+      "pSymbol,pInstType,pSymbolName,pTrdSymbol,pOptionType,pExpiryDate,dStrikePrice;,lLotSize",
+      `123,OPTIDX,NIFTY,NIFTY30JAN2030CE,CE,${expiryEpoch},2500000,25`,
+    ].join("\n");
+    let orderCalls = 0;
+    const app = buildApp({
+      config,
+      authClient: {
+        async login() { return authenticatedSession; },
+        async getScripMaster() { return { data: { filesPaths: [] } }; },
+        async placeNiftyOptionOrder() {
+          orderCalls += 1;
+          return { stat: "Ok" };
+        },
+      },
+      optionChainCsvLoader: async () => csv,
+    });
+    apps.push(app);
+
+    await app.inject({ method: "POST", url: "/api/auth/login", payload: { totp: "123456" } });
+    const basePayload = {
+      expiry: "30JAN2030",
+      tradingSymbol: "NIFTY30JAN2030CE",
+      transactionType: "B",
+      quantity: "25",
+      product: "MIS",
+      orderType: "L",
+      price: "100",
+      validity: "DAY",
+    };
+    const unknownContract = await app.inject({
+      method: "POST",
+      url: "/api/options/nifty/order",
+      payload: { ...basePayload, tradingSymbol: "NIFTY30JAN2030PE" },
+    });
+    const fractionalLot = await app.inject({
+      method: "POST",
+      url: "/api/options/nifty/order",
+      payload: { ...basePayload, quantity: "20" },
+    });
+
+    assert.equal(unknownContract.statusCode, 400);
+    assert.equal(fractionalLot.statusCode, 400);
+    assert.equal(orderCalls, 0);
+  });
+
+  it("submits a validated NIFTY order using the contract from the local Scrip Master", async () => {
+    const expiryEpoch = String(Date.UTC(2030, 0, 30) / 1000 - 315_511_200);
+    const csv = [
+      "pSymbol,pInstType,pSymbolName,pTrdSymbol,pOptionType,pExpiryDate,dStrikePrice;,lLotSize",
+      `123,OPTIDX,NIFTY,NIFTY30JAN2030CE,CE,${expiryEpoch},2500000,25`,
+    ].join("\n");
+    let orderSession: AuthenticatedSession | undefined;
+    let orderInput: unknown;
+    const app = buildApp({
+      config,
+      authClient: {
+        async login() { return { ...authenticatedSession, serverId: "server-id" }; },
+        async getScripMaster() { return { data: { filesPaths: [] } }; },
+        async placeNiftyOptionOrder(session, input) {
+          orderSession = session;
+          orderInput = input;
+          return { stat: "Ok", nOrdNo: "order-id" };
+        },
+      },
+      optionChainCsvLoader: async () => csv,
+    });
+    apps.push(app);
+
+    await app.inject({ method: "POST", url: "/api/auth/login", payload: { totp: "123456" } });
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/options/nifty/order",
+      payload: {
+        expiry: "30JAN2030",
+        tradingSymbol: "NIFTY30JAN2030CE",
+        transactionType: "B",
+        quantity: "50",
+        product: "MIS",
+        orderType: "L",
+        price: "100",
+        validity: "DAY",
+        tag: "test-order",
+      },
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(response.json(), { stat: "Ok", nOrdNo: "order-id" });
+    assert.deepEqual(orderSession, { ...authenticatedSession, serverId: "server-id" });
+    assert.deepEqual(orderInput, {
+      tradingSymbol: "NIFTY30JAN2030CE",
+      transactionType: "B",
+      quantity: "50",
+      product: "MIS",
+      orderType: "L",
+      price: "100",
+      validity: "DAY",
+      amo: "NO",
+      disclosedQuantity: "0",
+      marketProtection: "0",
+      triggerPrice: "0",
+      tag: "test-order",
     });
   });
 

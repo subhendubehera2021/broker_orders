@@ -11,6 +11,7 @@ import {
   type NiftyIndexTick,
   type NiftyOptionMarketInstrument,
   type NiftyOptionPriceTick,
+  type PlaceNiftyOptionOrderInput,
 } from "./kotak-neo-client.js";
 import { renderLoginPage } from "./login-page.js";
 import { renderMarginPage } from "./margin-page.js";
@@ -33,6 +34,22 @@ interface KotakLoginInput extends LoginBody {
   mpin: string;
 }
 
+interface NiftyOptionOrderBody {
+  expiry: string;
+  tradingSymbol: string;
+  transactionType: "B" | "S";
+  quantity: string;
+  product: "NRML" | "MIS";
+  orderType: "L" | "MKT" | "SL" | "SL-M";
+  price: string;
+  validity: "DAY" | "IOC";
+  amo?: "YES" | "NO";
+  disclosedQuantity?: string;
+  marketProtection?: string;
+  triggerPrice?: string;
+  tag?: string;
+}
+
 interface AuthClient {
   login(input: KotakLoginInput): Promise<AuthenticatedSession>;
   getScripMaster(): Promise<unknown>;
@@ -52,6 +69,10 @@ interface AuthClient {
     onConnected?: () => void,
   ): () => void;
   checkMargin?(session: AuthenticatedSession, input: MarginCheckInput): Promise<unknown>;
+  placeNiftyOptionOrder?(
+    session: AuthenticatedSession,
+    input: PlaceNiftyOptionOrderInput,
+  ): Promise<unknown>;
 }
 
 interface AppOptions {
@@ -113,7 +134,7 @@ export function buildApp({
         openapi: "3.0.3",
         info: {
           title: "Kotak Neo API",
-          description: "Authentication and Scrip Master APIs for the Kotak Neo trading service.",
+          description: "Authentication and trading APIs for the Kotak Neo service.",
           version: "1.0.0",
         },
         tags: [
@@ -121,7 +142,7 @@ export function buildApp({
           { name: "Authentication", description: "Kotak Neo session authentication" },
           { name: "Scrip Master", description: "Kotak Neo instrument master files" },
           { name: "Margin", description: "Kotak Neo margin estimates" },
-          { name: "Options", description: "NIFTY contracts and live index market data" },
+          { name: "Options", description: "NIFTY contracts, market data, and option orders" },
         ],
       },
     });
@@ -691,6 +712,146 @@ export function buildApp({
         }
       },
     );
+
+    api.post<{ Body: NiftyOptionOrderBody }>(
+      "/api/options/nifty/order",
+      {
+        schema: {
+          tags: ["Options"],
+          summary: "Place a live NIFTY option order",
+          description:
+            "Submits a live NSE F&O order. The expiry and trading symbol must match the local NSE F&O Scrip Master. Quantity is in units and must be a whole number of lots.",
+          body: {
+            type: "object",
+            required: [
+              "expiry",
+              "tradingSymbol",
+              "transactionType",
+              "quantity",
+              "product",
+              "orderType",
+              "price",
+              "validity",
+            ],
+            additionalProperties: false,
+            properties: {
+              expiry: { type: "string", pattern: "^\\d{2}[A-Z]{3}\\d{4}$" },
+              tradingSymbol: { type: "string", minLength: 1, maxLength: 64 },
+              transactionType: { type: "string", enum: ["B", "S"] },
+              quantity: { type: "string", pattern: "^[1-9]\\d{0,7}$" },
+              product: { type: "string", enum: ["NRML", "MIS"] },
+              orderType: { type: "string", enum: ["L", "MKT", "SL", "SL-M"] },
+              price: { type: "string", pattern: "^\\d+(\\.\\d{1,4})?$" },
+              validity: { type: "string", enum: ["DAY", "IOC"] },
+              amo: { type: "string", enum: ["YES", "NO"] },
+              disclosedQuantity: { type: "string", pattern: "^\\d{1,8}$" },
+              marketProtection: { type: "string", pattern: "^\\d+(\\.\\d{1,2})?$" },
+              triggerPrice: { type: "string", pattern: "^\\d+(\\.\\d{1,4})?$" },
+              tag: { type: "string", minLength: 1, maxLength: 20 },
+            },
+          },
+          response: {
+            200: {
+              type: "object",
+              additionalProperties: true,
+              description: "Kotak Neo order submission response.",
+            },
+            400: errorResponseSchema,
+            401: errorResponseSchema,
+            429: errorResponseSchema,
+            502: errorResponseSchema,
+            503: errorResponseSchema,
+            504: errorResponseSchema,
+          },
+        },
+      },
+      async (request, reply) => {
+        if (!session) {
+          return reply.code(401).send({ error: "Authenticate with Kotak Neo before placing an order" });
+        }
+        if (
+          !client?.placeNiftyOptionOrder ||
+          !config.kotakNeo.placeOrderPath ||
+          !config.kotakNeo.orderSource
+        ) {
+          return reply.code(503).send({
+            error:
+              "Kotak Neo order API is not configured; set KOTAK_NEO_PLACE_ORDER_PATH and KOTAK_NEO_ORDER_SOURCE",
+          });
+        }
+
+        const authenticatedSession = session;
+        const body = request.body;
+        const isMarketOrder = body.orderType === "MKT" || body.orderType === "SL-M";
+        const isStopOrder = body.orderType === "SL" || body.orderType === "SL-M";
+        if (
+          isMarketOrder !== (Number(body.price) === 0) ||
+          isStopOrder !== (body.triggerPrice !== undefined && Number(body.triggerPrice) > 0)
+        ) {
+          return reply.code(400).send({ error: "Price and trigger price do not match the order type" });
+        }
+        if (body.disclosedQuantity && Number(body.disclosedQuantity) > Number(body.quantity)) {
+          return reply.code(400).send({ error: "Disclosed quantity cannot exceed order quantity" });
+        }
+
+        try {
+          const contract = (await getNiftyContracts()).find(
+            ({ expiry, tradingSymbol }) =>
+              expiry === body.expiry && tradingSymbol === body.tradingSymbol,
+          );
+          if (!contract) {
+            return reply.code(400).send({
+              error: "NIFTY option contract was not found for the selected expiry",
+            });
+          }
+          const quantity = Number(body.quantity);
+          const lotSize = Number(contract.lotSize);
+          if (!Number.isSafeInteger(lotSize) || lotSize < 1 || quantity % lotSize !== 0) {
+            return reply.code(400).send({
+              error: "Order quantity must be a whole number of lots for this contract",
+            });
+          }
+          const expiryDate = Date.parse(
+            `${body.expiry.slice(0, 2)} ${body.expiry.slice(2, 5)} ${body.expiry.slice(5)} UTC`,
+          );
+          const today = Date.parse(`${new Date().toISOString().slice(0, 10)} UTC`);
+          if (!Number.isFinite(expiryDate) || expiryDate < today) {
+            return reply.code(400).send({ error: "Cannot place an order for an expired contract" });
+          }
+
+          return await client.placeNiftyOptionOrder(authenticatedSession, {
+            tradingSymbol: contract.tradingSymbol,
+            transactionType: body.transactionType,
+            quantity: body.quantity,
+            product: body.product,
+            orderType: body.orderType,
+            price: body.price,
+            validity: body.validity,
+            amo: body.amo ?? "NO",
+            disclosedQuantity: body.disclosedQuantity ?? "0",
+            marketProtection: body.marketProtection ?? "0",
+            triggerPrice: body.triggerPrice ?? "0",
+            ...(body.tag ? { tag: body.tag } : {}),
+          });
+        } catch (error) {
+          const statusCode = orderRequestStatus(error);
+          request.log.error(
+            {
+              statusCode,
+              errorName: error instanceof Error ? error.name : "UnknownError",
+              ...(error instanceof KotakNeoError ? { upstreamStatusCode: error.statusCode } : {}),
+            },
+            "Kotak Neo NIFTY option order failed",
+          );
+          return reply.code(statusCode).send({
+            error:
+              statusCode === 502 || statusCode === 503 || statusCode === 504
+                ? "Order outcome could not be confirmed; check your Kotak Neo order book before retrying"
+                : "Kotak Neo could not place the NIFTY option order",
+          });
+        }
+      },
+    );
   });
 
   return app;
@@ -731,6 +892,21 @@ function brokerRequestStatus(error: unknown): 400 | 401 | 429 | 502 | 503 | 504 
   if (
     error.statusCode === 400 ||
     error.statusCode === 401 ||
+    error.statusCode === 429 ||
+    error.statusCode === 502 ||
+    error.statusCode === 503 ||
+    error.statusCode === 504
+  ) {
+    return error.statusCode;
+  }
+  return 502;
+}
+
+function orderRequestStatus(error: unknown): 400 | 401 | 429 | 502 | 503 | 504 {
+  if (!(error instanceof KotakNeoError)) return 502;
+  if (error.statusCode === 400) return 400;
+  if (error.statusCode === 401 || error.statusCode === 403) return 401;
+  if (
     error.statusCode === 429 ||
     error.statusCode === 502 ||
     error.statusCode === 503 ||

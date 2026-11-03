@@ -59,6 +59,21 @@ export interface QuoteInstrument {
   exchangeSegment: string;
 }
 
+export interface PlaceNiftyOptionOrderInput {
+  tradingSymbol: string;
+  transactionType: "B" | "S";
+  quantity: string;
+  product: "NRML" | "MIS";
+  orderType: "L" | "MKT" | "SL" | "SL-M";
+  price: string;
+  validity: "DAY" | "IOC";
+  amo: "YES" | "NO";
+  disclosedQuantity: string;
+  marketProtection: string;
+  triggerPrice: string;
+  tag?: string;
+}
+
 interface KotakResponse {
   data?: {
     token?: unknown;
@@ -445,6 +460,51 @@ export class KotakNeoClient {
         "neo-fin-key": this.config.financialKey,
         "Content-Type": "application/x-www-form-urlencoded",
       },
+    });
+  }
+
+  async placeNiftyOptionOrder(
+    session: AuthenticatedSession,
+    input: PlaceNiftyOptionOrderInput,
+  ): Promise<unknown> {
+    if (!this.config.placeOrderPath || !this.config.orderSource) {
+      throw new KotakNeoError(
+        "Kotak Neo order API is not configured; set KOTAK_NEO_PLACE_ORDER_PATH and KOTAK_NEO_ORDER_SOURCE",
+        503,
+      );
+    }
+    if (!session.serverId) {
+      throw new KotakNeoError("Kotak Neo order session details are missing; sign in again", 503);
+    }
+
+    const body = new URLSearchParams({
+      am: input.amo,
+      dq: input.disclosedQuantity,
+      es: "nse_fo",
+      mp: input.marketProtection,
+      pc: input.product,
+      pf: "N",
+      pr: input.price,
+      pt: input.orderType,
+      qt: input.quantity,
+      rt: input.validity,
+      tp: input.triggerPrice,
+      ts: input.tradingSymbol,
+      tt: input.transactionType,
+      os: this.config.orderSource,
+    });
+    if (input.tag) body.set("ig", input.tag);
+
+    const path = new URL(this.config.placeOrderPath, ensureTrailingSlash(this.config.apiBaseUrl));
+    path.searchParams.set("sId", session.serverId);
+    return this.requestJson(path.toString(), {
+      method: "POST",
+      headers: {
+        Auth: session.tradeToken,
+        Sid: session.sid,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body,
     });
   }
 

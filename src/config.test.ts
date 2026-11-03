@@ -15,6 +15,8 @@ const validEnvironment: NodeJS.ProcessEnv = {
   KOTAK_NEO_TOTP_VALIDATE_PATH: "validate",
   KOTAK_NEO_SCRIP_MASTER_PATH: "script-details/1.0/masterscrip/file-paths",
   KOTAK_NEO_MARGIN_PATH: "quick/user/check-margin",
+  KOTAK_NEO_PLACE_ORDER_PATH: "quick/order/rule/ms/place",
+  KOTAK_NEO_ORDER_SOURCE: "NEOTRADEAPI",
   KOTAK_NEO_QUOTES_PATH: "script-details/1.0/quotes/neosymbol/{neo_symbols}/{quote_type}",
   KOTAK_NEO_NIFTY_INDEX_TOKEN: "Nifty 50",
   KOTAK_NEO_NIFTY_INDEX_SEGMENT: "nse_cm",
@@ -37,6 +39,8 @@ describe("loadConfig", () => {
         totpValidatePath: "validate",
         scripMasterPath: "script-details/1.0/masterscrip/file-paths",
         marginPath: "quick/user/check-margin",
+        placeOrderPath: "quick/order/rule/ms/place",
+        orderSource: "NEOTRADEAPI",
         quotesPath: "script-details/1.0/quotes/neosymbol/{neo_symbols}/{quote_type}",
         niftyIndexToken: "Nifty 50",
         niftyIndexSegment: "nse_cm",
@@ -52,6 +56,19 @@ describe("loadConfig", () => {
       () => loadConfig(incompleteEnvironment),
       /KOTAK_NEO_FIN_KEY must be configured/,
     );
+  });
+
+  it("allows startup without optional live-order settings", () => {
+    const {
+      KOTAK_NEO_PLACE_ORDER_PATH: _placeOrderPath,
+      KOTAK_NEO_ORDER_SOURCE: _orderSource,
+      ...environmentWithoutOrderSettings
+    } = validEnvironment;
+
+    const config = loadConfig(environmentWithoutOrderSettings);
+
+    assert.equal(config.kotakNeo.placeOrderPath, undefined);
+    assert.equal(config.kotakNeo.orderSource, undefined);
   });
 
   it("rejects non-HTTPS API URLs", () => {
