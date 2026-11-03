@@ -58,25 +58,24 @@ export function renderOptionChainPage(): string {
         <nav class="nav" aria-label="Main navigation"><a href="/margin">Margin calculator</a><a href="/scrip-master">Scrip Master</a><a href="/">Sign in</a></nav>
       </header>
       <main>
-        <p class="eyebrow">Live quotes · NSE F&amp;O</p>
+        <p class="eyebrow">Local contract data · NSE F&amp;O</p>
         <h1>NIFTY option chain</h1>
-        <p class="intro">Select an expiry to view available NIFTY calls and puts by strike. Quotes are fetched from Kotak Neo when you load or refresh the chain.</p>
+        <p class="intro">Select an expiry to view NIFTY calls and puts by strike. Contract details are read from the local NSE F&amp;O CSV; this page does not load prices or request live quotes.</p>
         <section class="panel" aria-label="NIFTY option chain">
           <div class="controls">
             <label for="expiry">Expiry</label>
             <select id="expiry" disabled><option value="">Loading expiries…</option></select>
-            <button id="refresh" type="button" disabled>Refresh quotes</button>
           </div>
-          <p class="status" id="status" role="status" aria-live="polite">Checking your Kotak Neo session…</p>
+          <p class="status" id="status" role="status" aria-live="polite">Loading local NIFTY expiries…</p>
           <div class="table-wrap" id="table-wrap" hidden>
             <table>
               <thead><tr>
-                <th colspan="4" class="call-head">CALLS</th>
+                <th colspan="3" class="call-head">CALLS</th>
                 <th class="strike-head">STRIKE</th>
-                <th colspan="4" class="put-head">PUTS</th>
+                <th colspan="3" class="put-head">PUTS</th>
               </tr><tr>
-                <th>Instrument</th><th>LTP</th><th>OI</th><th>Volume</th><th class="strike-head">Price</th>
-                <th>Volume</th><th>OI</th><th>LTP</th><th>Instrument</th>
+                <th>Instrument</th><th>Token</th><th>Lot size</th><th class="strike-head">Price</th>
+                <th>Lot size</th><th>Token</th><th>Instrument</th>
               </tr></thead>
               <tbody id="rows"></tbody>
             </table>
@@ -86,7 +85,6 @@ export function renderOptionChainPage(): string {
     </div>
     <script>
       const expirySelect = document.querySelector("#expiry");
-      const refreshButton = document.querySelector("#refresh");
       const status = document.querySelector("#status");
       const tableWrap = document.querySelector("#table-wrap");
       const tableBody = document.querySelector("#rows");
@@ -98,32 +96,6 @@ export function renderOptionChainPage(): string {
         status.dataset.kind = kind;
       }
 
-      function quoteRecords(value, found = []) {
-        if (Array.isArray(value)) {
-          for (const item of value) quoteRecords(item, found);
-          return found;
-        }
-        if (!value || typeof value !== "object") return found;
-        const record = value;
-        const token = record.instrument_token ?? record.instrumentToken ?? record.token ?? record.tk ?? record.pSymbol;
-        if (token !== undefined) found.push(record);
-        else for (const child of Object.values(record)) quoteRecords(child, found);
-        return found;
-      }
-
-      function quoteToken(record) {
-        return String(record.instrument_token ?? record.instrumentToken ?? record.token ?? record.tk ?? record.pSymbol ?? "");
-      }
-
-      function getQuoteValue(record, aliases) {
-        if (!record) return "—";
-        const keys = Object.keys(record);
-        const key = keys.find((candidate) => aliases.includes(candidate.toLowerCase()));
-        if (!key || record[key] === null || record[key] === undefined || record[key] === "") return "—";
-        const numeric = Number(record[key]);
-        return Number.isFinite(numeric) ? numberFormat.format(numeric) : String(record[key]);
-      }
-
       function makeCell(row, value) {
         const cell = document.createElement("td");
         cell.textContent = value;
@@ -131,7 +103,6 @@ export function renderOptionChainPage(): string {
       }
 
       function renderChain(data) {
-        const quoteMap = new Map(quoteRecords(data.quotes).map((quote) => [quoteToken(quote), quote]));
         const strikes = new Map();
         for (const contract of data.contracts) {
           const pair = strikes.get(contract.strike) ?? {};
@@ -144,30 +115,25 @@ export function renderOptionChainPage(): string {
           const row = document.createElement("tr");
           const call = pair.CE;
           const put = pair.PE;
-          const callQuote = call ? quoteMap.get(String(call.instrumentToken)) : undefined;
-          const putQuote = put ? quoteMap.get(String(put.instrumentToken)) : undefined;
           makeCell(row, call?.tradingSymbol ?? "—");
-          makeCell(row, getQuoteValue(callQuote, ["ltp", "lp", "lastprice", "last_traded_price", "lasttradedprice"]));
-          makeCell(row, getQuoteValue(callQuote, ["oi", "open_interest", "openinterest"]));
-          makeCell(row, getQuoteValue(callQuote, ["volume", "vol", "v", "traded_volume", "totaltradedvolume", "tottrdqty"]));
+          makeCell(row, call?.instrumentToken ?? "—");
+          makeCell(row, call?.lotSize || "—");
           makeCell(row, numberFormat.format(strike));
-          makeCell(row, getQuoteValue(putQuote, ["volume", "vol", "v", "traded_volume", "totaltradedvolume", "tottrdqty"]));
-          makeCell(row, getQuoteValue(putQuote, ["oi", "open_interest", "openinterest"]));
-          makeCell(row, getQuoteValue(putQuote, ["ltp", "lp", "lastprice", "last_traded_price", "lasttradedprice"]));
+          makeCell(row, put?.lotSize || "—");
+          makeCell(row, put?.instrumentToken ?? "—");
           makeCell(row, put?.tradingSymbol ?? "—");
           tableBody.append(row);
         }
         tableWrap.hidden = false;
-        setStatus(sorted.length + " strikes · " + data.contracts.length + " contracts · loaded " + new Date().toLocaleTimeString());
+        setStatus(sorted.length + " strikes · " + data.contracts.length + " contracts · local CSV data");
       }
 
       async function loadChain() {
         const expiry = expirySelect.value;
         if (!expiry) return;
-        refreshButton.disabled = true;
         expirySelect.disabled = true;
         tableWrap.hidden = true;
-        setStatus("Loading option contracts and quotes…");
+        setStatus("Loading local option contracts…");
         try {
           const response = await fetch("/api/options/nifty/chain?expiry=" + encodeURIComponent(expiry), {
             headers: { Accept: "application/json" },
@@ -178,20 +144,12 @@ export function renderOptionChainPage(): string {
         } catch (error) {
           setStatus(error instanceof Error ? error.message : "Could not load the option chain.", "error");
         } finally {
-          refreshButton.disabled = false;
           expirySelect.disabled = false;
         }
       }
 
       async function initialize() {
         try {
-          const sessionResponse = await fetch("/api/auth/session", { headers: { Accept: "application/json" } });
-          if (!sessionResponse.ok) throw new Error("Could not check your Kotak Neo session.");
-          const session = await sessionResponse.json();
-          if (session.authenticated !== true) {
-            status.innerHTML = 'Sign in to Kotak Neo to load live option quotes. <a href="/">Go to sign in</a>.';
-            return;
-          }
           const response = await fetch("/api/options/nifty/expiries", { headers: { Accept: "application/json" } });
           const data = await response.json();
           if (!response.ok) throw new Error(data.error || "Could not load option expiries.");
@@ -205,15 +163,13 @@ export function renderOptionChainPage(): string {
           }
           if (expiryValues.length === 0) throw new Error("No NIFTY option expiries were found in the Scrip Master.");
           expirySelect.disabled = false;
-          refreshButton.disabled = false;
           await loadChain();
         } catch (error) {
           setStatus(error instanceof Error ? error.message : "Could not initialize the option chain.", "error");
         }
       }
-
       expirySelect.addEventListener("change", loadChain);
-      refreshButton.addEventListener("click", loadChain);
+      expirySelect.addEventListener("change", loadChain);
       initialize();
     </script>
   </body>

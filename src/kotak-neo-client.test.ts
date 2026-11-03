@@ -233,12 +233,15 @@ describe("KotakNeoClient", () => {
 
   it("includes the upstream HTTP status when Kotak rejects a quote request", async () => {
     const client = new KotakNeoClient(prodConfig, async () =>
-      new Response("Bad request", { status: 400 }),
+      Response.json(
+        { error: [{ code: "10300", message: "Invalid quote type" }] },
+        { status: 400 },
+      ),
     );
 
     await assert.rejects(
       client.getQuotes([{ instrumentToken: "123", exchangeSegment: "nse_fo" }]),
-      /Kotak Neo rejected the API request \(HTTP 400\)/,
+      /Kotak Neo rejected the API request \(HTTP 400\): Invalid quote type/,
     );
   });
 });

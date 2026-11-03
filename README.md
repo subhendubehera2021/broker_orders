@@ -37,8 +37,8 @@ stays server-side; only the current TOTP is submitted by the browser.
 - `GET /margin` — standalone margin calculator UI; requires an active local
   Kotak Neo session to show the calculator form.
 - `GET /scrip-master` — browse and search the full NSE F&O instrument list.
-- `GET /option-chain` — NIFTY option-chain UI; requires an active local
-  Kotak Neo session for expiries and live quotes.
+- `GET /option-chain` — NIFTY option-chain UI using local contract data; no
+  Kotak Neo session or live quotes required.
 - `POST /api/auth/login` — submit the current TOTP. The service uses the
   server-side mobile number, UCC, and MPIN to complete authentication.
 - `GET /api/auth/session` — check whether this process has an authenticated
@@ -46,9 +46,9 @@ stays server-side; only the current TOTP is submitted by the browser.
 - `GET /api/scrip-master` — retrieve Scrip Master file paths from Kotak Neo.
 - `GET /api/scrip-master/nse-fo` — retrieve the NSE F&O Scrip Master CSV.
 - `GET /api/options/nifty/expiries` — list NIFTY option expiries from the
-  Scrip Master.
-- `GET /api/options/nifty/chain?expiry=DDMMMYYYY` — get contracts and quote
-  data for a selected NIFTY expiry.
+  local NSE F&O CSV.
+- `GET /api/options/nifty/chain?expiry=DDMMMYYYY` — get local contract details
+  for a selected NIFTY expiry; no prices or live quotes are included.
 - `POST /api/margin` — check the required margin for the supplied order details
   using the current authenticated session. This does not place an order.
 - `POST /api/auth/logout` — clear the in-memory session from this process. This
@@ -78,9 +78,12 @@ Browse all NSE F&O instruments at
 The page provides search across every field, pagination, and a CSV download.
 
 Open the NIFTY option chain at
-[http://127.0.0.1:3000/option-chain](http://127.0.0.1:3000/option-chain) after
-signing in. It groups calls and puts by strike and supports expiry selection
-and quote refresh.
+[http://127.0.0.1:3000/option-chain](http://127.0.0.1:3000/option-chain) without
+signing in. Contract details and expiries are read from the local
+[`src/nse_fo.csv`](./src/nse_fo.csv) file. The page does not load prices or call
+Kotak Neo for live quotes. Replace the CSV with an updated NSE F&O Scrip Master
+when you need new contracts. The page groups calls and puts by strike and
+supports expiry selection.
 
 The margin calculator has a separate UI route at
 [http://127.0.0.1:3000/margin](http://127.0.0.1:3000/margin). Sign in at `/`

@@ -98,6 +98,8 @@ describe("authentication routes", () => {
     assert.match(response.body, /<h1>NIFTY option chain<\/h1>/);
     assert.match(response.body, /\/api\/options\/nifty\/expiries/);
     assert.match(response.body, /\/api\/options\/nifty\/chain/);
+    assert.match(response.body, /does not load prices or request live quotes/);
+    assert.doesNotMatch(response.body, /Refresh quotes|>LTP</);
   });
 
   it("serves Swagger UI and an OpenAPI document for the API routes", async () => {
@@ -341,7 +343,7 @@ describe("authentication routes", () => {
     });
   });
 
-  it("requires login before returning NIFTY option expiries", async () => {
+  it("returns NIFTY option expiries without a broker session", async () => {
     let masterCalls = 0;
     const app = buildApp({
       config,
@@ -350,17 +352,40 @@ describe("authentication routes", () => {
         async getScripMaster() { return { data: { filesPaths: [] } }; },
         async getNseFoScripMaster() { masterCalls += 1; return ""; },
       },
+      optionChainCsvLoader: async () => [
+        "pSymbol,pInstType,pSymbolName,pTrdSymbol,pOptionType,pExpiryDate,dStrikePrice;",
+        `123,OPTIDX,NIFTY,NIFTY30JAN2030CE,CE,${Date.UTC(2030, 0, 30) / 1000 - 315_511_200},2500000`,
+      ].join("\n"),
     });
     apps.push(app);
 
     const response = await app.inject("/api/options/nifty/expiries");
 
-    assert.equal(response.statusCode, 401);
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(response.json(), { expiries: ["30JAN2030"] });
     assert.equal(masterCalls, 0);
   });
 
-  it("lists NIFTY expiries and returns quotes for the selected contracts", async () => {
-    let quoteInput: unknown;
+  it("loads option expiries from the local NSE F&O file instead of downloading it", async () => {
+    const app = buildApp({
+      config,
+      authClient: {
+        async login() { return authenticatedSession; },
+        async getScripMaster() { return { data: { filesPaths: [] } }; },
+        async getNseFoScripMaster() {
+          assert.fail("option chain must use the local CSV, not download the Scrip Master");
+        },
+      },
+    });
+    apps.push(app);
+
+    const response = await app.inject("/api/options/nifty/expiries");
+
+    assert.equal(response.statusCode, 200);
+    assert.ok(response.json().expiries.length > 0);
+  });
+
+  it("returns local NIFTY contract details without requesting quotes", async () => {
     const expiryEpoch = String(Date.UTC(2030, 0, 30) / 1000 - 315_511_200);
     const csv = [
       "pSymbol,pInstType,pSymbolName,pTrdSymbol,pOptionType,pExpiryDate,dStrikePrice;,lLotSize",
@@ -368,55 +393,49 @@ describe("authentication routes", () => {
       `124,OPTIDX,NIFTY,NIFTY30JAN2030PE,PE,${expiryEpoch},2500000,25`,
       `125,OPTIDX,BANKNIFTY,BANKNIFTY30JAN2030CE,CE,${expiryEpoch},2500000,15`,
     ].join("\n");
+    let remoteMasterCalls = 0;
     const app = buildApp({
       config,
       authClient: {
         async login() { return authenticatedSession; },
         async getScripMaster() { return { data: { filesPaths: [] } }; },
-        async getNseFoScripMaster() { return csv; },
-        async getQuotes(instruments, quoteType) {
-          quoteInput = { instruments, quoteType };
-          return { message: [{ tk: "123", ltp: "120.5" }, { tk: "124", ltp: "95.25" }] };
-        },
+        async getNseFoScripMaster() { remoteMasterCalls += 1; return csv; },
       },
+      optionChainCsvLoader: async () => csv,
     });
     apps.push(app);
 
-    await app.inject({ method: "POST", url: "/api/auth/login", payload: { totp: "123456" } });
     const expiriesResponse = await app.inject("/api/options/nifty/expiries");
     const chainResponse = await app.inject("/api/options/nifty/chain?expiry=30JAN2030");
 
     assert.equal(expiriesResponse.statusCode, 200);
     assert.deepEqual(expiriesResponse.json(), { expiries: ["30JAN2030"] });
     assert.equal(chainResponse.statusCode, 200);
-    assert.deepEqual(quoteInput, {
-      instruments: [
-        { instrumentToken: "123", exchangeSegment: "nse_fo" },
-        { instrumentToken: "124", exchangeSegment: "nse_fo" },
+    assert.equal(remoteMasterCalls, 0);
+    assert.deepEqual(chainResponse.json(), {
+      expiry: "30JAN2030",
+      contracts: [
+        {
+          instrumentToken: "123",
+          tradingSymbol: "NIFTY30JAN2030CE",
+          optionType: "CE",
+          strike: 25000,
+          expiry: "30JAN2030",
+          lotSize: "25",
+        },
+        {
+          instrumentToken: "124",
+          tradingSymbol: "NIFTY30JAN2030PE",
+          optionType: "PE",
+          strike: 25000,
+          expiry: "30JAN2030",
+          lotSize: "25",
+        },
       ],
-      quoteType: "all",
     });
-    assert.deepEqual(chainResponse.json().contracts, [
-      {
-        instrumentToken: "123",
-        tradingSymbol: "NIFTY30JAN2030CE",
-        optionType: "CE",
-        strike: 25000,
-        expiry: "30JAN2030",
-        lotSize: "25",
-      },
-      {
-        instrumentToken: "124",
-        tradingSymbol: "NIFTY30JAN2030PE",
-        optionType: "PE",
-        strike: 25000,
-        expiry: "30JAN2030",
-        lotSize: "25",
-      },
-    ]);
   });
 
-  it("preserves Kotak quote validation errors as HTTP 400", async () => {
+  it("returns HTTP 400 when the selected expiry has no NIFTY contracts", async () => {
     const expiryEpoch = String(Date.UTC(2030, 0, 30) / 1000 - 315_511_200);
     const csv = [
       "pSymbol,pInstType,pSymbolName,pTrdSymbol,pOptionType,pExpiryDate,dStrikePrice;",
@@ -427,20 +446,16 @@ describe("authentication routes", () => {
       authClient: {
         async login() { return authenticatedSession; },
         async getScripMaster() { return { data: { filesPaths: [] } }; },
-        async getNseFoScripMaster() { return csv; },
-        async getQuotes() {
-          throw new KotakNeoError("Kotak Neo rejected the API request (HTTP 400)", 400);
-        },
       },
+      optionChainCsvLoader: async () => csv,
     });
     apps.push(app);
 
-    await app.inject({ method: "POST", url: "/api/auth/login", payload: { totp: "123456" } });
-    const response = await app.inject("/api/options/nifty/chain?expiry=30JAN2030");
+    const response = await app.inject("/api/options/nifty/chain?expiry=31JAN2030");
 
     assert.equal(response.statusCode, 400);
     assert.deepEqual(response.json(), {
-      error: "Kotak Neo rejected the API request (HTTP 400)",
+      error: "No NIFTY option contracts found for that expiry",
     });
   });
 

@@ -248,8 +248,9 @@ export class KotakNeoClient {
     }
 
     if (!response.ok) {
+      const upstreamMessage = await readUpstreamErrorMessage(response);
       throw new KotakNeoError(
-        `Kotak Neo rejected the API request (HTTP ${response.status})`,
+        `Kotak Neo rejected the API request (HTTP ${response.status})${upstreamMessage ? `: ${upstreamMessage}` : ""}`,
         response.status,
       );
     }
@@ -269,6 +270,47 @@ export class KotakNeoClient {
 
     return responseBody;
   }
+}
+
+async function readUpstreamErrorMessage(response: Response): Promise<string | undefined> {
+  let body: string;
+  try {
+    body = (await response.text()).slice(0, 4096);
+  } catch {
+    return undefined;
+  }
+  if (!body) return undefined;
+
+  try {
+    const parsed: unknown = JSON.parse(body);
+    const message = findErrorMessage(parsed);
+    return message ? sanitizeUpstreamMessage(message) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function findErrorMessage(value: unknown): string | undefined {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const message = findErrorMessage(item);
+      if (message) return message;
+    }
+    return undefined;
+  }
+  if (!isRecord(value)) return undefined;
+
+  for (const key of ["message", "error_description", "description", "error"]) {
+    const message = findErrorMessage(value[key]);
+    if (message) return message;
+  }
+  return undefined;
+}
+
+function sanitizeUpstreamMessage(value: string): string | undefined {
+  const sanitized = value.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim();
+  return sanitized ? sanitized.slice(0, 300) : undefined;
 }
 
 const MAX_SCRIP_MASTER_BYTES = 100 * 1024 * 1024;

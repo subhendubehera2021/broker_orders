@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import Fastify, { type FastifyInstance } from "fastify";
 import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
@@ -7,12 +8,15 @@ import {
   KotakNeoError,
   type AuthenticatedSession,
   type MarginCheckInput,
-  type QuoteInstrument,
 } from "./kotak-neo-client.js";
 import { renderLoginPage } from "./login-page.js";
 import { renderMarginPage } from "./margin-page.js";
 import { renderNseFoScripMasterPage } from "./scrip-master-page.js";
-import { parseNiftyOptionContracts, sortExpiryLabels } from "./option-chain.js";
+import {
+  parseNiftyOptionContracts,
+  sortExpiryLabels,
+  type NiftyOptionContract,
+} from "./option-chain.js";
 import { renderOptionChainPage } from "./option-chain-page.js";
 
 interface LoginBody {
@@ -29,16 +33,20 @@ interface AuthClient {
   login(input: KotakLoginInput): Promise<AuthenticatedSession>;
   getScripMaster(): Promise<unknown>;
   getNseFoScripMaster?(): Promise<string>;
-  getQuotes?(instruments: QuoteInstrument[], quoteType?: string): Promise<unknown>;
   checkMargin?(session: AuthenticatedSession, input: MarginCheckInput): Promise<unknown>;
 }
 
 interface AppOptions {
   config: AppConfig;
   authClient?: AuthClient;
+  optionChainCsvLoader?: () => Promise<string>;
 }
 
-export function buildApp({ config, authClient }: AppOptions): FastifyInstance {
+export function buildApp({
+  config,
+  authClient,
+  optionChainCsvLoader = readLocalNseFoMaster,
+}: AppOptions): FastifyInstance {
   const app = Fastify({
     bodyLimit: 1024,
     logger: true,
@@ -95,7 +103,7 @@ export function buildApp({ config, authClient }: AppOptions): FastifyInstance {
           { name: "Authentication", description: "Kotak Neo session authentication" },
           { name: "Scrip Master", description: "Kotak Neo instrument master files" },
           { name: "Margin", description: "Kotak Neo margin estimates" },
-          { name: "Options", description: "NIFTY option-chain quotes" },
+          { name: "Options", description: "NIFTY option contracts from the local NSE F&O file" },
         ],
       },
     });
@@ -104,20 +112,16 @@ export function buildApp({ config, authClient }: AppOptions): FastifyInstance {
     });
 
     let session: AuthenticatedSession | undefined;
-    let niftyContractsCache:
-      | { loadedAt: number; contracts: ReturnType<typeof parseNiftyOptionContracts> }
-      | undefined;
+    let niftyContractsLoad: Promise<NiftyOptionContract[]> | undefined;
 
-    const getNiftyContracts = async () => {
-      if (niftyContractsCache && Date.now() - niftyContractsCache.loadedAt < 5 * 60 * 1000) {
-        return niftyContractsCache.contracts;
-      }
-      if (!client?.getNseFoScripMaster) {
-        throw new KotakNeoError("NSE F&O Scrip Master is not configured", 503);
-      }
-      const contracts = parseNiftyOptionContracts(await client.getNseFoScripMaster());
-      niftyContractsCache = { loadedAt: Date.now(), contracts };
-      return contracts;
+    const getNiftyContracts = (): Promise<NiftyOptionContract[]> => {
+      niftyContractsLoad ??= optionChainCsvLoader()
+        .then(parseNiftyOptionContracts)
+        .catch((error: unknown) => {
+          niftyContractsLoad = undefined;
+          throw error;
+        });
+      return niftyContractsLoad;
     };
 
     api.get(
@@ -347,7 +351,7 @@ export function buildApp({ config, authClient }: AppOptions): FastifyInstance {
       {
         schema: {
           tags: ["Options"],
-          summary: "List available NIFTY option expiries",
+          summary: "List available NIFTY option expiries from the local NSE F&O file",
           response: {
             200: {
               type: "object",
@@ -364,9 +368,6 @@ export function buildApp({ config, authClient }: AppOptions): FastifyInstance {
         },
       },
       async (request, reply) => {
-        if (!session) {
-          return reply.code(401).send({ error: "Authenticate with Kotak Neo to view the option chain" });
-        }
         try {
           const contracts = await getNiftyContracts();
           const expiries = sortExpiryLabels([...new Set(contracts.map(({ expiry }) => expiry))]);
@@ -381,7 +382,7 @@ export function buildApp({ config, authClient }: AppOptions): FastifyInstance {
                 ? { errorMessage: error.message, upstreamStatusCode: error.statusCode }
                 : {}),
             },
-            "Kotak Neo NIFTY option expiries request failed",
+            "NIFTY option expiries request failed",
           );
           return reply.code(statusCode).send({
             error: error instanceof KotakNeoError ? error.message : "NIFTY option expiries could not be loaded",
@@ -395,7 +396,7 @@ export function buildApp({ config, authClient }: AppOptions): FastifyInstance {
       {
         schema: {
           tags: ["Options"],
-          summary: "Get NIFTY option chain quotes",
+          summary: "Get NIFTY option contracts from the local NSE F&O file",
           querystring: {
             type: "object",
             required: ["expiry"],
@@ -405,11 +406,10 @@ export function buildApp({ config, authClient }: AppOptions): FastifyInstance {
           response: {
             200: {
               type: "object",
-              required: ["expiry", "contracts", "quotes"],
+              required: ["expiry", "contracts"],
               properties: {
                 expiry: { type: "string" },
                 contracts: { type: "array", items: { type: "object", additionalProperties: true } },
-                quotes: { type: "array", items: {} },
               },
             },
             400: errorResponseSchema,
@@ -422,13 +422,6 @@ export function buildApp({ config, authClient }: AppOptions): FastifyInstance {
         },
       },
       async (request, reply) => {
-        if (!session) {
-          return reply.code(401).send({ error: "Authenticate with Kotak Neo to view the option chain" });
-        }
-        if (!client?.getQuotes) {
-          return reply.code(503).send({ error: "Kotak Neo quotes API is not configured" });
-        }
-
         try {
           const contracts = await getNiftyContracts();
           const selected = contracts.filter(({ expiry }) => expiry === request.query.expiry);
@@ -436,15 +429,7 @@ export function buildApp({ config, authClient }: AppOptions): FastifyInstance {
             return reply.code(400).send({ error: "No NIFTY option contracts found for that expiry" });
           }
 
-          const instruments: QuoteInstrument[] = selected.map(({ instrumentToken }) => ({
-            instrumentToken,
-            exchangeSegment: "nse_fo",
-          }));
-          const quotes: unknown[] = [];
-          for (let offset = 0; offset < instruments.length; offset += 50) {
-            quotes.push(await client.getQuotes(instruments.slice(offset, offset + 50), "all"));
-          }
-          return { expiry: request.query.expiry, contracts: selected, quotes };
+          return { expiry: request.query.expiry, contracts: selected };
         } catch (error) {
           const statusCode = brokerRequestStatus(error);
           request.log.error(
@@ -455,7 +440,7 @@ export function buildApp({ config, authClient }: AppOptions): FastifyInstance {
                 ? { errorMessage: error.message, upstreamStatusCode: error.statusCode }
                 : {}),
             },
-            "Kotak Neo NIFTY option chain request failed",
+            "NIFTY option chain request failed",
           );
           return reply.code(statusCode).send({
             error: error instanceof KotakNeoError ? error.message : "NIFTY option chain could not be loaded",
@@ -537,6 +522,14 @@ export function buildApp({ config, authClient }: AppOptions): FastifyInstance {
   });
 
   return app;
+}
+
+async function readLocalNseFoMaster(): Promise<string> {
+  try {
+    return await readFile(new URL("../src/nse_fo.csv", import.meta.url), "utf8");
+  } catch {
+    throw new KotakNeoError("Local NSE F&O Scrip Master file could not be read", 503);
+  }
 }
 
 const errorResponseSchema = {
