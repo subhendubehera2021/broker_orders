@@ -138,7 +138,9 @@ order defaults, and does not expose broker tokens to the browser. Order
 submission has no automatic retry or idempotency guarantee: if the API returns
 502, 503, or 504, the request may have reached Kotak despite the uncertain
 response. Check the Kotak Neo order book before submitting it again. The option
-chain's BUY buttons remain disabled; this endpoint is not wired to the UI.
+chain BUY buttons open a ticket prefilled with one lot; select the trigger and
+limit prices and confirm the live order before submission. The UI currently
+uses the `MIS` product and a stop-loss-limit (`SL`) order.
 
 ## Configuration
 

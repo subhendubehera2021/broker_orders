@@ -67,11 +67,25 @@ export function renderOptionChainPage(): string {
       td.strike-cell { background: #0d1217; color: #f0f3f6; font-size: 16px; font-weight: 750; text-align: center; }
       td.put-price { color: #e2e9ed; text-align: left; }
       td.put-instrument { text-align: right; }
-      .instrument-name { display: block; overflow: hidden; color: #cbd6df; font-size: 11px; font-weight: 550; text-overflow: ellipsis; }
+      .instrument-name { display: block; overflow: hidden; padding-right: 44px; color: #cbd6df; font-size: 11px; font-weight: 550; text-overflow: ellipsis; }
       .buy-button { position: absolute; top: 50%; right: 8px; height: 26px; padding: 0 10px; transform: translateY(-50%); border: 1px solid #416b60; border-radius: 6px; background: #1b302a; color: #9ce0cb; font-size: 10px; font-weight: 800; letter-spacing: .06em; opacity: 0; pointer-events: none; transition: opacity .12s ease; }
-      tr:hover .buy-button { opacity: .9; }
-      .buy-button:disabled { cursor: default; opacity: 0; }
-      tr:hover .buy-button:disabled { opacity: .9; }
+      .option-row:hover .buy-button, .option-row:focus-within .buy-button { opacity: .9; pointer-events: auto; }
+      .buy-button:disabled { cursor: default; opacity: 0; pointer-events: none; }
+      .option-row:hover .buy-button:disabled, .option-row:focus-within .buy-button:disabled { opacity: .9; }
+      .order-dialog { width: min(460px, calc(100vw - 28px)); max-height: min(90vh, 700px); padding: 0; overflow: auto; border: 1px solid #344250; border-radius: 14px; background: #111820; color: #e6edf3; box-shadow: 0 24px 80px rgb(0 0 0 / 55%); }
+      .order-dialog::backdrop { background: rgb(0 0 0 / 72%); backdrop-filter: blur(3px); }
+      .order-form { padding: 22px; }
+      .order-title { margin: 0; font-size: 18px; font-weight: 750; }
+      .order-contract { margin: 6px 0 20px; color: #9aa8b7; font-size: 12px; }
+      .order-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+      .order-fields label { display: grid; gap: 7px; color: #a9b6c4; font-size: 10px; }
+      .order-fields input, .order-value { width: 100%; min-height: 40px; padding: 0 10px; border: 1px solid #303d4b; border-radius: 7px; background: #0e141b; color: #e3eaf1; font: inherit; font-size: 13px; }
+      .order-value { display: flex; align-items: center; color: #cbd6df; font-size: 12px; }
+      .order-note { margin: 16px 0; color: #9aa8b7; font-size: 11px; line-height: 1.5; }
+      .order-error { min-height: 18px; margin: 12px 0; color: #f0a3a3; font-size: 12px; }
+      .order-actions { display: flex; justify-content: flex-end; gap: 10px; }
+      .order-submit { border-color: #416b60; background: #1b302a; color: #9ce0cb; font-weight: 750; }
+      .order-fields input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
       tr.spot-row td { height: 58px; padding: 0; border-top: 1px solid #168dd0; border-bottom: 1px solid #168dd0; background: #101419; }
       .spot-marker { position: relative; display: flex; min-height: 58px; align-items: center; justify-content: center; }
       .spot-marker::before { position: absolute; right: 0; left: 0; height: 1px; background: #168dd0; content: ""; }
@@ -79,6 +93,7 @@ export function renderOptionChainPage(): string {
       .spot-label { color: #39aef0; font-size: 13px; font-weight: 650; }
       .spot-price { color: #39aef0; font-size: 15px; font-variant-numeric: tabular-nums; font-weight: 750; }
       [hidden] { display: none !important; }
+      @media (hover: none) { .option-row .buy-button { opacity: .9; pointer-events: auto; } }
       @media (max-width: 600px) { .shell { padding: 18px 14px; } .panel { padding: 12px; } .nav { gap: 12px; } .nav a { font-size: 11px; } }
     </style>
   </head>
@@ -122,6 +137,35 @@ export function renderOptionChainPage(): string {
         </section>
       </main>
     </div>
+    <dialog class="order-dialog" id="order-dialog" aria-labelledby="order-title">
+      <form class="order-form" id="order-form">
+        <h2 class="order-title" id="order-title">Place BUY order</h2>
+        <p class="order-contract" id="order-contract"></p>
+        <div class="order-fields">
+          <label for="order-quantity">Quantity (units)
+            <input id="order-quantity" type="number" min="1" step="1" required>
+          </label>
+          <label>Product
+            <span class="order-value">MIS · Intraday</span>
+          </label>
+          <label>Order type
+            <span class="order-value">Stop-loss limit (SL)</span>
+          </label>
+          <label for="order-trigger-price">Trigger price (₹)
+            <input id="order-trigger-price" type="number" min="0.05" step="0.05" required>
+          </label>
+          <label for="order-limit-price">Limit price (₹)
+            <input id="order-limit-price" type="number" min="0.05" step="0.05" required>
+          </label>
+        </div>
+        <p class="order-note">Quantity starts at one lot. Set both prices; for a BUY stop-limit order, the limit price must be at least the trigger price. Review the live-order confirmation before submitting.</p>
+        <p class="order-error" id="order-error" role="alert"></p>
+        <div class="order-actions">
+          <button type="button" id="order-cancel">Cancel</button>
+          <button type="submit" class="order-submit" id="order-submit">Review &amp; place live BUY</button>
+        </div>
+      </form>
+    </dialog>
     <script>
       const expirySelect = document.querySelector("#expiry");
       const status = document.querySelector("#status");
@@ -129,12 +173,22 @@ export function renderOptionChainPage(): string {
       const tableBody = document.querySelector("#rows");
       const priceStatus = document.querySelector("#price-status");
       const refreshPriceButton = document.querySelector("#refresh-price");
+      const orderDialog = document.querySelector("#order-dialog");
+      const orderForm = document.querySelector("#order-form");
+      const orderContractLabel = document.querySelector("#order-contract");
+      const orderQuantityInput = document.querySelector("#order-quantity");
+      const orderTriggerInput = document.querySelector("#order-trigger-price");
+      const orderLimitInput = document.querySelector("#order-limit-price");
+      const orderError = document.querySelector("#order-error");
+      const orderSubmitButton = document.querySelector("#order-submit");
       const numberFormat = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 });
       let expiryValues = [];
       let marketFeed;
       let liveSpotPrice;
       let loadedContracts = [];
       let displayedStrikesKey = "";
+      let selectedOrderContract;
+      let orderSubmissionUncertain = false;
       const optionPrices = new Map();
 
       function setStatus(text, kind = "") {
@@ -158,14 +212,149 @@ export function renderOptionChainPage(): string {
           const button = document.createElement("button");
           button.className = "buy-button";
           button.type = "button";
-          button.disabled = true;
+          button.disabled = orderSubmissionUncertain;
           button.textContent = "BUY";
-          button.title = "Order placement is not enabled";
-          button.setAttribute("aria-label", "Buy " + contract.tradingSymbol + " (not enabled)");
+          button.title = orderSubmissionUncertain
+            ? "Check your Kotak Neo order book before retrying"
+            : "Open a live BUY order ticket for " + contract.tradingSymbol;
+          button.setAttribute("aria-label", "Buy " + contract.tradingSymbol);
+          button.addEventListener("click", () => {
+            void openOrderTicket(contract);
+          });
           cell.append(button);
         }
         row.append(cell);
       }
+
+      async function openOrderTicket(contract) {
+        orderError.textContent = "";
+        try {
+          const response = await fetch("/api/auth/session", {
+            headers: { Accept: "application/json" },
+          });
+          if (!response.ok) throw new Error("Could not check your Kotak Neo session.");
+          const session = await response.json();
+          if (session.authenticated !== true) {
+            setStatus("Sign in before placing an order.", "error");
+            return;
+          }
+          selectedOrderContract = contract;
+          orderContractLabel.textContent =
+            contract.tradingSymbol + " · " + expirySelect.value +
+            (optionPrices.has(contract.tradingSymbol)
+              ? " · LTP ₹" + numberFormat.format(optionPrices.get(contract.tradingSymbol))
+              : "");
+          orderQuantityInput.value = String(contract.lotSize);
+          orderTriggerInput.value = "";
+          orderLimitInput.value = "";
+          orderDialog.showModal();
+          orderQuantityInput.focus();
+        } catch (error) {
+          setStatus(error instanceof Error ? error.message : "Could not open the order ticket.", "error");
+        }
+      }
+
+      orderForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        if (!selectedOrderContract || !orderForm.reportValidity()) return;
+
+        const quantity = Number(orderQuantityInput.value);
+        const lotSize = Number(selectedOrderContract.lotSize);
+        const triggerPrice = Number(orderTriggerInput.value);
+        const limitPrice = Number(orderLimitInput.value);
+        if (
+          !Number.isSafeInteger(quantity) ||
+          !Number.isSafeInteger(lotSize) ||
+          lotSize < 1 ||
+          quantity % lotSize !== 0
+        ) {
+          orderError.textContent = "Quantity must be a whole number of lots (" + lotSize + " units per lot).";
+          return;
+        }
+        if (
+          !Number.isFinite(triggerPrice) ||
+          !Number.isFinite(limitPrice) ||
+          triggerPrice <= 0 ||
+          limitPrice < triggerPrice
+        ) {
+          orderError.textContent = "For a BUY stop-limit order, enter a positive trigger and a limit at or above it.";
+          return;
+        }
+
+        const lots = quantity / lotSize;
+        const confirmation =
+          "Place a LIVE BUY order?\\n\\n" +
+          selectedOrderContract.tradingSymbol + " · " + expirySelect.value + "\\n" +
+          quantity + " units (" + lots + " lot" + (lots === 1 ? "" : "s") + ") · MIS · SL · DAY\\n" +
+          "Trigger ₹" + numberFormat.format(triggerPrice) +
+          " · Limit ₹" + numberFormat.format(limitPrice);
+        if (!window.confirm(confirmation)) return;
+
+        orderSubmitButton.disabled = true;
+        orderSubmitButton.textContent = "Submitting…";
+        orderError.textContent = "";
+        try {
+          const response = await fetch("/api/options/nifty/order", {
+            method: "POST",
+            headers: {
+              Accept: "application/json",
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              expiry: expirySelect.value,
+              tradingSymbol: selectedOrderContract.tradingSymbol,
+              transactionType: "B",
+              quantity: String(quantity),
+              product: "MIS",
+              orderType: "SL",
+              price: String(limitPrice),
+              triggerPrice: String(triggerPrice),
+              validity: "DAY",
+            }),
+          });
+          const result = await response.json();
+          if (!response.ok) {
+            if (
+              typeof result.error === "string" &&
+              result.error.startsWith("Order outcome could not be confirmed")
+            ) {
+              orderSubmissionUncertain = true;
+              orderDialog.close();
+              renderChain();
+              setStatus(
+                result.error || "Order outcome is uncertain; check your Kotak Neo order book before retrying.",
+                "error",
+              );
+              return;
+            }
+            orderError.textContent = result.error || "Kotak Neo could not place the order.";
+            return;
+          }
+
+          orderDialog.close();
+          const orderNumber = result.nOrdNo || result.orderId;
+          setStatus(
+            "Order request sent" + (orderNumber ? " · " + orderNumber : "") +
+            ". Check your Kotak Neo order book for its status.",
+          );
+        } catch (error) {
+          orderSubmissionUncertain = true;
+          orderDialog.close();
+          renderChain();
+          setStatus(
+            "Order outcome is uncertain; check your Kotak Neo order book before retrying. " +
+              (error instanceof Error ? error.message : ""),
+            "error",
+          );
+        } finally {
+          orderSubmitButton.disabled = false;
+          orderSubmitButton.textContent = "Review & place live BUY";
+        }
+      });
+
+      document.querySelector("#order-cancel").addEventListener("click", () => {
+        orderDialog.close();
+      });
 
       function makePriceCell(row, contract, side) {
         const cell = document.createElement("td");
@@ -289,7 +478,12 @@ export function renderOptionChainPage(): string {
           if (!selectedSymbols.has(symbol)) optionPrices.delete(symbol);
         }
         const strikesKey = sorted.join(",") || "none";
-        if (strikesKey === displayedStrikesKey) return;
+        if (strikesKey === displayedStrikesKey) {
+          for (const button of tableBody.querySelectorAll(".buy-button")) {
+            button.disabled = orderSubmissionUncertain;
+          }
+          return;
+        }
         displayedStrikesKey = strikesKey;
 
         tableBody.replaceChildren();

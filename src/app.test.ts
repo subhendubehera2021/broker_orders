@@ -108,8 +108,14 @@ describe("authentication routes", () => {
     assert.match(response.body, /spotPrice\.id = "nifty-spot-price"/);
     assert.match(response.body, /spotRow\.className = "spot-row"/);
     assert.match(response.body, /button\.textContent = "BUY"/);
-    assert.match(response.body, /button\.disabled = true/);
-    assert.match(response.body, /tr:hover \.buy-button/);
+    assert.match(response.body, /button\.disabled = orderSubmissionUncertain/);
+    assert.match(response.body, /\.option-row:hover \.buy-button, \.option-row:focus-within \.buy-button \{ opacity: \.9; pointer-events: auto; \}/);
+    assert.match(response.body, /orderDialog\.showModal\(\)/);
+    assert.match(response.body, /Place BUY order/);
+    assert.match(response.body, /api\/options\/nifty\/order/);
+    assert.match(response.body, /window\.confirm\(confirmation\)/);
+    assert.match(response.body, /orderType: "SL"/);
+    assert.match(response.body, /option-row:hover \.buy-button/);
     assert.match(response.body, /className = "option-price"/);
     assert.match(response.body, /api\/market\/nifty\/stream\?expiry=/);
     assert.match(response.body, /addEventListener\("option-price"/);
@@ -664,7 +670,7 @@ describe("authentication routes", () => {
     const app = buildApp({
       config,
       authClient: {
-        async login() { return authenticatedSession; },
+        async login() { return { ...authenticatedSession, serverId: "test-server-id" }; },
         async getScripMaster() { return { data: { filesPaths: [] } }; },
         async placeNiftyOptionOrder() {
           orderCalls += 1;
@@ -759,6 +765,43 @@ describe("authentication routes", () => {
       triggerPrice: "0",
       tag: "test-order",
     });
+  });
+
+  it("rejects a BUY stop-limit order whose limit is below its trigger", async () => {
+    let orderCalls = 0;
+    const app = buildApp({
+      config,
+      authClient: {
+        async login() { return { ...authenticatedSession, serverId: "test-server-id" }; },
+        async getScripMaster() { return { data: { filesPaths: [] } }; },
+        async placeNiftyOptionOrder() {
+          orderCalls += 1;
+          return { stat: "Ok" };
+        },
+      },
+    });
+    apps.push(app);
+
+    await app.inject({ method: "POST", url: "/api/auth/login", payload: { totp: "123456" } });
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/options/nifty/order",
+      payload: {
+        expiry: "30JAN2030",
+        tradingSymbol: "NIFTY30JAN2030CE",
+        transactionType: "B",
+        quantity: "25",
+        product: "MIS",
+        orderType: "SL",
+        price: "100",
+        triggerPrice: "101",
+        validity: "DAY",
+      },
+    });
+
+    assert.equal(response.statusCode, 400);
+    assert.match(response.json().error, /greater than or equal/);
+    assert.equal(orderCalls, 0);
   });
 
   it("requires an authenticated broker session before checking margin", async () => {

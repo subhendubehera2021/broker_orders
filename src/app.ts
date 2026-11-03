@@ -779,6 +779,11 @@ export function buildApp({
               "Kotak Neo order API is not configured; set KOTAK_NEO_PLACE_ORDER_PATH and KOTAK_NEO_ORDER_SOURCE",
           });
         }
+        if (!session.serverId) {
+          return reply.code(401).send({
+              error: "Kotak Neo order session details are missing; sign in again",
+          });
+        }
 
         const authenticatedSession = session;
         const body = request.body;
@@ -790,10 +795,24 @@ export function buildApp({
         ) {
           return reply.code(400).send({ error: "Price and trigger price do not match the order type" });
         }
+        const invalidStopLimitPrice =
+          body.orderType === "SL" &&
+          (body.transactionType === "B"
+            ? Number(body.price) < Number(body.triggerPrice)
+            : Number(body.price) > Number(body.triggerPrice));
+        if (invalidStopLimitPrice) {
+          return reply.code(400).send({
+            error:
+              body.transactionType === "B"
+                ? "BUY stop-limit price must be greater than or equal to its trigger price"
+                : "SELL stop-limit price must be less than or equal to its trigger price",
+          });
+        }
         if (body.disclosedQuantity && Number(body.disclosedQuantity) > Number(body.quantity)) {
           return reply.code(400).send({ error: "Disclosed quantity cannot exceed order quantity" });
         }
 
+        let brokerRequestStarted = false;
         try {
           const contract = (await getNiftyContracts()).find(
             ({ expiry, tradingSymbol }) =>
@@ -819,6 +838,7 @@ export function buildApp({
             return reply.code(400).send({ error: "Cannot place an order for an expired contract" });
           }
 
+          brokerRequestStarted = true;
           return await client.placeNiftyOptionOrder(authenticatedSession, {
             tradingSymbol: contract.tradingSymbol,
             transactionType: body.transactionType,
@@ -835,6 +855,9 @@ export function buildApp({
           });
         } catch (error) {
           const statusCode = orderRequestStatus(error);
+          const outcomeUncertain =
+            brokerRequestStarted &&
+            (statusCode === 502 || statusCode === 503 || statusCode === 504);
           request.log.error(
             {
               statusCode,
@@ -844,10 +867,11 @@ export function buildApp({
             "Kotak Neo NIFTY option order failed",
           );
           return reply.code(statusCode).send({
-            error:
-              statusCode === 502 || statusCode === 503 || statusCode === 504
-                ? "Order outcome could not be confirmed; check your Kotak Neo order book before retrying"
-                : "Kotak Neo could not place the NIFTY option order",
+            error: outcomeUncertain
+              ? "Order outcome could not be confirmed; check your Kotak Neo order book before retrying"
+              : error instanceof KotakNeoError
+                ? error.message
+                : "NIFTY option order could not be prepared",
           });
         }
       },
