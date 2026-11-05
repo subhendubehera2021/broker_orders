@@ -105,6 +105,14 @@ describe("authentication routes", () => {
     assert.doesNotMatch(response.body, /<h1>NIFTY option chain<\/h1>/);
     assert.match(response.body, /\/api\/options\/nifty\/expiries/);
     assert.match(response.body, /\/api\/options\/nifty\/chain/);
+    assert.match(response.body, /<h2>Open orders<\/h2>/);
+    assert.match(response.body, /id="refresh-open-orders"/);
+    assert.match(response.body, /fetch\("\/api\/orders"/);
+    assert.match(response.body, /openOrderRows\.append\(row\)/);
+    assert.ok(
+      response.body.indexOf('aria-label="Open orders"') <
+        response.body.indexOf('aria-label="NIFTY option chain"'),
+    );
     assert.match(response.body, /Reconnect<\/button>/);
     assert.match(response.body, /spotPrice\.id = "nifty-spot-price"/);
     assert.match(response.body, /spotRow\.className = "spot-row"/);

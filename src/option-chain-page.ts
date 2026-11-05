@@ -41,6 +41,13 @@ export function renderOptionChainPage(): string {
       .status { min-height: 18px; margin: 14px 0 12px; color: #a0adba; font-size: 11px; letter-spacing: .04em; }
       .status[data-kind="error"] { color: #f0a3a3; }
       .status a { color: var(--accent); }
+      .orders-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
+      .orders-heading h2 { margin: 0; font-size: 17px; }
+      .orders-status { min-height: 18px; margin: 14px 0 12px; color: #a0adba; font-size: 11px; }
+      .orders-status[data-kind="error"] { color: #f0a3a3; }
+      .open-orders-table { min-width: 680px; }
+      .open-orders-table th { position: static; height: auto; padding: 11px 14px; background: #171f27; text-align: left; }
+      .open-orders-table td { padding: 11px 14px; }
       .table-wrap { max-height: 72vh; overflow: auto; border: 1px solid #293541; border-radius: 10px; background: #0d131a; }
       table { width: 100%; min-width: 760px; table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: 13px; white-space: nowrap; }
       th, td { overflow: hidden; padding: 13px 16px; border-right: 1px solid #242e38; border-bottom: 1px solid #222d38; text-overflow: ellipsis; }
@@ -109,6 +116,27 @@ export function renderOptionChainPage(): string {
         <nav class="nav" aria-label="Main navigation"><a href="/orders">Orders</a><a href="/margin">Margin calculator</a><a href="/scrip-master">Scrip Master</a><a href="/">Sign in</a></nav>
       </header>
       <main>
+        <section class="panel" aria-label="Open orders" style="margin-bottom: 20px">
+          <div class="orders-heading">
+            <h2>Open orders</h2>
+            <button id="refresh-open-orders" type="button">Refresh orders</button>
+          </div>
+          <p class="orders-status" id="open-orders-status" role="status" aria-live="polite">Loading open orders…</p>
+          <div class="table-wrap">
+            <table class="open-orders-table">
+              <thead><tr>
+                <th scope="col">Order ID</th>
+                <th scope="col">Instrument</th>
+                <th scope="col">Side</th>
+                <th scope="col">Qty</th>
+                <th scope="col">Price</th>
+                <th scope="col">Type</th>
+                <th scope="col">Status</th>
+              </tr></thead>
+              <tbody id="open-order-rows"><tr><td colspan="7">Loading…</td></tr></tbody>
+            </table>
+          </div>
+        </section>
         <section class="panel" aria-label="NIFTY option chain">
           <div class="controls">
             <label for="expiry">Expiry</label>
@@ -241,6 +269,9 @@ export function renderOptionChainPage(): string {
       const tableBody = document.querySelector("#rows");
       const priceStatus = document.querySelector("#price-status");
       const refreshPriceButton = document.querySelector("#refresh-price");
+      const openOrdersStatus = document.querySelector("#open-orders-status");
+      const openOrderRows = document.querySelector("#open-order-rows");
+      const refreshOpenOrdersButton = document.querySelector("#refresh-open-orders");
       const orderDialog = document.querySelector("#order-dialog");
       const orderForm = document.querySelector("#order-form");
       const orderContractLabel = document.querySelector("#order-contract");
@@ -280,6 +311,104 @@ export function renderOptionChainPage(): string {
       function setStatus(text, kind = "") {
         status.textContent = text;
         status.dataset.kind = kind;
+      }
+
+      function orderValue(order, keys) {
+        for (const key of keys) {
+          const value = order[key];
+          if (value !== undefined && value !== null && value !== "") return String(value);
+        }
+        return "—";
+      }
+
+      function extractOrders(payload) {
+        if (Array.isArray(payload)) return payload.filter((item) => item && typeof item === "object");
+        if (!payload || typeof payload !== "object") return [];
+        for (const key of ["data", "orders", "orderBook", "orderbook"]) {
+          const result = extractOrders(payload[key]);
+          if (result.length) return result;
+        }
+        return [];
+      }
+
+      function isOpenOrder(order) {
+        const orderStatus = orderValue(order, ["ordSt", "orderStatus", "status", "stat"])
+          .toLowerCase()
+          .replace(/[_-]+/g, " ")
+          .trim();
+        return [
+          "open",
+          "pending",
+          "trigger pending",
+          "validation pending",
+          "open pending",
+          "partially filled",
+          "partial",
+          "after market order req received",
+          "modify pending",
+          "cancel pending",
+        ].includes(orderStatus);
+      }
+
+      function renderOpenOrders(orders) {
+        const openOrders = orders.filter(isOpenOrder);
+        openOrderRows.replaceChildren();
+        if (!openOrders.length) {
+          const row = document.createElement("tr");
+          const cell = document.createElement("td");
+          cell.colSpan = 7;
+          cell.textContent = "No open orders.";
+          row.append(cell);
+          openOrderRows.append(row);
+          return 0;
+        }
+
+        for (const order of openOrders) {
+          const row = document.createElement("tr");
+          const fields = [
+            ["nOrdNo", "orderId", "order_id"],
+            ["trdSym", "tradingSymbol", "trading_symbol", "ts"],
+            ["trnsTp", "transactionType", "transaction_type", "tt"],
+            ["qty", "quantity", "qt"],
+            ["prc", "price", "pr"],
+            ["prcTp", "orderType", "order_type", "pt"],
+            ["ordSt", "orderStatus", "status", "stat"],
+          ];
+          for (const keys of fields) {
+            const cell = document.createElement("td");
+            cell.textContent = orderValue(order, keys);
+            row.append(cell);
+          }
+          openOrderRows.append(row);
+        }
+        return openOrders.length;
+      }
+
+      async function loadOpenOrders() {
+        refreshOpenOrdersButton.disabled = true;
+        openOrdersStatus.textContent = "Loading open orders…";
+        openOrdersStatus.dataset.kind = "";
+        try {
+          const response = await fetch("/api/orders", { headers: { Accept: "application/json" } });
+          const payload = await response.json();
+          if (!response.ok) throw new Error(payload.error || "Could not load open orders.");
+          const count = renderOpenOrders(extractOrders(payload));
+          openOrdersStatus.textContent =
+            count + " open order" + (count === 1 ? "" : "s") + ".";
+        } catch (error) {
+          openOrderRows.replaceChildren();
+          const row = document.createElement("tr");
+          const cell = document.createElement("td");
+          cell.colSpan = 7;
+          cell.textContent = "Open orders could not be loaded.";
+          row.append(cell);
+          openOrderRows.append(row);
+          openOrdersStatus.textContent =
+            error instanceof Error ? error.message : "Could not load open orders.";
+          openOrdersStatus.dataset.kind = "error";
+        } finally {
+          refreshOpenOrdersButton.disabled = false;
+        }
       }
 
       function setFeedStatus(state, text) {
@@ -519,6 +648,7 @@ export function renderOptionChainPage(): string {
             "Order request sent" + (orderNumber ? " · " + orderNumber : "") +
             ". Check your Kotak Neo order book for its status.",
           );
+          void loadOpenOrders();
         } catch (error) {
           orderSubmissionUncertain = true;
           orderDialog.close();
@@ -787,10 +917,14 @@ export function renderOptionChainPage(): string {
       }
 
       expirySelect.addEventListener("change", loadChain);
+      refreshOpenOrdersButton.addEventListener("click", () => {
+        void loadOpenOrders();
+      });
       refreshPriceButton.addEventListener("click", () => {
         void initializeLivePrice(expirySelect.value);
       });
       initialize();
+      void loadOpenOrders();
     </script>
   </body>
 </html>`;
