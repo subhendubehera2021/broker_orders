@@ -916,10 +916,17 @@ export function buildApp({
             {
               statusCode,
               errorName: error instanceof Error ? error.name : "UnknownError",
+              ...(error instanceof Error ? { errorMessage: error.message } : {}),
               ...(error instanceof KotakNeoError
                 ? {
-                    upstreamStatusCode: error.statusCode,
-                    upstreamErrorMessage: error.message,
+                    ...(error.upstreamMessage
+                      ? { upstreamErrorMessage: error.upstreamMessage }
+                      : {}),
+                    ...(error.upstreamHttpStatusCode !== undefined
+                      ? { upstreamStatusCode: error.upstreamHttpStatusCode }
+                      : {}),
+                    ...(error.upstreamCode ? { upstreamCode: error.upstreamCode } : {}),
+                    ...(error.upstreamStat ? { upstreamStat: error.upstreamStat } : {}),
                   }
                 : {}),
             },

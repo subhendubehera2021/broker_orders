@@ -95,6 +95,10 @@ export class KotakNeoError extends Error {
   constructor(
     message: string,
     readonly statusCode: number,
+    readonly upstreamCode?: string,
+    readonly upstreamHttpStatusCode?: number,
+    readonly upstreamMessage?: string,
+    readonly upstreamStat?: string,
   ) {
     super(message);
     this.name = "KotakNeoError";
@@ -529,7 +533,7 @@ export class KotakNeoClient {
     const baseUrl = session.baseUrl ?? this.config.apiBaseUrl;
     const path = new URL(this.config.placeOrderPath, ensureTrailingSlash(baseUrl));
     if (session.serverId) path.searchParams.set("sId", session.serverId);
-    return this.requestJson(path.toString(), {
+    const response = await this.requestJson(path.toString(), {
       method: "POST",
       headers: {
         Auth: session.tradeToken,
@@ -539,6 +543,30 @@ export class KotakNeoClient {
       },
       body,
     }, baseUrl);
+    if (
+      isRecord(response) &&
+      typeof response.stat === "string" &&
+      response.stat.toLowerCase() !== "ok"
+    ) {
+      const upstreamCode =
+        typeof response.stCode === "string" || typeof response.stCode === "number"
+          ? String(response.stCode)
+          : undefined;
+      const upstreamMessage = findErrorMessage(response);
+      const sanitizedMessage = upstreamMessage
+        ? sanitizeUpstreamMessage(upstreamMessage)
+        : undefined;
+      const statusCode = upstreamCode === "100008" ? 401 : 400;
+      throw new KotakNeoError(
+        `Kotak Neo rejected the order${upstreamCode ? ` (stCode=${upstreamCode})` : ""}${sanitizedMessage ? `: ${sanitizedMessage}` : ""}`,
+        statusCode,
+        upstreamCode,
+        200,
+        sanitizedMessage,
+        response.stat,
+      );
+    }
+    return response;
   }
 
   private async post(
@@ -578,10 +606,14 @@ export class KotakNeoClient {
     }
 
     if (!response.ok) {
-      const upstreamMessage = await readUpstreamErrorMessage(response);
+      const upstreamError = await readUpstreamError(response);
       throw new KotakNeoError(
-        `Kotak Neo rejected the API request (HTTP ${response.status})${upstreamMessage ? `: ${upstreamMessage}` : ""}`,
+        `Kotak Neo rejected the API request (HTTP ${response.status})${upstreamError.message ? `: ${upstreamError.message}` : ""}`,
         response.status,
+        upstreamError.code,
+        response.status,
+        upstreamError.message,
+        upstreamError.stat,
       );
     }
 
@@ -602,21 +634,39 @@ export class KotakNeoClient {
   }
 }
 
-async function readUpstreamErrorMessage(response: Response): Promise<string | undefined> {
+interface UpstreamErrorDetails {
+  code?: string;
+  message?: string;
+  stat?: string;
+}
+
+async function readUpstreamError(response: Response): Promise<UpstreamErrorDetails> {
   let body: string;
   try {
     body = (await response.text()).slice(0, 4096);
   } catch {
-    return undefined;
+    return {};
   }
-  if (!body) return undefined;
+  if (!body) return {};
 
   try {
     const parsed: unknown = JSON.parse(body);
-    const message = findErrorMessage(parsed);
-    return message ? sanitizeUpstreamMessage(message) : undefined;
+    if (!isRecord(parsed)) return {};
+    const rawCode =
+      typeof parsed.stCode === "string" || typeof parsed.stCode === "number"
+        ? String(parsed.stCode)
+        : undefined;
+    const rawStat = typeof parsed.stat === "string" ? parsed.stat : undefined;
+    const rawMessage = findErrorMessage(parsed);
+    return {
+      ...(rawCode ? { code: rawCode } : {}),
+      ...(rawMessage && sanitizeUpstreamMessage(rawMessage)
+        ? { message: sanitizeUpstreamMessage(rawMessage) }
+        : {}),
+      ...(rawStat ? { stat: sanitizeUpstreamMessage(rawStat) } : {}),
+    };
   } catch {
-    return undefined;
+    return {};
   }
 }
 

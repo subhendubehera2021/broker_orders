@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { KotakNeoClient } from "./kotak-neo-client.js";
+import { KotakNeoClient, KotakNeoError } from "./kotak-neo-client.js";
 
 const prodConfig = {
   apiBaseUrl: "https://mis.kotaksecurities.com/",
@@ -746,6 +746,74 @@ describe("KotakNeoClient", () => {
         triggerPrice: "0",
       }),
       /Kotak Neo rejected the API request \(HTTP 400\): Invalid order parameters/,
+    );
+  });
+
+  it("treats a Kotak HTTP 200 unauthorized order body as a failed order", async () => {
+    const client = new KotakNeoClient(prodConfig, async () =>
+      Response.json({ stCode: 100008, errMsg: "unauthorized", stat: "Not_Ok" }),
+    );
+
+    await assert.rejects(
+      client.placeNiftyOptionOrder(testSession, {
+        tradingSymbol: "NIFTY30JAN2030CE",
+        instrumentToken: "12345",
+        transactionType: "B",
+        quantity: "25",
+        product: "MIS",
+        orderType: "L",
+        price: "100",
+        validity: "DAY",
+        amo: "NO",
+        disclosedQuantity: "0",
+        marketProtection: "0",
+        triggerPrice: "0",
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof KotakNeoError);
+        assert.equal(error.statusCode, 401);
+        assert.equal(error.upstreamCode, "100008");
+        assert.equal(error.upstreamHttpStatusCode, 200);
+        assert.equal(error.upstreamMessage, "unauthorized");
+        assert.equal(error.upstreamStat, "Not_Ok");
+        assert.match(error.message, /unauthorized/);
+        return true;
+      },
+    );
+  });
+
+  it("preserves Kotak error fields when an order rejection uses HTTP 401", async () => {
+    const client = new KotakNeoClient(prodConfig, async () =>
+      Response.json(
+        { stCode: 100008, errMsg: "unauthorized", stat: "Not_Ok" },
+        { status: 401 },
+      ),
+    );
+
+    await assert.rejects(
+      client.placeNiftyOptionOrder(testSession, {
+        tradingSymbol: "NIFTY30JAN2030CE",
+        instrumentToken: "12345",
+        transactionType: "B",
+        quantity: "25",
+        product: "MIS",
+        orderType: "L",
+        price: "100",
+        validity: "DAY",
+        amo: "NO",
+        disclosedQuantity: "0",
+        marketProtection: "0",
+        triggerPrice: "0",
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof KotakNeoError);
+        assert.equal(error.statusCode, 401);
+        assert.equal(error.upstreamHttpStatusCode, 401);
+        assert.equal(error.upstreamCode, "100008");
+        assert.equal(error.upstreamMessage, "unauthorized");
+        assert.equal(error.upstreamStat, "Not_Ok");
+        return true;
+      },
     );
   });
 });
