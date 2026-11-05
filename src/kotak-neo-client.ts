@@ -83,6 +83,12 @@ export interface PlaceNiftyOptionOrderInput {
   lastTradedPrice?: string;
 }
 
+export interface CancelOrderInput {
+  orderNumber: string;
+  amo: "YES" | "NO";
+  tradingSymbol?: string;
+}
+
 interface KotakResponse {
   data?: Record<string, unknown>;
   [key: string]: unknown;
@@ -497,6 +503,62 @@ export class KotakNeoClient {
     return response;
   }
 
+  async cancelOrder(
+    session: AuthenticatedSession,
+    input: CancelOrderInput,
+  ): Promise<unknown> {
+    if (!this.config.cancelOrderPath) {
+      throw new KotakNeoError(
+        "Kotak Neo cancel-order API is not configured; set KOTAK_NEO_CANCEL_ORDER_PATH",
+        503,
+      );
+    }
+    if (input.amo === "YES" && !input.tradingSymbol) {
+      throw new KotakNeoError("AMO cancellation requires the trading symbol", 400);
+    }
+    const cancelData: Record<string, string> = {
+      on: input.orderNumber,
+      am: input.amo,
+    };
+    if (input.amo === "YES" && input.tradingSymbol) cancelData.ts = input.tradingSymbol;
+    const response = await this.requestJson(
+      this.config.cancelOrderPath,
+      {
+        method: "POST",
+        headers: {
+          Auth: session.tradeToken,
+          Sid: session.sid,
+          "neo-fin-key": this.config.financialKey,
+          Accept: "application/json",
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({ jData: JSON.stringify(cancelData) }),
+      },
+      session.baseUrl,
+    );
+    if (
+      isRecord(response) &&
+      typeof response.stat === "string" &&
+      response.stat.toLowerCase() !== "ok"
+    ) {
+      const code =
+        typeof response.stCode === "string" || typeof response.stCode === "number"
+          ? String(response.stCode)
+          : undefined;
+      const message = findErrorMessage(response);
+      const sanitizedMessage = message ? sanitizeUpstreamMessage(message) : undefined;
+      throw new KotakNeoError(
+        `Kotak Neo rejected the order cancellation${code ? ` (stCode=${code})` : ""}${sanitizedMessage ? `: ${sanitizedMessage}` : ""}`,
+        code === "100008" ? 401 : 400,
+        code,
+        200,
+        sanitizedMessage,
+        response.stat,
+      );
+    }
+    return response;
+  }
+
   async getQuotes(
     session: AuthenticatedSession,
     instruments: QuoteInstrument[],
@@ -728,6 +790,7 @@ function findErrorMessage(value: unknown): string | undefined {
   const messageKeys = [
     "message",
     "errMsg",
+    "emsg",
     "errorMessage",
     "error_message",
     "error_msg",

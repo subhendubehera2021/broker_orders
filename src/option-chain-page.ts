@@ -132,8 +132,9 @@ export function renderOptionChainPage(): string {
                 <th scope="col">Price</th>
                 <th scope="col">Type</th>
                 <th scope="col">Status</th>
+                <th scope="col">Action</th>
               </tr></thead>
-              <tbody id="open-order-rows"><tr><td colspan="7">Loading…</td></tr></tbody>
+              <tbody id="open-order-rows"><tr><td colspan="8">Loading…</td></tr></tbody>
             </table>
           </div>
         </section>
@@ -356,7 +357,7 @@ export function renderOptionChainPage(): string {
         if (!openOrders.length) {
           const row = document.createElement("tr");
           const cell = document.createElement("td");
-          cell.colSpan = 7;
+          cell.colSpan = 8;
           cell.textContent = "No open orders.";
           row.append(cell);
           openOrderRows.append(row);
@@ -379,9 +380,50 @@ export function renderOptionChainPage(): string {
             cell.textContent = orderValue(order, keys);
             row.append(cell);
           }
+          const actionCell = document.createElement("td");
+          const orderNumber = orderValue(order, ["nOrdNo", "orderId", "order_id"]);
+          if (orderNumber !== "—") {
+            const cancelButton = document.createElement("button");
+            cancelButton.type = "button";
+            cancelButton.textContent = "Cancel";
+            cancelButton.setAttribute("aria-label", "Cancel order " + orderNumber);
+            cancelButton.addEventListener("click", () => {
+              void cancelOpenOrder(orderNumber, orderValue(order, ["trdSym", "tradingSymbol", "ts"]));
+            });
+            actionCell.append(cancelButton);
+          } else {
+            actionCell.textContent = "—";
+          }
+          row.append(actionCell);
           openOrderRows.append(row);
         }
         return openOrders.length;
+      }
+
+      async function cancelOpenOrder(orderNumber, tradingSymbol) {
+        if (!window.confirm("Cancel open order " + orderNumber + " (" + tradingSymbol + ")?")) return;
+        const cancelButton = [...openOrderRows.querySelectorAll("button")].find((button) =>
+          button.getAttribute("aria-label") === "Cancel order " + orderNumber,
+        );
+        if (cancelButton) cancelButton.disabled = true;
+        openOrdersStatus.textContent = "Submitting cancellation for order " + orderNumber + "…";
+        openOrdersStatus.dataset.kind = "";
+        try {
+          const response = await fetch(
+            "/api/orders/" + encodeURIComponent(orderNumber) + "/cancel",
+            { method: "POST", headers: { Accept: "application/json" } },
+          );
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.error || "Could not cancel this order.");
+          await loadOpenOrders();
+          openOrdersStatus.textContent =
+            "Cancellation requested for order " + orderNumber + "; open orders refreshed.";
+        } catch (error) {
+          openOrdersStatus.textContent =
+            error instanceof Error ? error.message : "Could not cancel this order.";
+          openOrdersStatus.dataset.kind = "error";
+          if (cancelButton) cancelButton.disabled = false;
+        }
       }
 
       async function loadOpenOrders() {
@@ -399,7 +441,7 @@ export function renderOptionChainPage(): string {
           openOrderRows.replaceChildren();
           const row = document.createElement("tr");
           const cell = document.createElement("td");
-          cell.colSpan = 7;
+          cell.colSpan = 8;
           cell.textContent = "Open orders could not be loaded.";
           row.append(cell);
           openOrderRows.append(row);

@@ -109,6 +109,8 @@ describe("authentication routes", () => {
     assert.match(response.body, /id="refresh-open-orders"/);
     assert.match(response.body, /fetch\("\/api\/orders"/);
     assert.match(response.body, /openOrderRows\.append\(row\)/);
+    assert.match(response.body, /Cancel open order/);
+    assert.match(response.body, /\/api\/orders\/" \+ encodeURIComponent\(orderNumber\) \+ "\/cancel/);
     assert.ok(
       response.body.indexOf('aria-label="Open orders"') <
         response.body.indexOf('aria-label="NIFTY option chain"'),
@@ -211,6 +213,80 @@ describe("authentication routes", () => {
     assert.deepEqual(response.json(), orderBook);
   });
 
+  it("cancels a current open AMO using order-book details", async () => {
+    let cancelInput: unknown;
+    const app = buildApp({
+      config: {
+        ...config,
+        kotakNeo: {
+          ...config.kotakNeo,
+          orderBookPath: "quick/user/orders",
+          cancelOrderPath: "quick/order/cancel",
+        },
+      },
+      authClient: {
+        async login() { return authenticatedSession; },
+        async getScripMaster() { return { data: { filesPaths: [] } }; },
+        async getOrderBook() {
+          return {
+            stat: "Ok",
+            data: [{ nOrdNo: "123", ordSt: "open", ordGenTp: "AMO", trdSym: "NIFTY30JAN2030CE" }],
+          };
+        },
+        async cancelOrder(session, input) {
+          assert.deepEqual(session, authenticatedSession);
+          cancelInput = input;
+          return { stat: "Ok", nOrdNo: "123" };
+        },
+      },
+    });
+    apps.push(app);
+
+    await app.inject({ method: "POST", url: "/api/auth/login", payload: { totp: "123456" } });
+    const response = await app.inject({ method: "POST", url: "/api/orders/123/cancel" });
+
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(cancelInput, {
+      orderNumber: "123",
+      amo: "YES",
+      tradingSymbol: "NIFTY30JAN2030CE",
+    });
+    assert.deepEqual(response.json(), { stat: "Ok", nOrdNo: "123" });
+  });
+
+  it("refuses to cancel an order that is not open", async () => {
+    let cancelCalls = 0;
+    const app = buildApp({
+      config: {
+        ...config,
+        kotakNeo: {
+          ...config.kotakNeo,
+          orderBookPath: "quick/user/orders",
+          cancelOrderPath: "quick/order/cancel",
+        },
+      },
+      authClient: {
+        async login() { return authenticatedSession; },
+        async getScripMaster() { return { data: { filesPaths: [] } }; },
+        async getOrderBook() {
+          return { stat: "Ok", data: [{ nOrdNo: "123", ordSt: "complete" }] };
+        },
+        async cancelOrder() {
+          cancelCalls += 1;
+          return { stat: "Ok" };
+        },
+      },
+    });
+    apps.push(app);
+
+    await app.inject({ method: "POST", url: "/api/auth/login", payload: { totp: "123456" } });
+    const response = await app.inject({ method: "POST", url: "/api/orders/123/cancel" });
+
+    assert.equal(response.statusCode, 400);
+    assert.match(response.json().error, /Only open orders can be cancelled/);
+    assert.equal(cancelCalls, 0);
+  });
+
   it("serves Swagger UI and an OpenAPI document for the API routes", async () => {
     const app = buildApp({ config });
     apps.push(app);
@@ -233,6 +309,7 @@ describe("authentication routes", () => {
       "/api/options/nifty/expiries",
       "/api/options/nifty/order",
       "/api/orders",
+      "/api/orders/{orderNumber}/cancel",
       "/api/scrip-master",
       "/api/scrip-master/nse-fo",
       "/health",

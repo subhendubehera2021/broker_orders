@@ -7,6 +7,7 @@ import {
   KotakNeoClient,
   KotakNeoError,
   type AuthenticatedSession,
+  type CancelOrderInput,
   type MarginCheckInput,
   type NiftyIndexTick,
   type NiftyOptionMarketInstrument,
@@ -63,6 +64,7 @@ interface AuthClient {
   login(input: KotakLoginInput): Promise<AuthenticatedSession>;
   getScripMaster(): Promise<unknown>;
   getOrderBook?(session: AuthenticatedSession): Promise<unknown>;
+  cancelOrder?(session: AuthenticatedSession, input: CancelOrderInput): Promise<unknown>;
   getNseFoScripMaster?(): Promise<string>;
   streamNiftyIndexPrice?(
     session: AuthenticatedSession,
@@ -290,6 +292,105 @@ export function buildApp({
           );
           return reply.code(statusCode).send({
             error: error instanceof Error ? error.message : "Kotak Neo order book request failed",
+          });
+        }
+      },
+    );
+
+    api.post<{ Params: { orderNumber: string } }>(
+      "/api/orders/:orderNumber/cancel",
+      {
+        schema: {
+          tags: ["Orders"],
+          summary: "Cancel an open Kotak Neo order",
+          params: {
+            type: "object",
+            required: ["orderNumber"],
+            additionalProperties: false,
+            properties: { orderNumber: { type: "string", pattern: "^\\d{1,32}$" } },
+          },
+          response: {
+            200: {
+              type: "object",
+              additionalProperties: true,
+              description: "Kotak Neo order cancellation response.",
+            },
+            400: errorResponseSchema,
+            401: errorResponseSchema,
+            429: errorResponseSchema,
+            502: errorResponseSchema,
+            503: errorResponseSchema,
+            504: errorResponseSchema,
+          },
+        },
+      },
+      async (request, reply) => {
+        if (!session) {
+          return reply.code(401).send({ error: "Authenticate with Kotak Neo before cancelling an order" });
+        }
+        if (!client?.getOrderBook || !client.cancelOrder) {
+          return reply.code(503).send({ error: "Kotak Neo order cancellation is not configured" });
+        }
+        if (!config.kotakNeo.orderBookPath || !config.kotakNeo.cancelOrderPath) {
+          return reply.code(503).send({
+            error: "Set KOTAK_NEO_ORDER_BOOK_PATH and KOTAK_NEO_CANCEL_ORDER_PATH to enable cancellation",
+          });
+        }
+
+        try {
+          const orderNumber = request.params.orderNumber;
+          const orders = orderBookRecords(await client.getOrderBook(session));
+          const order = orders.find(
+            (item) => orderRecordValue(item, ["nOrdNo", "orderId", "order_id"]) === orderNumber,
+          );
+          if (!order) {
+            return reply.code(400).send({ error: "Order was not found in the current order book" });
+          }
+          if (!isOpenOrderRecord(order)) {
+            return reply.code(400).send({ error: "Only open orders can be cancelled" });
+          }
+          const amo =
+            orderRecordValue(order, ["ordGenTp", "orderGenerationType", "amo", "am"]).toUpperCase() ===
+            "AMO"
+              ? "YES"
+              : orderRecordValue(order, ["amo", "am"]).toUpperCase() === "YES"
+                ? "YES"
+                : "NO";
+          const tradingSymbol =
+            orderRecordValue(order, ["trdSym", "tradingSymbol", "trading_symbol", "ts"]) || undefined;
+          if (amo === "YES" && !tradingSymbol) {
+            return reply.code(400).send({
+              error: "Cannot cancel this AMO order because its trading symbol is missing",
+            });
+          }
+          return await client.cancelOrder(session, {
+            orderNumber,
+            amo,
+            ...(tradingSymbol ? { tradingSymbol } : {}),
+          });
+        } catch (error) {
+          const statusCode = brokerRequestStatus(error);
+          request.log.error(
+            {
+              statusCode,
+              errorName: error instanceof Error ? error.name : "UnknownError",
+              ...(error instanceof KotakNeoError
+                ? {
+                    ...(error.upstreamHttpStatusCode !== undefined
+                      ? { upstreamStatusCode: error.upstreamHttpStatusCode }
+                      : {}),
+                    ...(error.upstreamCode ? { upstreamCode: error.upstreamCode } : {}),
+                    ...(error.upstreamMessage
+                      ? { upstreamErrorMessage: error.upstreamMessage }
+                      : {}),
+                    ...(error.upstreamStat ? { upstreamStat: error.upstreamStat } : {}),
+                  }
+                : {}),
+            },
+            "Kotak Neo order cancellation failed",
+          );
+          return reply.code(statusCode).send({
+            error: error instanceof Error ? error.message : "Kotak Neo order cancellation failed",
           });
         }
       },
@@ -1021,6 +1122,50 @@ export function buildApp({
   });
 
   return app;
+}
+
+function orderBookRecords(value: unknown): Record<string, unknown>[] {
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => orderBookRecords(item));
+  }
+  if (!isObjectRecord(value)) return [];
+  if (["nOrdNo", "orderId", "order_id"].some((key) => orderRecordValue(value, [key]))) {
+    return [value];
+  }
+  return Object.values(value).flatMap((item) => orderBookRecords(item));
+}
+
+function orderRecordValue(order: Record<string, unknown>, keys: string[]): string {
+  for (const key of keys) {
+    const value = order[key];
+    if (typeof value === "string" || typeof value === "number") {
+      if (String(value).trim()) return String(value).trim();
+    }
+  }
+  return "";
+}
+
+function isOpenOrderRecord(order: Record<string, unknown>): boolean {
+  const status = orderRecordValue(order, ["ordSt", "orderStatus", "status"])
+    .toLowerCase()
+    .replace(/[_-]+/g, " ")
+    .trim();
+  return [
+    "open",
+    "pending",
+    "trigger pending",
+    "validation pending",
+    "open pending",
+    "partially filled",
+    "partial",
+    "after market order req received",
+    "modify pending",
+    "cancel pending",
+  ].includes(status);
+}
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 async function readLocalNseFoMaster(): Promise<string> {

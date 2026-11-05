@@ -11,6 +11,7 @@ const prodConfig = {
   scripMasterPath: "script-details/1.0/masterscrip/file-paths",
   marginPath: "quick/user/check-margin",
   orderBookPath: "quick/user/orders",
+  cancelOrderPath: "quick/order/cancel",
   placeOrderPath: "quick/order/rule/ms/place",
   orderSource: "NEOTRADEAPI",
   quotesPath: "script-details/1.0/quotes/neosymbol/{neo_symbols}/{quote_type}",
@@ -19,6 +20,70 @@ const prodConfig = {
 const testSession = { sid: "test-sid", tradeToken: "test-trade-token" };
 
 describe("KotakNeoClient", () => {
+  it("cancels a regular order with Kotak's url-encoded jData request", async () => {
+    let capturedUrl: URL | undefined;
+    let capturedInit: RequestInit | undefined;
+    const client = new KotakNeoClient(prodConfig, async (input, init) => {
+      capturedUrl = new URL(input.toString());
+      capturedInit = init;
+      return Response.json({ stat: "Ok", nOrdNo: "123" });
+    });
+
+    const response = await client.cancelOrder(
+      { ...testSession, baseUrl: "https://neo-gw.kotaksecurities.com/api/" },
+      { orderNumber: "123", amo: "NO" },
+    );
+
+    assert.equal(capturedUrl?.href, "https://neo-gw.kotaksecurities.com/api/quick/order/cancel");
+    assert.equal(capturedInit?.method, "POST");
+    const headers = new Headers(capturedInit?.headers);
+    assert.equal(headers.get("auth"), "test-trade-token");
+    assert.equal(headers.get("sid"), "test-sid");
+    assert.equal(headers.get("neo-fin-key"), "test-prod-financial-key");
+    assert.equal(headers.get("content-type"), "application/x-www-form-urlencoded");
+    const form = new URLSearchParams(String(capturedInit?.body));
+    assert.deepEqual(JSON.parse(form.get("jData") ?? ""), { on: "123", am: "NO" });
+    assert.deepEqual(response, { stat: "Ok", nOrdNo: "123" });
+  });
+
+  it("includes the symbol when cancelling an AMO order", async () => {
+    let capturedInit: RequestInit | undefined;
+    const client = new KotakNeoClient(prodConfig, async (_input, init) => {
+      capturedInit = init;
+      return Response.json({ stat: "Ok", nOrdNo: "123" });
+    });
+
+    await client.cancelOrder(testSession, {
+      orderNumber: "123",
+      amo: "YES",
+      tradingSymbol: "NIFTY30JAN2030CE",
+    });
+
+    const form = new URLSearchParams(String(capturedInit?.body));
+    assert.deepEqual(JSON.parse(form.get("jData") ?? ""), {
+      on: "123",
+      am: "YES",
+      ts: "NIFTY30JAN2030CE",
+    });
+  });
+
+  it("preserves Kotak cancellation errors", async () => {
+    const client = new KotakNeoClient(prodConfig, async () =>
+      Response.json({ stat: "Not_Ok", stCode: 1006, emsg: "Order already cancelled" }),
+    );
+
+    await assert.rejects(
+      client.cancelOrder(testSession, { orderNumber: "123", amo: "NO" }),
+      (error: unknown) => {
+        assert.ok(error instanceof KotakNeoError);
+        assert.equal(error.statusCode, 400);
+        assert.equal(error.upstreamCode, "1006");
+        assert.equal(error.upstreamMessage, "Order already cancelled");
+        return true;
+      },
+    );
+  });
+
   it("uses the production TOTP response to validate MPIN and returns the trade session", async () => {
     const requests: Array<{ url: URL; init: RequestInit }> = [];
     const client = new KotakNeoClient(prodConfig, async (input, init) => {

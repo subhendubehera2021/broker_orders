@@ -54,6 +54,8 @@ stays server-side; only the current TOTP is submitted by the browser.
 - `GET /orders` — view the authenticated Kotak Neo order book, separated into
   all, open, and closed orders.
 - `GET /api/orders` — retrieve the authenticated Kotak Neo order-book response.
+- `POST /api/orders/{orderNumber}/cancel` — cancel an order only if it is still
+  open in the current order book.
 - `POST /api/auth/login` — submit the current TOTP. The service uses the
   server-side mobile number, UCC, and MPIN to complete authentication.
 - `GET /api/auth/session` — check whether this process has an authenticated
@@ -191,6 +193,8 @@ application:
 - `KOTAK_NEO_SCRIP_MASTER_PATH` — the Scrip Master file-path endpoint.
 - `KOTAK_NEO_MARGIN_PATH` — the check-margin endpoint.
 - `KOTAK_NEO_ORDER_BOOK_PATH` — the order-book endpoint used by the Orders page.
+- `KOTAK_NEO_CANCEL_ORDER_PATH` — the cancel-order endpoint used for open orders;
+  set it to `quick/order/cancel` to enable cancellation.
 - `KOTAK_NEO_PLACE_ORDER_PATH` and `KOTAK_NEO_ORDER_SOURCE` — the live order
   endpoint and source identifier. These are optional for application startup
   but must both be set to enable live order placement.
