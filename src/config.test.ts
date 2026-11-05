@@ -15,6 +15,7 @@ const validEnvironment: NodeJS.ProcessEnv = {
   KOTAK_NEO_TOTP_VALIDATE_PATH: "validate",
   KOTAK_NEO_SCRIP_MASTER_PATH: "script-details/1.0/masterscrip/file-paths",
   KOTAK_NEO_MARGIN_PATH: "quick/user/check-margin",
+  KOTAK_NEO_ORDER_BOOK_PATH: "quick/order/orders",
   KOTAK_NEO_PLACE_ORDER_PATH: "quick/order/rule/ms/place",
   KOTAK_NEO_ORDER_SOURCE: "NEOTRADEAPI",
   KOTAK_NEO_QUOTES_PATH: "script-details/1.0/quotes/neosymbol/{neo_symbols}/{quote_type}",
@@ -39,6 +40,7 @@ describe("loadConfig", () => {
         totpValidatePath: "validate",
         scripMasterPath: "script-details/1.0/masterscrip/file-paths",
         marginPath: "quick/user/check-margin",
+        orderBookPath: "quick/order/orders",
         placeOrderPath: "quick/order/rule/ms/place",
         orderSource: "NEOTRADEAPI",
         quotesPath: "script-details/1.0/quotes/neosymbol/{neo_symbols}/{quote_type}",
@@ -70,6 +72,17 @@ describe("loadConfig", () => {
 
     assert.equal(config.kotakNeo.placeOrderPath, undefined);
     assert.equal(config.kotakNeo.orderSource, undefined);
+  });
+
+  it("allows startup without optional order-book settings", () => {
+    const {
+      KOTAK_NEO_ORDER_BOOK_PATH: _orderBookPath,
+      ...environmentWithoutOrderBookPath
+    } = validEnvironment;
+
+    const config = loadConfig(environmentWithoutOrderBookPath);
+
+    assert.equal(config.kotakNeo.orderBookPath, undefined);
   });
 
   it("enables sanitized Kotak login response logs only when explicitly enabled", () => {

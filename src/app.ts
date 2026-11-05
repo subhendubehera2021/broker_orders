@@ -15,6 +15,7 @@ import {
 } from "./kotak-neo-client.js";
 import { renderLoginPage } from "./login-page.js";
 import { renderMarginPage } from "./margin-page.js";
+import { renderOrdersPage } from "./orders-page.js";
 import { renderNseFoScripMasterPage } from "./scrip-master-page.js";
 import {
   parseNiftyOptionContracts,
@@ -60,6 +61,7 @@ interface NiftyOptionOrderBody {
 interface AuthClient {
   login(input: KotakLoginInput): Promise<AuthenticatedSession>;
   getScripMaster(): Promise<unknown>;
+  getOrderBook?(session: AuthenticatedSession): Promise<unknown>;
   getNseFoScripMaster?(): Promise<string>;
   streamNiftyIndexPrice?(
     session: AuthenticatedSession,
@@ -143,6 +145,13 @@ export function buildApp({
       .send(renderOptionChainPage());
   });
 
+  app.get("/orders", async (_request, reply) => {
+    return reply
+      .header("Cache-Control", "no-store")
+      .type("text/html; charset=utf-8")
+      .send(renderOrdersPage());
+  });
+
   app.register(async (api) => {
     await api.register(swagger, {
       openapi: {
@@ -219,6 +228,70 @@ export function buildApp({
         authenticated: Boolean(session),
         orderReady: Boolean(session),
       }),
+    );
+
+    api.get(
+      "/api/orders",
+      {
+        schema: {
+          tags: ["Orders"],
+          summary: "Get the authenticated Kotak Neo order book",
+          response: {
+            200: {
+              type: "object",
+              additionalProperties: true,
+              description: "Kotak Neo order-book response.",
+            },
+            400: errorResponseSchema,
+            401: errorResponseSchema,
+            429: errorResponseSchema,
+            502: errorResponseSchema,
+            503: errorResponseSchema,
+            504: errorResponseSchema,
+          },
+        },
+      },
+      async (request, reply) => {
+        if (!session) {
+          return reply.code(401).send({ error: "Authenticate with Kotak Neo to view orders" });
+        }
+        if (!client?.getOrderBook) {
+          return reply.code(503).send({ error: "Kotak Neo order-book API is not configured" });
+        }
+        if (!config.kotakNeo.orderBookPath) {
+          return reply.code(503).send({
+            error: "Set KOTAK_NEO_ORDER_BOOK_PATH to enable the order book",
+          });
+        }
+
+        try {
+          return await client.getOrderBook(session);
+        } catch (error) {
+          const statusCode = brokerRequestStatus(error);
+          request.log.error(
+            {
+              statusCode,
+              errorName: error instanceof Error ? error.name : "UnknownError",
+              ...(error instanceof KotakNeoError
+                ? {
+                    ...(error.upstreamHttpStatusCode !== undefined
+                      ? { upstreamStatusCode: error.upstreamHttpStatusCode }
+                      : {}),
+                    ...(error.upstreamCode ? { upstreamCode: error.upstreamCode } : {}),
+                    ...(error.upstreamMessage
+                      ? { upstreamErrorMessage: error.upstreamMessage }
+                      : {}),
+                    ...(error.upstreamStat ? { upstreamStat: error.upstreamStat } : {}),
+                  }
+                : {}),
+            },
+            "Kotak Neo order book request failed",
+          );
+          return reply.code(statusCode).send({
+            error: error instanceof Error ? error.message : "Kotak Neo order book request failed",
+          });
+        }
+      },
     );
 
     api.get<{ Querystring: { expiry?: string } }>(

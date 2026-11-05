@@ -453,6 +453,50 @@ export class KotakNeoClient {
     }, session.baseUrl);
   }
 
+  async getOrderBook(session: AuthenticatedSession): Promise<unknown> {
+    if (!this.config.orderBookPath) {
+      throw new KotakNeoError(
+        "Kotak Neo order book API is not configured; set KOTAK_NEO_ORDER_BOOK_PATH",
+        503,
+      );
+    }
+
+    const url = new URL(
+      this.config.orderBookPath,
+      ensureTrailingSlash(session.baseUrl ?? this.config.apiBaseUrl),
+    );
+    if (session.serverId) url.searchParams.set("sId", session.serverId);
+    const response = await this.requestJson(url.toString(), {
+      method: "GET",
+      headers: {
+        Auth: session.tradeToken,
+        Sid: session.sid,
+        Accept: "application/json",
+      },
+    }, session.baseUrl);
+    if (
+      isRecord(response) &&
+      typeof response.stat === "string" &&
+      response.stat.toLowerCase() !== "ok"
+    ) {
+      const code =
+        typeof response.stCode === "string" || typeof response.stCode === "number"
+          ? String(response.stCode)
+          : undefined;
+      const message = findErrorMessage(response);
+      const sanitizedMessage = message ? sanitizeUpstreamMessage(message) : undefined;
+      throw new KotakNeoError(
+        `Kotak Neo rejected the order-book request${code ? ` (stCode=${code})` : ""}${sanitizedMessage ? `: ${sanitizedMessage}` : ""}`,
+        code === "100008" ? 401 : 502,
+        code,
+        200,
+        sanitizedMessage,
+        response.stat,
+      );
+    }
+    return response;
+  }
+
   async getQuotes(
     session: AuthenticatedSession,
     instruments: QuoteInstrument[],

@@ -59,6 +59,7 @@ describe("authentication routes", () => {
     assert.doesNotMatch(response.body, /name="mpin"/);
     assert.match(response.body, /href="\/margin">Open margin calculator/);
     assert.match(response.body, /href="\/option-chain">Open NIFTY option chain/);
+    assert.match(response.body, /href="\/orders">View open and closed orders/);
     assert.doesNotMatch(response.body, /id="margin-form"/);
     assert.match(response.body, /fetch\("\/api\/auth\/login"/);
   });
@@ -128,12 +129,78 @@ describe("authentication routes", () => {
     assert.match(response.body, /addEventListener\("option-price"/);
     assert.match(response.body, /addEventListener\("feed-connected"/);
     assert.match(response.body, /data-state="idle"/);
+    assert.match(response.body, /href="\/orders">Orders<\/a>/);
     assert.match(response.body, /class="call-head" colspan="2">CALLS/);
     assert.match(response.body, /class="put-head" colspan="2">PUTS/);
     assert.match(response.body, /spotPill\.className = "spot-pill"/);
     assert.doesNotMatch(response.body, /<th>Token<\/th>|<th>Lot size<\/th>/);
     assert.match(response.body, /api\/market\/nifty\/stream/);
     assert.doesNotMatch(response.body, /Refresh quotes/);
+  });
+
+  it("serves the separate orders page with open and closed filters", async () => {
+    const app = buildApp({ config });
+    apps.push(app);
+
+    const response = await app.inject("/orders");
+
+    assert.equal(response.statusCode, 200);
+    assert.match(String(response.headers["content-type"] ?? ""), /text\/html/);
+    assert.equal(response.headers["cache-control"], "no-store");
+    assert.match(response.body, /<h1>Orders<\/h1>/);
+    assert.match(response.body, /data-filter="open"/);
+    assert.match(response.body, /data-filter="closed"/);
+    assert.match(response.body, /fetch\("\/api\/orders"/);
+  });
+
+  it("requires authentication and configured order-book path for the orders API", async () => {
+    let orderBookCalls = 0;
+    const app = buildApp({
+      config,
+      authClient: {
+        async login() { return authenticatedSession; },
+        async getScripMaster() { return { data: { filesPaths: [] } }; },
+        async getOrderBook() {
+          orderBookCalls += 1;
+          return { stat: "Ok", data: [] };
+        },
+      },
+    });
+    apps.push(app);
+
+    const unauthenticated = await app.inject("/api/orders");
+    assert.equal(unauthenticated.statusCode, 401);
+
+    await app.inject({ method: "POST", url: "/api/auth/login", payload: { totp: "123456" } });
+    const notConfigured = await app.inject("/api/orders");
+    assert.equal(notConfigured.statusCode, 503);
+    assert.match(notConfigured.json().error, /KOTAK_NEO_ORDER_BOOK_PATH/);
+    assert.equal(orderBookCalls, 0);
+  });
+
+  it("returns Kotak order book data for an authenticated configured session", async () => {
+    const orderBook = { stat: "Ok", data: [{ nOrdNo: "123", ordSt: "open" }] };
+    const app = buildApp({
+      config: {
+        ...config,
+        kotakNeo: { ...config.kotakNeo, orderBookPath: "quick/order/orders" },
+      },
+      authClient: {
+        async login() { return authenticatedSession; },
+        async getScripMaster() { return { data: { filesPaths: [] } }; },
+        async getOrderBook(session) {
+          assert.deepEqual(session, authenticatedSession);
+          return orderBook;
+        },
+      },
+    });
+    apps.push(app);
+
+    await app.inject({ method: "POST", url: "/api/auth/login", payload: { totp: "123456" } });
+    const response = await app.inject("/api/orders");
+
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(response.json(), orderBook);
   });
 
   it("serves Swagger UI and an OpenAPI document for the API routes", async () => {
@@ -157,6 +224,7 @@ describe("authentication routes", () => {
       "/api/options/nifty/chain",
       "/api/options/nifty/expiries",
       "/api/options/nifty/order",
+      "/api/orders",
       "/api/scrip-master",
       "/api/scrip-master/nse-fo",
       "/health",

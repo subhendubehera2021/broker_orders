@@ -10,6 +10,7 @@ const prodConfig = {
   totpValidatePath: "login/1.0/tradeApiValidate",
   scripMasterPath: "script-details/1.0/masterscrip/file-paths",
   marginPath: "quick/user/check-margin",
+  orderBookPath: "quick/order/orders",
   placeOrderPath: "quick/order/rule/ms/place",
   orderSource: "NEOTRADEAPI",
   quotesPath: "script-details/1.0/quotes/neosymbol/{neo_symbols}/{quote_type}",
@@ -719,6 +720,52 @@ describe("KotakNeoClient", () => {
     await assert.rejects(
       client.getQuotes(testSession, [{ instrumentToken: "123", exchangeSegment: "nse_fo" }]),
       /Kotak Neo rejected the API request \(HTTP 400\): Invalid quote type/,
+    );
+  });
+
+  it("gets the authenticated order book from the session base URL", async () => {
+    let capturedUrl: URL | undefined;
+    let capturedInit: RequestInit | undefined;
+    const orderBook = { stat: "Ok", data: [{ nOrdNo: "123", ordSt: "open" }] };
+    const client = new KotakNeoClient(prodConfig, async (input, init) => {
+      capturedUrl = new URL(input.toString());
+      capturedInit = init;
+      return Response.json(orderBook);
+    });
+
+    const response = await client.getOrderBook({
+      ...testSession,
+      serverId: "server-id",
+      baseUrl: "https://neo-gw.kotaksecurities.com/api/",
+    });
+
+    assert.equal(
+      capturedUrl?.href,
+      "https://neo-gw.kotaksecurities.com/api/quick/order/orders?sId=server-id",
+    );
+    assert.equal(capturedInit?.method, "GET");
+    const headers = new Headers(capturedInit?.headers);
+    assert.equal(headers.get("auth"), "test-trade-token");
+    assert.equal(headers.get("sid"), "test-sid");
+    assert.equal(headers.get("accept"), "application/json");
+    assert.deepEqual(response, orderBook);
+  });
+
+  it("preserves Kotak error code and message for an order-book API rejection", async () => {
+    const client = new KotakNeoClient(prodConfig, async () =>
+      Response.json({ stCode: 100008, errMsg: "unauthorized", stat: "Not_Ok" }),
+    );
+
+    await assert.rejects(
+      client.getOrderBook(testSession),
+      (error: unknown) => {
+        assert.ok(error instanceof KotakNeoError);
+        assert.equal(error.statusCode, 401);
+        assert.equal(error.upstreamCode, "100008");
+        assert.equal(error.upstreamMessage, "unauthorized");
+        assert.equal(error.upstreamStat, "Not_Ok");
+        return true;
+      },
     );
   });
 

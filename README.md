@@ -30,6 +30,9 @@ npm run start:pm2
 Manage the process with `pm2 status`, `pm2 logs kotak-neo-api`, and
 `pm2 restart kotak-neo-api`.
 
+Add `KOTAK_NEO_ORDER_BOOK_PATH=quick/order/orders` to `.env` to enable the
+Orders page and API.
+
 ## API documentation
 
 Start the service and open [http://127.0.0.1:3000/docs](http://127.0.0.1:3000/docs)
@@ -48,6 +51,9 @@ stays server-side; only the current TOTP is submitted by the browser.
 - `GET /scrip-master` — browse and search the full NSE F&O instrument list.
 - `GET /option-chain` — NIFTY option-chain UI using local contract data, with
   optional live index streaming after Kotak Neo sign-in.
+- `GET /orders` — view the authenticated Kotak Neo order book, separated into
+  all, open, and closed orders.
+- `GET /api/orders` — retrieve the authenticated Kotak Neo order-book response.
 - `POST /api/auth/login` — submit the current TOTP. The service uses the
   server-side mobile number, UCC, and MPIN to complete authentication.
 - `GET /api/auth/session` — check whether this process has an authenticated
@@ -184,6 +190,7 @@ application:
   environment-specific authentication paths.
 - `KOTAK_NEO_SCRIP_MASTER_PATH` — the Scrip Master file-path endpoint.
 - `KOTAK_NEO_MARGIN_PATH` — the check-margin endpoint.
+- `KOTAK_NEO_ORDER_BOOK_PATH` — the order-book endpoint used by the Orders page.
 - `KOTAK_NEO_PLACE_ORDER_PATH` and `KOTAK_NEO_ORDER_SOURCE` — the live order
   endpoint and source identifier. These are optional for application startup
   but must both be set to enable live order placement.

@@ -106,7 +106,7 @@ export function renderOptionChainPage(): string {
           <span class="brand-mark" aria-hidden="true">N.</span>
           <span><span class="brand-name">Neo Desk</span><br><span class="brand-caption">Trading API</span></span>
         </a>
-        <nav class="nav" aria-label="Main navigation"><a href="/margin">Margin calculator</a><a href="/scrip-master">Scrip Master</a><a href="/">Sign in</a></nav>
+        <nav class="nav" aria-label="Main navigation"><a href="/orders">Orders</a><a href="/margin">Margin calculator</a><a href="/scrip-master">Scrip Master</a><a href="/">Sign in</a></nav>
       </header>
       <main>
         <section class="panel" aria-label="NIFTY option chain">
