@@ -110,10 +110,61 @@ export function sortExpiryLabels(expiries: string[]): string[] {
   return expiries.sort((left, right) => expiryTimestamp(left) - expiryTimestamp(right));
 }
 
+export function filterUpcomingExpiryLabels(
+  expiries: string[],
+  now = new Date(),
+): string[] {
+  const todayParts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const today = Number(
+    `${todayParts.find(({ type }) => type === "year")?.value}` +
+      `${todayParts.find(({ type }) => type === "month")?.value}` +
+      `${todayParts.find(({ type }) => type === "day")?.value}`,
+  );
+  return expiries.filter((expiry) => {
+    const key = expiryDateKey(expiry);
+    return key !== undefined && key >= today;
+  });
+}
+
 function expiryTimestamp(value: string): number {
+  const key = expiryDateKey(value);
+  return key === undefined ? Number.MAX_SAFE_INTEGER : key;
+}
+
+function expiryDateKey(value: string): number | undefined {
   const match = /^(\d{2})([A-Z]{3})(\d{4})$/.exec(value);
-  if (!match) return Number.MAX_SAFE_INTEGER;
-  return Date.parse(`${match[1]} ${match[2]} ${match[3]} UTC`);
+  if (!match) return undefined;
+  const month = [
+    "JAN",
+    "FEB",
+    "MAR",
+    "APR",
+    "MAY",
+    "JUN",
+    "JUL",
+    "AUG",
+    "SEP",
+    "OCT",
+    "NOV",
+    "DEC",
+  ].indexOf(match[2]);
+  if (month < 0) return undefined;
+  const day = Number(match[1]);
+  const year = Number(match[3]);
+  const date = new Date(Date.UTC(year, month, day));
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month ||
+    date.getUTCDate() !== day
+  ) {
+    return undefined;
+  }
+  return year * 10_000 + (month + 1) * 100 + day;
 }
 
 function expiryLabel(rawValue: string): string | undefined {

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  filterUpcomingExpiryLabels,
   selectNearbyNiftyOptionContracts,
   type NiftyOptionContract,
 } from "./option-chain.js";
@@ -43,6 +44,21 @@ describe("selectNearbyNiftyOptionContracts", () => {
         ["CE", "PE"],
       );
     }
+  });
+
+  describe("filterUpcomingExpiryLabels", () => {
+    it("excludes past expiries and keeps today and future dates in India time", () => {
+      const now = new Date("2026-11-05T05:30:00.000Z");
+      const expiries = ["04NOV2026", "05NOV2026", "06NOV2026", "31FEB2027"];
+
+      assert.deepEqual(filterUpcomingExpiryLabels(expiries, now), ["05NOV2026", "06NOV2026"]);
+    });
+
+    it("uses the current date in Asia/Kolkata near a UTC date boundary", () => {
+      const now = new Date("2026-11-04T20:00:00.000Z");
+
+      assert.deepEqual(filterUpcomingExpiryLabels(["04NOV2026", "05NOV2026"], now), ["05NOV2026"]);
+    });
   });
 
   it("omits a strike without both a call and a put contract", () => {

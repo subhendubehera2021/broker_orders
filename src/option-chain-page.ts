@@ -892,7 +892,7 @@ export function renderOptionChainPage(): string {
             option.textContent = expiry;
             expirySelect.append(option);
           }
-          if (expiryValues.length === 0) throw new Error("No NIFTY option expiries were found in the Scrip Master.");
+          if (expiryValues.length === 0) throw new Error("No upcoming NIFTY option expiries were found in the Scrip Master.");
           expirySelect.disabled = false;
           await loadChain();
         } catch (error) {

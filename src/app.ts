@@ -18,6 +18,7 @@ import { renderMarginPage } from "./margin-page.js";
 import { renderOrdersPage } from "./orders-page.js";
 import { renderNseFoScripMasterPage } from "./scrip-master-page.js";
 import {
+  filterUpcomingExpiryLabels,
   parseNiftyOptionContracts,
   selectNearbyNiftyOptionContracts,
   sortExpiryLabels,
@@ -655,7 +656,9 @@ export function buildApp({
       async (request, reply) => {
         try {
           const contracts = await getNiftyContracts();
-          const expiries = sortExpiryLabels([...new Set(contracts.map(({ expiry }) => expiry))]);
+          const expiries = sortExpiryLabels(
+            filterUpcomingExpiryLabels([...new Set(contracts.map(({ expiry }) => expiry))]),
+          );
           return { expiries };
         } catch (error) {
           const statusCode = brokerRequestStatus(error);
