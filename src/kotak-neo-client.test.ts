@@ -10,7 +10,7 @@ const prodConfig = {
   totpValidatePath: "login/1.0/tradeApiValidate",
   scripMasterPath: "script-details/1.0/masterscrip/file-paths",
   marginPath: "quick/user/check-margin",
-  orderBookPath: "quick/order/orders",
+  orderBookPath: "quick/user/orders",
   placeOrderPath: "quick/order/rule/ms/place",
   orderSource: "NEOTRADEAPI",
   quotesPath: "script-details/1.0/quotes/neosymbol/{neo_symbols}/{quote_type}",
@@ -741,13 +741,14 @@ describe("KotakNeoClient", () => {
 
     assert.equal(
       capturedUrl?.href,
-      "https://neo-gw.kotaksecurities.com/api/quick/order/orders?sId=server-id",
+      "https://neo-gw.kotaksecurities.com/api/quick/user/orders",
     );
     assert.equal(capturedInit?.method, "GET");
     const headers = new Headers(capturedInit?.headers);
     assert.equal(headers.get("auth"), "test-trade-token");
     assert.equal(headers.get("sid"), "test-sid");
     assert.equal(headers.get("accept"), "application/json");
+    assert.equal(headers.get("neo-fin-key"), "test-prod-financial-key");
     assert.deepEqual(response, orderBook);
   });
 

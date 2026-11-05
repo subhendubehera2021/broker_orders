@@ -183,7 +183,7 @@ describe("authentication routes", () => {
     const app = buildApp({
       config: {
         ...config,
-        kotakNeo: { ...config.kotakNeo, orderBookPath: "quick/order/orders" },
+        kotakNeo: { ...config.kotakNeo, orderBookPath: "quick/user/orders" },
       },
       authClient: {
         async login() { return authenticatedSession; },

@@ -30,7 +30,7 @@ npm run start:pm2
 Manage the process with `pm2 status`, `pm2 logs kotak-neo-api`, and
 `pm2 restart kotak-neo-api`.
 
-Add `KOTAK_NEO_ORDER_BOOK_PATH=quick/order/orders` to `.env` to enable the
+Add `KOTAK_NEO_ORDER_BOOK_PATH=quick/user/orders` to `.env` to enable the
 Orders page and API.
 
 ## API documentation

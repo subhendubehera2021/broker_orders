@@ -465,13 +465,13 @@ export class KotakNeoClient {
       this.config.orderBookPath,
       ensureTrailingSlash(session.baseUrl ?? this.config.apiBaseUrl),
     );
-    if (session.serverId) url.searchParams.set("sId", session.serverId);
     const response = await this.requestJson(url.toString(), {
       method: "GET",
       headers: {
         Auth: session.tradeToken,
         Sid: session.sid,
         Accept: "application/json",
+        "neo-fin-key": this.config.financialKey,
       },
     }, session.baseUrl);
     if (
