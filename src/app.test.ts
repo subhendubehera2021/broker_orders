@@ -60,6 +60,7 @@ describe("authentication routes", () => {
     assert.match(response.body, /href="\/margin">Open margin calculator/);
     assert.match(response.body, /href="\/option-chain">Open NIFTY option chain/);
     assert.match(response.body, /href="\/orders">View open and closed orders/);
+    assert.match(response.body, /href="\/order-stream">View live order and position updates/);
     assert.doesNotMatch(response.body, /id="margin-form"/);
     assert.match(response.body, /fetch\("\/api\/auth\/login"/);
   });
@@ -161,6 +162,37 @@ describe("authentication routes", () => {
     assert.match(response.body, /data-filter="open"/);
     assert.match(response.body, /data-filter="closed"/);
     assert.match(response.body, /fetch\("\/api\/orders"/);
+  });
+
+  it("serves the live order and position stream page", async () => {
+    const app = buildApp({ config });
+    apps.push(app);
+
+    const response = await app.inject("/order-stream");
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.headers["cache-control"], "no-store");
+    assert.match(response.body, /<h1>Live activity<\/h1>/);
+    assert.match(response.body, /Order updates/);
+    assert.match(response.body, /Position updates/);
+    assert.match(response.body, /new EventSource\("\/api\/orders\/stream"\)/);
+    assert.match(response.body, /seenOrderEvents/);
+  });
+
+  it("requires authentication for the live order stream", async () => {
+    const app = buildApp({
+      config,
+      authClient: {
+        async login() { return authenticatedSession; },
+        async getScripMaster() { return { data: { filesPaths: [] } }; },
+      },
+    });
+    apps.push(app);
+
+    const response = await app.inject("/api/orders/stream");
+
+    assert.equal(response.statusCode, 401);
+    assert.match(response.json().error, /Authenticate with Kotak Neo/);
   });
 
   it("requires authentication and configured order-book path for the orders API", async () => {
@@ -309,6 +341,7 @@ describe("authentication routes", () => {
       "/api/options/nifty/expiries",
       "/api/options/nifty/order",
       "/api/orders",
+      "/api/orders/stream",
       "/api/orders/{orderNumber}/cancel",
       "/api/scrip-master",
       "/api/scrip-master/nse-fo",

@@ -33,6 +33,13 @@ export interface NiftyOptionPriceTick {
   asOf: string;
 }
 
+export interface OrderPositionUpdate {
+  type: "order" | "position";
+  data: Record<string, unknown>;
+}
+
+export type OrderPositionConnectionState = "connecting" | "connected" | "reconnecting";
+
 interface MarketDataSocket {
   readyState: number;
   onopen: ((event: Event) => void) | null;
@@ -369,6 +376,102 @@ export class KotakNeoClient {
       socket.onerror = null;
       socket.onclose = null;
       if (socket.readyState < 2) socket.close();
+    };
+  }
+
+  streamOrderPositionUpdates(
+    session: AuthenticatedSession,
+    onUpdate: (update: OrderPositionUpdate) => void,
+    onState: (state: OrderPositionConnectionState) => void,
+    onError: (error: Error) => void,
+  ): () => void {
+    if (!session.baseUrl) {
+      onError(new KotakNeoError("Kotak order stream base URL is missing; sign in again", 503));
+      return () => {};
+    }
+
+    let url: string;
+    try {
+      url = orderStreamUrl(session.baseUrl);
+    } catch {
+      onError(new KotakNeoError("Kotak order stream URL is invalid", 503));
+      return () => {};
+    }
+
+    let stopped = false;
+    let socket: MarketDataSocket | undefined;
+    let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+    let reconnectAttempt = 0;
+
+    const scheduleReconnect = () => {
+      if (stopped || reconnectTimer) return;
+      reconnectAttempt += 1;
+      onState("reconnecting");
+      const delay = Math.min(1_000 * 2 ** Math.min(reconnectAttempt - 1, 5), 30_000);
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = undefined;
+        connect();
+      }, delay);
+    };
+
+    const connect = () => {
+      if (stopped) return;
+      onState(reconnectAttempt === 0 ? "connecting" : "reconnecting");
+      try {
+        socket = this.webSocketFactory(url);
+      } catch {
+        scheduleReconnect();
+        return;
+      }
+
+      const activeSocket = socket;
+      activeSocket.onopen = () => {
+        if (stopped) return;
+        activeSocket.send(
+          `{type:cn,Authorization:${session.tradeToken},Sid:${session.sid},src:WEB}`,
+        );
+      };
+      activeSocket.onmessage = (event) => {
+        if (stopped || typeof event.data !== "string") return;
+        let message: unknown;
+        try {
+          message = JSON.parse(event.data);
+        } catch {
+          onError(new Error("Kotak order stream sent an invalid JSON message"));
+          return;
+        }
+        if (!isRecord(message)) return;
+        if (message.type === "cn" && String(message.ak).toLowerCase() === "ok") {
+          reconnectAttempt = 0;
+          onState("connected");
+          return;
+        }
+        if (
+          (message.type === "order" || message.type === "position") &&
+          isRecord(message.data)
+        ) {
+          onUpdate({ type: message.type, data: message.data });
+        }
+      };
+      activeSocket.onerror = () => {
+        if (!stopped) onError(new Error("Kotak order stream connection failed"));
+      };
+      activeSocket.onclose = () => {
+        if (!stopped) scheduleReconnect();
+      };
+    };
+
+    connect();
+    return () => {
+      stopped = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (socket) {
+        socket.onopen = null;
+        socket.onmessage = null;
+        socket.onerror = null;
+        socket.onclose = null;
+        if (socket.readyState < 2) socket.close();
+      }
     };
   }
 
@@ -883,6 +986,24 @@ function toWebSocketUrl(value: string): string {
     throw new Error("Kotak market-data feed URL must not contain credentials");
   }
   return url.toString();
+}
+
+function orderStreamUrl(baseUrl: string): string {
+  const parsedBaseUrl = new URL(baseUrl);
+  if (
+    parsedBaseUrl.protocol !== "https:" ||
+    (parsedBaseUrl.hostname !== "kotaksecurities.com" &&
+      !parsedBaseUrl.hostname.endsWith(".kotaksecurities.com")) ||
+    parsedBaseUrl.username ||
+    parsedBaseUrl.password
+  ) {
+    throw new Error("Untrusted Kotak order-stream base URL");
+  }
+  parsedBaseUrl.protocol = "wss:";
+  parsedBaseUrl.pathname = "/realtime";
+  parsedBaseUrl.search = "";
+  parsedBaseUrl.hash = "";
+  return parsedBaseUrl.toString();
 }
 
 function requiredString(value: unknown): string {

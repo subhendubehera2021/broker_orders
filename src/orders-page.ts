@@ -50,7 +50,7 @@ export function renderOrdersPage(): string {
           <span class="brand-mark" aria-hidden="true">N.</span>
           <span><span class="brand-name">Neo Desk</span><br><span class="brand-caption">Trading API</span></span>
         </a>
-        <nav aria-label="Main navigation"><a href="/option-chain">NIFTY option chain</a><a href="/margin">Margin calculator</a><a href="/">Sign in</a></nav>
+        <nav aria-label="Main navigation"><a href="/option-chain">NIFTY option chain</a><a href="/order-stream">Live activity</a><a href="/margin">Margin calculator</a><a href="/">Sign in</a></nav>
       </header>
       <main>
         <div class="heading">

@@ -162,6 +162,8 @@ const loginPageTemplate = `<!doctype html>
       .option-link:hover { color: var(--green); }
       .orders-link { display: block; margin-top: 10px; color: #a9aea3; font-size: 11px; text-align: center; text-decoration: none; }
       .orders-link:hover { color: var(--green); }
+      .activity-link { display: block; margin-top: 10px; color: #a9aea3; font-size: 11px; text-align: center; text-decoration: none; }
+      .activity-link:hover { color: var(--green); }
       footer { display: flex; justify-content: space-between; gap: 20px; padding: 10px 7% 0; color: #63685e; font-size: 10px; }
       footer a { color: #92988a; text-decoration: none; }
       footer a:hover { color: var(--green); }
@@ -255,6 +257,7 @@ const loginPageTemplate = `<!doctype html>
             <a class="margin-link" href="/margin">Open margin calculator</a>
             <a class="option-link" href="/option-chain">Open NIFTY option chain</a>
             <a class="orders-link" href="/orders">View open and closed orders</a>
+            <a class="activity-link" href="/order-stream">View live order and position updates</a>
             <a class="scrip-link" href="/scrip-master">Browse NSE F&amp;O Scrip Master</a>
             <button class="logout" id="logout-button" type="button">Disconnect this session</button>
           </div>

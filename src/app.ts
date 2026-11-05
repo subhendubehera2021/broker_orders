@@ -12,11 +12,14 @@ import {
   type NiftyIndexTick,
   type NiftyOptionMarketInstrument,
   type NiftyOptionPriceTick,
+  type OrderPositionConnectionState,
+  type OrderPositionUpdate,
   type PlaceNiftyOptionOrderInput,
 } from "./kotak-neo-client.js";
 import { renderLoginPage } from "./login-page.js";
 import { renderMarginPage } from "./margin-page.js";
 import { renderOrdersPage } from "./orders-page.js";
+import { renderOrderStreamPage } from "./order-stream-page.js";
 import { renderNseFoScripMasterPage } from "./scrip-master-page.js";
 import {
   filterUpcomingExpiryLabels,
@@ -65,6 +68,12 @@ interface AuthClient {
   getScripMaster(): Promise<unknown>;
   getOrderBook?(session: AuthenticatedSession): Promise<unknown>;
   cancelOrder?(session: AuthenticatedSession, input: CancelOrderInput): Promise<unknown>;
+  streamOrderPositionUpdates?(
+    session: AuthenticatedSession,
+    onUpdate: (update: OrderPositionUpdate) => void,
+    onState: (state: OrderPositionConnectionState) => void,
+    onError: (error: Error) => void,
+  ): () => void;
   getNseFoScripMaster?(): Promise<string>;
   streamNiftyIndexPrice?(
     session: AuthenticatedSession,
@@ -155,6 +164,13 @@ export function buildApp({
       .send(renderOrdersPage());
   });
 
+  app.get("/order-stream", async (_request, reply) => {
+    return reply
+      .header("Cache-Control", "no-store")
+      .type("text/html; charset=utf-8")
+      .send(renderOrderStreamPage());
+  });
+
   app.register(async (api) => {
     await api.register(swagger, {
       openapi: {
@@ -179,7 +195,13 @@ export function buildApp({
 
     let session: AuthenticatedSession | undefined;
     const activeNiftyStreams = new Set<() => void>();
+    const activeOrderStreams = new Set<() => void>();
     let niftyContractsLoad: Promise<NiftyOptionContract[]> | undefined;
+
+    api.addHook("onClose", async () => {
+      for (const closeStream of activeNiftyStreams) closeStream();
+      for (const closeStream of activeOrderStreams) closeStream();
+    });
 
     const getNiftyContracts = (): Promise<NiftyOptionContract[]> => {
       niftyContractsLoad ??= optionChainCsvLoader()
@@ -231,6 +253,94 @@ export function buildApp({
         authenticated: Boolean(session),
         orderReady: Boolean(session),
       }),
+    );
+
+    api.get(
+      "/api/orders/stream",
+      {
+        schema: {
+          tags: ["Orders"],
+          summary: "Stream authenticated Kotak Neo order and position updates",
+          response: {
+            200: {
+              type: "string",
+              description: "Server-Sent Events containing connection, order, and position events.",
+            },
+            401: errorResponseSchema,
+            503: errorResponseSchema,
+          },
+        },
+      },
+      async (request, reply) => {
+        if (!session) {
+          return reply.code(401).send({ error: "Authenticate with Kotak Neo to stream activity" });
+        }
+        if (!client?.streamOrderPositionUpdates) {
+          return reply.code(503).send({ error: "Kotak Neo order and position streaming is unavailable" });
+        }
+        if (!session.baseUrl) {
+          return reply.code(503).send({
+            error: "Kotak Neo did not return an order-stream base URL; sign in again",
+          });
+        }
+
+        const authenticatedSession = session;
+        reply.hijack();
+        const response = reply.raw;
+        response.writeHead(200, {
+          "Cache-Control": "no-cache, no-transform",
+          Connection: "keep-alive",
+          "Content-Type": "text/event-stream; charset=utf-8",
+          "X-Accel-Buffering": "no",
+        });
+        response.write("retry: 3000\n\n");
+
+        let closed = false;
+        let stopStream: (() => void) | undefined;
+        const keepAlive = setInterval(() => {
+          if (!closed && !response.destroyed) response.write(": keep-alive\n\n");
+        }, 20_000);
+        const closeStream = () => {
+          if (closed) return;
+          closed = true;
+          clearInterval(keepAlive);
+          response.off("close", closeStream);
+          activeOrderStreams.delete(closeStream);
+          stopStream?.();
+          if (!response.destroyed && !response.writableEnded) response.end();
+        };
+        const writeEvent = (name: string, value: unknown) => {
+          if (!closed && !response.destroyed) {
+            response.write(`event: ${name}\ndata: ${JSON.stringify(value)}\n\n`);
+          }
+        };
+        activeOrderStreams.add(closeStream);
+        response.once("close", closeStream);
+
+        try {
+          stopStream = client.streamOrderPositionUpdates(
+            authenticatedSession,
+            (update) => writeEvent(update.type, update.data),
+            (state) => writeEvent("connection", { state }),
+            (error) => {
+              request.log.error(
+                { errorName: error.name, errorMessage: error.message },
+                "Kotak order and position stream reported an error",
+              );
+              writeEvent("stream-error", { error: error.message });
+            },
+          );
+          if (closed) stopStream();
+        } catch (error) {
+          request.log.error(
+            { errorName: error instanceof Error ? error.name : "UnknownError" },
+            "Kotak order and position stream could not start",
+          );
+          writeEvent("stream-error", { error: "Kotak order and position stream could not start" });
+          closeStream();
+        }
+        return reply;
+      },
     );
 
     api.get(
@@ -584,6 +694,7 @@ export function buildApp({
         }
 
         for (const closeStream of activeNiftyStreams) closeStream();
+        for (const closeStream of activeOrderStreams) closeStream();
         session = undefined;
         try {
           session = await client.login({
@@ -624,6 +735,7 @@ export function buildApp({
       },
       async () => {
         for (const closeStream of activeNiftyStreams) closeStream();
+        for (const closeStream of activeOrderStreams) closeStream();
         session = undefined;
         return { authenticated: false };
       },

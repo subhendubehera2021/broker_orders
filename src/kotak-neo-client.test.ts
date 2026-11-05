@@ -20,6 +20,78 @@ const prodConfig = {
 const testSession = { sid: "test-sid", tradeToken: "test-trade-token" };
 
 describe("KotakNeoClient", () => {
+  it("authenticates and forwards order and position stream messages", () => {
+    const sent: string[] = [];
+    let socketUrl = "";
+    let socket:
+      | {
+          readyState: number;
+          onopen: ((event: Event) => void) | null;
+          onmessage: ((event: MessageEvent) => void) | null;
+          onerror: ((event: Event) => void) | null;
+          onclose: ((event: CloseEvent) => void) | null;
+          send(data: string): void;
+          close(): void;
+        }
+      | undefined;
+    const client = new KotakNeoClient(prodConfig, fetch, (url) => {
+      socketUrl = url;
+      socket = {
+        readyState: 0,
+        onopen: null,
+        onmessage: null,
+        onerror: null,
+        onclose: null,
+        send(data) { sent.push(data); },
+        close() { if (socket) socket.readyState = 3; },
+      };
+      return socket;
+    });
+    const updates: Array<{ type: string; data: Record<string, unknown> }> = [];
+    const states: string[] = [];
+    const errors: Error[] = [];
+    const stop = client.streamOrderPositionUpdates(
+      {
+        ...testSession,
+        baseUrl: "https://e21.kotaksecurities.com/api/",
+      },
+      (update) => updates.push(update),
+      (state) => states.push(state),
+      (error) => errors.push(error),
+    );
+
+    assert.ok(socket);
+    assert.equal(socketUrl, "wss://e21.kotaksecurities.com/realtime");
+    socket.onopen?.(new Event("open"));
+    assert.deepEqual(sent, [
+      "{type:cn,Authorization:test-trade-token,Sid:test-sid,src:WEB}",
+    ]);
+    socket.onmessage?.(
+      new MessageEvent("message", {
+        data: JSON.stringify({ ak: "ok", type: "cn", task: "cn", msg: "connected" }),
+      }),
+    );
+    socket.onmessage?.(
+      new MessageEvent("message", {
+        data: JSON.stringify({ type: "order", data: { nOrdNo: "123", ordSt: "open" } }),
+      }),
+    );
+    socket.onmessage?.(
+      new MessageEvent("message", {
+        data: JSON.stringify({ type: "position", data: { sym: "ITBEES" } }),
+      }),
+    );
+
+    assert.deepEqual(updates, [
+      { type: "order", data: { nOrdNo: "123", ordSt: "open" } },
+      { type: "position", data: { sym: "ITBEES" } },
+    ]);
+    assert.deepEqual(states, ["connecting", "connected"]);
+    assert.deepEqual(errors, []);
+    stop();
+    assert.equal(socket.readyState, 3);
+  });
+
   it("cancels a regular order with Kotak's url-encoded jData request", async () => {
     let capturedUrl: URL | undefined;
     let capturedInit: RequestInit | undefined;

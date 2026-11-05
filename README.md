@@ -53,7 +53,11 @@ stays server-side; only the current TOTP is submitted by the browser.
   optional live index streaming after Kotak Neo sign-in.
 - `GET /orders` — view the authenticated Kotak Neo order book, separated into
   all, open, and closed orders.
+- `GET /order-stream` — view live order lifecycle and position updates.
 - `GET /api/orders` — retrieve the authenticated Kotak Neo order-book response.
+- `GET /api/orders/stream` — authenticated Server-Sent Events relay for Kotak's
+  order and position WebSocket stream. The broker connection uses the
+  `/realtime` endpoint returned via the authenticated session base URL.
 - `POST /api/orders/{orderNumber}/cancel` — cancel an order only if it is still
   open in the current order book.
 - `POST /api/auth/login` — submit the current TOTP. The service uses the
