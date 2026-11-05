@@ -11,6 +11,7 @@ export interface KotakNeoConfig {
   marginPath: string;
   orderBookPath?: string;
   cancelOrderPath?: string;
+  positionsPath?: string;
   placeOrderPath?: string;
   orderSource?: string;
   quotesPath: string;
@@ -69,6 +70,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const marginPath = requiredValue(env.KOTAK_NEO_MARGIN_PATH, "KOTAK_NEO_MARGIN_PATH");
   const orderBookPath = env.KOTAK_NEO_ORDER_BOOK_PATH?.trim() || undefined;
   const cancelOrderPath = env.KOTAK_NEO_CANCEL_ORDER_PATH?.trim() || undefined;
+  const positionsPath = env.KOTAK_NEO_POSITIONS_PATH?.trim() || undefined;
   const placeOrderPath = env.KOTAK_NEO_PLACE_ORDER_PATH?.trim() || undefined;
   const orderSource = env.KOTAK_NEO_ORDER_SOURCE?.trim() || undefined;
   const quotesPath = requiredValue(env.KOTAK_NEO_QUOTES_PATH, "KOTAK_NEO_QUOTES_PATH");
@@ -78,6 +80,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   validateRelativePath(marginPath, "KOTAK_NEO_MARGIN_PATH");
   if (orderBookPath) validateRelativePath(orderBookPath, "KOTAK_NEO_ORDER_BOOK_PATH");
   if (cancelOrderPath) validateRelativePath(cancelOrderPath, "KOTAK_NEO_CANCEL_ORDER_PATH");
+  if (positionsPath) validateRelativePath(positionsPath, "KOTAK_NEO_POSITIONS_PATH");
   if (placeOrderPath) validateRelativePath(placeOrderPath, "KOTAK_NEO_PLACE_ORDER_PATH");
   if (!quotesPath.includes("{neo_symbols}") || !quotesPath.includes("{quote_type}")) {
     throw new Error("KOTAK_NEO_QUOTES_PATH must contain {neo_symbols} and {quote_type}");
@@ -103,6 +106,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       marginPath,
       ...(orderBookPath ? { orderBookPath } : {}),
       ...(cancelOrderPath ? { cancelOrderPath } : {}),
+      ...(positionsPath ? { positionsPath } : {}),
       ...(placeOrderPath ? { placeOrderPath } : {}),
       ...(orderSource ? { orderSource } : {}),
       quotesPath,

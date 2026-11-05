@@ -67,6 +67,7 @@ interface AuthClient {
   login(input: KotakLoginInput): Promise<AuthenticatedSession>;
   getScripMaster(): Promise<unknown>;
   getOrderBook?(session: AuthenticatedSession): Promise<unknown>;
+  getPositions?(session: AuthenticatedSession): Promise<unknown>;
   cancelOrder?(session: AuthenticatedSession, input: CancelOrderInput): Promise<unknown>;
   streamOrderPositionUpdates?(
     session: AuthenticatedSession,
@@ -186,6 +187,7 @@ export function buildApp({
           { name: "Scrip Master", description: "Kotak Neo instrument master files" },
           { name: "Margin", description: "Kotak Neo margin estimates" },
           { name: "Options", description: "NIFTY contracts, market data, and option orders" },
+          { name: "Orders", description: "Kotak Neo orders, positions, and activity streams" },
         ],
       },
     });
@@ -402,6 +404,66 @@ export function buildApp({
           );
           return reply.code(statusCode).send({
             error: error instanceof Error ? error.message : "Kotak Neo order book request failed",
+          });
+        }
+      },
+    );
+
+    api.get(
+      "/api/positions",
+      {
+        schema: {
+          tags: ["Orders"],
+          summary: "Get the authenticated Kotak Neo positions",
+          response: {
+            200: {
+              type: "object",
+              additionalProperties: true,
+              description: "Kotak Neo positions response.",
+            },
+            400: errorResponseSchema,
+            401: errorResponseSchema,
+            429: errorResponseSchema,
+            502: errorResponseSchema,
+            503: errorResponseSchema,
+            504: errorResponseSchema,
+          },
+        },
+      },
+      async (request, reply) => {
+        if (!session) {
+          return reply.code(401).send({ error: "Authenticate with Kotak Neo to view positions" });
+        }
+        if (!client?.getPositions || !config.kotakNeo.positionsPath) {
+          return reply.code(503).send({
+            error: "Set KOTAK_NEO_POSITIONS_PATH to enable current positions",
+          });
+        }
+        try {
+          return await client.getPositions(session);
+        } catch (error) {
+          const statusCode = brokerRequestStatus(error);
+          request.log.error(
+            {
+              statusCode,
+              errorName: error instanceof Error ? error.name : "UnknownError",
+              ...(error instanceof KotakNeoError
+                ? {
+                    ...(error.upstreamHttpStatusCode !== undefined
+                      ? { upstreamStatusCode: error.upstreamHttpStatusCode }
+                      : {}),
+                    ...(error.upstreamCode ? { upstreamCode: error.upstreamCode } : {}),
+                    ...(error.upstreamMessage
+                      ? { upstreamErrorMessage: error.upstreamMessage }
+                      : {}),
+                    ...(error.upstreamStat ? { upstreamStat: error.upstreamStat } : {}),
+                  }
+                : {}),
+            },
+            "Kotak Neo positions request failed",
+          );
+          return reply.code(statusCode).send({
+            error: error instanceof Error ? error.message : "Kotak Neo positions request failed",
           });
         }
       },

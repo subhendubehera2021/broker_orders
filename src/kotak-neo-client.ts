@@ -606,6 +606,50 @@ export class KotakNeoClient {
     return response;
   }
 
+  async getPositions(session: AuthenticatedSession): Promise<unknown> {
+    if (!this.config.positionsPath) {
+      throw new KotakNeoError(
+        "Kotak Neo positions API is not configured; set KOTAK_NEO_POSITIONS_PATH",
+        503,
+      );
+    }
+    const response = await this.requestJson(
+      this.config.positionsPath,
+      {
+        method: "GET",
+        headers: {
+          Auth: session.tradeToken,
+          Sid: session.sid,
+          "neo-fin-key": this.config.financialKey,
+          Accept: "application/json",
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+      },
+      session.baseUrl,
+    );
+    if (
+      isRecord(response) &&
+      typeof response.stat === "string" &&
+      response.stat.toLowerCase() !== "ok"
+    ) {
+      const code =
+        typeof response.stCode === "string" || typeof response.stCode === "number"
+          ? String(response.stCode)
+          : undefined;
+      const message = findErrorMessage(response);
+      const sanitizedMessage = message ? sanitizeUpstreamMessage(message) : undefined;
+      throw new KotakNeoError(
+        `Kotak Neo rejected the positions request${code ? ` (stCode=${code})` : ""}${sanitizedMessage ? `: ${sanitizedMessage}` : ""}`,
+        code === "100008" ? 401 : 502,
+        code,
+        200,
+        sanitizedMessage,
+        response.stat,
+      );
+    }
+    return response;
+  }
+
   async cancelOrder(
     session: AuthenticatedSession,
     input: CancelOrderInput,

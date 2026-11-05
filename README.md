@@ -55,6 +55,8 @@ stays server-side; only the current TOTP is submitted by the browser.
   all, open, and closed orders.
 - `GET /order-stream` — view live order lifecycle and position updates.
 - `GET /api/orders` — retrieve the authenticated Kotak Neo order-book response.
+- `GET /api/positions` — retrieve current positions from Kotak Neo; the Live
+  activity page loads this snapshot before applying streaming updates.
 - `GET /api/orders/stream` — authenticated Server-Sent Events relay for Kotak's
   order and position WebSocket stream. The broker connection uses the
   `/realtime` endpoint returned via the authenticated session base URL.
@@ -199,6 +201,8 @@ application:
 - `KOTAK_NEO_ORDER_BOOK_PATH` — the order-book endpoint used by the Orders page.
 - `KOTAK_NEO_CANCEL_ORDER_PATH` — the cancel-order endpoint used for open orders;
   set it to `quick/order/cancel` to enable cancellation.
+- `KOTAK_NEO_POSITIONS_PATH` — the current-positions endpoint used by Live
+  activity; set it to `quick/user/positions`.
 - `KOTAK_NEO_PLACE_ORDER_PATH` and `KOTAK_NEO_ORDER_SOURCE` — the live order
   endpoint and source identifier. These are optional for application startup
   but must both be set to enable live order placement.

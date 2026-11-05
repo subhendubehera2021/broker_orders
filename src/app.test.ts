@@ -175,6 +175,16 @@ describe("authentication routes", () => {
     assert.match(response.body, /<h1>Live activity<\/h1>/);
     assert.match(response.body, /Order updates/);
     assert.match(response.body, /Position updates/);
+    assert.match(response.body, /fetch\("\/api\/positions"/);
+    assert.match(response.body, /"qty", "flBuyQty", "flSellQty"/);
+    assert.match(response.body, /<th>Trading symbol<\/th><th>Product<\/th>/);
+    assert.match(response.body, /<th>P&amp;L \(Sell - Buy\)<\/th>/);
+    assert.doesNotMatch(response.body, /<th>Account<\/th>|<th>Exchange<\/th>/);
+    assert.match(response.body, /"trdSym", "prod", "qty".*"pnl"/);
+    assert.match(response.body, /Number\(position\.buyAmt\)/);
+    assert.match(response.body, /sellAmount - buyAmount/);
+    assert.match(response.body, /positionUpdates = extractPositions\(positionsPayload\)/);
+    assert.doesNotMatch(response.body, /new Map\(\).*position/);
     assert.match(response.body, /new EventSource\("\/api\/orders\/stream"\)/);
     assert.match(response.body, /seenOrderEvents/);
   });
@@ -218,6 +228,34 @@ describe("authentication routes", () => {
     assert.equal(notConfigured.statusCode, 503);
     assert.match(notConfigured.json().error, /KOTAK_NEO_ORDER_BOOK_PATH/);
     assert.equal(orderBookCalls, 0);
+  });
+
+  it("returns current positions for an authenticated configured session", async () => {
+    const positions = { stat: "Ok", data: [{ trdSym: "ITC-EQ", qty: "15" }] };
+    const app = buildApp({
+      config: {
+        ...config,
+        kotakNeo: { ...config.kotakNeo, positionsPath: "quick/user/positions" },
+      },
+      authClient: {
+        async login() { return authenticatedSession; },
+        async getScripMaster() { return { data: { filesPaths: [] } }; },
+        async getPositions(session) {
+          assert.deepEqual(session, authenticatedSession);
+          return positions;
+        },
+      },
+    });
+    apps.push(app);
+
+    const unauthenticated = await app.inject("/api/positions");
+    assert.equal(unauthenticated.statusCode, 401);
+
+    await app.inject({ method: "POST", url: "/api/auth/login", payload: { totp: "123456" } });
+    const response = await app.inject("/api/positions");
+
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(response.json(), positions);
   });
 
   it("returns Kotak order book data for an authenticated configured session", async () => {
@@ -343,6 +381,7 @@ describe("authentication routes", () => {
       "/api/orders",
       "/api/orders/stream",
       "/api/orders/{orderNumber}/cancel",
+      "/api/positions",
       "/api/scrip-master",
       "/api/scrip-master/nse-fo",
       "/health",

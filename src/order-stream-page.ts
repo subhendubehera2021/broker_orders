@@ -61,8 +61,9 @@ export function renderOrderStreamPage(): string {
         </section>
         <section class="panel" aria-label="Live position updates">
           <h2>Position updates</h2>
+          <p class="status" id="position-status" role="status" aria-live="polite">Loading current positions…</p>
           <div class="table-wrap">
-            <table><thead><tr><th>Account</th><th>Symbol</th><th>Exchange</th><th>Product</th><th>Buy qty</th><th>Sell qty</th><th>Buy amount</th><th>Sell amount</th><th>Updated</th></tr></thead>
+            <table><thead><tr><th>Trading symbol</th><th>Product</th><th>Net qty</th><th>Buy qty</th><th>Sell qty</th><th>Buy amount</th><th>Sell amount</th><th>P&amp;L (Sell - Buy)</th><th>Updated</th></tr></thead>
               <tbody id="position-updates"><tr><td class="empty" colspan="9">Waiting for position updates…</td></tr></tbody>
             </table>
           </div>
@@ -73,14 +74,38 @@ export function renderOrderStreamPage(): string {
       const statusLabel = document.querySelector("#stream-status");
       const orderBody = document.querySelector("#order-updates");
       const positionBody = document.querySelector("#position-updates");
+      const positionStatus = document.querySelector("#position-status");
       const orderUpdates = new Map();
-      const positionUpdates = new Map();
+      let positionUpdates = [];
       const seenOrderEvents = new Set();
       let eventSource;
 
       function value(record, key, fallback = "—") {
+        if (key === "pnl") return positionPnl(record);
         const item = record[key];
         return item === undefined || item === null || item === "" ? fallback : String(item);
+      }
+
+      function positionPnl(position) {
+        if (
+          position.buyAmt === undefined ||
+          position.buyAmt === null ||
+          position.buyAmt === "" ||
+          position.sellAmt === undefined ||
+          position.sellAmt === null ||
+          position.sellAmt === ""
+        ) {
+          return "—";
+        }
+        const buyAmount = Number(position.buyAmt);
+        const sellAmount = Number(position.sellAmt);
+        if (!Number.isFinite(buyAmount) || !Number.isFinite(sellAmount)) return "—";
+        return new Intl.NumberFormat("en-IN", {
+          style: "currency",
+          currency: "INR",
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        }).format(sellAmount - buyAmount);
       }
 
       function drawRows(body, records, fields, emptyMessage) {
@@ -130,21 +155,53 @@ export function renderOrderStreamPage(): string {
       }
 
       function handlePosition(data) {
-        const key = [
+        const key = positionKey(data);
+        const index = key ? positionUpdates.findIndex((position) => positionKey(position) === key) : -1;
+        if (index >= 0) {
+          positionUpdates[index] = { ...positionUpdates[index], ...data };
+        } else {
+          positionUpdates.push(data);
+        }
+        renderPositions();
+        positionStatus.textContent =
+          positionUpdates.length + " position" + (positionUpdates.length === 1 ? "" : "s") +
+          " · live update received";
+        positionStatus.dataset.state = "connected";
+      }
+
+      function positionKey(data) {
+        const symbol = value(data, "trdSym", value(data, "sym", ""));
+        const identity = [
           value(data, "actId", ""),
-          value(data, "sym", ""),
+          symbol,
           value(data, "exSeg", ""),
           value(data, "prod", ""),
-        ].join("|");
-        if (key === "|||") return;
-        const previous = positionUpdates.get(key) || {};
-        positionUpdates.set(key, { ...previous, ...data });
+        ];
+        return identity.some(Boolean) ? identity.join("|") : "";
+      }
+
+      function renderPositions() {
         drawRows(
           positionBody,
-          [...positionUpdates.values()],
-          ["actId", "sym", "exSeg", "prod", "flBuyQty", "flSellQty", "buyAmt", "sellAmt", "hsUpTm"],
+          positionUpdates,
+          ["trdSym", "prod", "qty", "flBuyQty", "flSellQty", "buyAmt", "sellAmt", "pnl", "hsUpTm"],
           "Waiting for position updates…",
         );
+      }
+
+      function extractPositions(payload) {
+        if (Array.isArray(payload)) {
+          return payload.filter((item) => item && typeof item === "object" && !Array.isArray(item));
+        }
+        if (!payload || typeof payload !== "object") return [];
+        if (["sym", "trdSym", "actId"].some((key) => payload[key] !== undefined)) {
+          return [payload];
+        }
+        for (const key of ["data", "positions", "positionBook", "positionbook"]) {
+          const records = extractPositions(payload[key]);
+          if (records.length) return records;
+        }
+        return [];
       }
 
       async function connect() {
@@ -156,6 +213,25 @@ export function renderOrderStreamPage(): string {
             statusLabel.textContent = "Sign in to Kotak Neo before opening the live activity stream.";
             statusLabel.dataset.state = "error";
             return;
+          }
+          try {
+            const positionsResponse = await fetch("/api/positions", {
+              headers: { Accept: "application/json" },
+            });
+            const positionsPayload = await positionsResponse.json();
+            if (!positionsResponse.ok) {
+              throw new Error(positionsPayload.error || "Could not load current positions.");
+            }
+            positionUpdates = extractPositions(positionsPayload);
+            renderPositions();
+            positionStatus.textContent =
+              positionUpdates.length + " current position" + (positionUpdates.length === 1 ? "" : "s") +
+              " loaded · waiting for live updates";
+            positionStatus.dataset.state = "";
+          } catch (error) {
+            positionStatus.textContent =
+              error instanceof Error ? error.message : "Could not load current positions.";
+            positionStatus.dataset.state = "error";
           }
           eventSource = new EventSource("/api/orders/stream");
           eventSource.addEventListener("connection", (event) => {

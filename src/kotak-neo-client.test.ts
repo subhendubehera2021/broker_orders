@@ -12,6 +12,7 @@ const prodConfig = {
   marginPath: "quick/user/check-margin",
   orderBookPath: "quick/user/orders",
   cancelOrderPath: "quick/order/cancel",
+  positionsPath: "quick/user/positions",
   placeOrderPath: "quick/order/rule/ms/place",
   orderSource: "NEOTRADEAPI",
   quotesPath: "script-details/1.0/quotes/neosymbol/{neo_symbols}/{quote_type}",
@@ -20,6 +21,49 @@ const prodConfig = {
 const testSession = { sid: "test-sid", tradeToken: "test-trade-token" };
 
 describe("KotakNeoClient", () => {
+  it("gets current positions with authenticated Kotak headers", async () => {
+    let capturedUrl: URL | undefined;
+    let capturedInit: RequestInit | undefined;
+    const positions = { stat: "Ok", data: [{ trdSym: "ITC-EQ", qty: "15" }] };
+    const client = new KotakNeoClient(prodConfig, async (input, init) => {
+      capturedUrl = new URL(input.toString());
+      capturedInit = init;
+      return Response.json(positions);
+    });
+
+    const response = await client.getPositions({
+      ...testSession,
+      baseUrl: "https://neo-gw.kotaksecurities.com/api/",
+    });
+
+    assert.equal(capturedUrl?.href, "https://neo-gw.kotaksecurities.com/api/quick/user/positions");
+    assert.equal(capturedInit?.method, "GET");
+    const headers = new Headers(capturedInit?.headers);
+    assert.equal(headers.get("auth"), "test-trade-token");
+    assert.equal(headers.get("sid"), "test-sid");
+    assert.equal(headers.get("neo-fin-key"), "test-prod-financial-key");
+    assert.equal(headers.get("accept"), "application/json");
+    assert.equal(headers.get("content-type"), "application/x-www-form-urlencoded");
+    assert.deepEqual(response, positions);
+  });
+
+  it("preserves Kotak positions errors", async () => {
+    const client = new KotakNeoClient(prodConfig, async () =>
+      Response.json({ stat: "Not_Ok", emsg: "Invalid session", stCode: 1003 }),
+    );
+
+    await assert.rejects(
+      client.getPositions(testSession),
+      (error: unknown) => {
+        assert.ok(error instanceof KotakNeoError);
+        assert.equal(error.statusCode, 502);
+        assert.equal(error.upstreamCode, "1003");
+        assert.equal(error.upstreamMessage, "Invalid session");
+        return true;
+      },
+    );
+  });
+
   it("authenticates and forwards order and position stream messages", () => {
     const sent: string[] = [];
     let socketUrl = "";
