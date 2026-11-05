@@ -20,6 +20,16 @@ npm run dev
 
 The checked-in environment template is configured for Kotak Neo production.
 
+To run the compiled service under PM2, install PM2 globally and use:
+
+```sh
+npm install --global pm2
+npm run start:pm2
+```
+
+Manage the process with `pm2 status`, `pm2 logs kotak-neo-api`, and
+`pm2 restart kotak-neo-api`.
+
 ## API documentation
 
 Start the service and open [http://127.0.0.1:3000/docs](http://127.0.0.1:3000/docs)
