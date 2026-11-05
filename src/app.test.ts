@@ -8,6 +8,7 @@ import { KotakNeoError, type AuthenticatedSession } from "./kotak-neo-client.js"
 const config: AppConfig = {
   host: "127.0.0.1",
   port: 3000,
+  webAccessPasscodePrefix: "SKB",
   kotakNeo: {
     apiBaseUrl: "https://kotak.example/",
     consumerKey: "test-consumer-key",
@@ -39,12 +40,113 @@ afterEach(async () => {
   await Promise.all(apps.splice(0).map((app) => app.close()));
 });
 
+async function frontendAccessCookie(
+  app: FastifyInstance,
+  next = "/",
+): Promise<string> {
+  const minute = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata",
+    minute: "2-digit",
+  }).format(new Date());
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/access/unlock",
+    payload: { passcode: `SKB${minute}`, next },
+  });
+  assert.equal(response.statusCode, 200, response.body);
+  const setCookie = response.headers["set-cookie"];
+  assert.ok(setCookie);
+  const cookie = Array.isArray(setCookie) ? setCookie[0] : setCookie;
+  return cookie?.split(";")[0] ?? "";
+}
+
 describe("authentication routes", () => {
+  it("serves the passcode form and redirects locked frontend pages to it", async () => {
+    const app = buildApp({ config });
+    apps.push(app);
+
+    const page = await app.inject("/access");
+    const locked = await app.inject("/option-chain?expiry=05NOV2026");
+
+    assert.equal(page.statusCode, 200);
+    assert.match(page.body, /Enter access passcode/);
+    assert.match(page.body, /\/api\/access\/unlock/);
+    assert.equal(locked.statusCode, 303);
+    assert.equal(
+      locked.headers.location,
+      `/access?next=${encodeURIComponent("/option-chain?expiry=05NOV2026")}`,
+    );
+    assert.equal((await app.inject("/health")).statusCode, 200);
+  });
+
+  it("unlocks frontend pages using the current India minute until midnight", async () => {
+    const app = buildApp({ config });
+    apps.push(app);
+
+    const cookie = await frontendAccessCookie(app, "/orders");
+    const response = await app.inject({ url: "/orders", headers: { cookie } });
+    const setCookie = await app.inject({
+      method: "POST",
+      url: "/api/access/unlock",
+      payload: {
+        passcode: `SKB${new Intl.DateTimeFormat("en-GB", {
+          timeZone: "Asia/Kolkata",
+          minute: "2-digit",
+        }).format(new Date())}`,
+        next: "//example.com",
+      },
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.match(response.body, /<h1>Orders<\/h1>/);
+    assert.match(setCookie.json().redirectTo, /^\//);
+    const post = await app.inject({
+      method: "POST",
+      url: "/api/access/unlock",
+      payload: {
+        passcode: `SKB${new Intl.DateTimeFormat("en-GB", {
+          timeZone: "Asia/Kolkata",
+          minute: "2-digit",
+        }).format(new Date())}`,
+      },
+    });
+    assert.match(String(post.headers["set-cookie"]), /Expires=/);
+    assert.match(String(post.headers["set-cookie"]), /HttpOnly/);
+    assert.match(String(post.headers["set-cookie"]), /SameSite=Strict/);
+  });
+
+  it("rejects incorrect frontend passcodes without setting an access cookie", async () => {
+    const app = buildApp({ config });
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/access/unlock",
+      payload: {
+        passcode: `SKB${String(
+          (Number(
+            new Intl.DateTimeFormat("en-GB", {
+              timeZone: "Asia/Kolkata",
+              minute: "2-digit",
+            }).format(new Date()),
+          ) +
+            1) %
+            60,
+        ).padStart(2, "0")}`,
+      },
+    });
+
+    assert.equal(response.statusCode, 400);
+    assert.match(response.json().error, /Incorrect or expired passcode/);
+    assert.equal(response.headers["set-cookie"], undefined);
+  });
+
   it("serves the login page without caching it", async () => {
     const app = buildApp({ config });
     apps.push(app);
 
-    const response = await app.inject("/");
+    const cookie = await frontendAccessCookie(app);
+    const response = await app.inject({ url: "/", headers: { cookie } });
 
     assert.equal(response.statusCode, 200);
     assert.match(String(response.headers["content-type"] ?? ""), /text\/html/);
@@ -69,7 +171,8 @@ describe("authentication routes", () => {
     const app = buildApp({ config });
     apps.push(app);
 
-    const response = await app.inject("/margin");
+    const cookie = await frontendAccessCookie(app);
+    const response = await app.inject({ url: "/margin", headers: { cookie } });
 
     assert.equal(response.statusCode, 200);
     assert.match(String(response.headers["content-type"] ?? ""), /text\/html/);
@@ -84,7 +187,8 @@ describe("authentication routes", () => {
     const app = buildApp({ config });
     apps.push(app);
 
-    const response = await app.inject("/scrip-master");
+    const cookie = await frontendAccessCookie(app);
+    const response = await app.inject({ url: "/scrip-master", headers: { cookie } });
 
     assert.equal(response.statusCode, 200);
     assert.match(String(response.headers["content-type"] ?? ""), /text\/html/);
@@ -98,7 +202,8 @@ describe("authentication routes", () => {
     const app = buildApp({ config });
     apps.push(app);
 
-    const response = await app.inject("/option-chain");
+    const cookie = await frontendAccessCookie(app);
+    const response = await app.inject({ url: "/option-chain", headers: { cookie } });
 
     assert.equal(response.statusCode, 200);
     assert.match(String(response.headers["content-type"] ?? ""), /text\/html/);
@@ -153,7 +258,8 @@ describe("authentication routes", () => {
     const app = buildApp({ config });
     apps.push(app);
 
-    const response = await app.inject("/orders");
+    const cookie = await frontendAccessCookie(app);
+    const response = await app.inject({ url: "/orders", headers: { cookie } });
 
     assert.equal(response.statusCode, 200);
     assert.match(String(response.headers["content-type"] ?? ""), /text\/html/);
@@ -168,7 +274,8 @@ describe("authentication routes", () => {
     const app = buildApp({ config });
     apps.push(app);
 
-    const response = await app.inject("/order-stream");
+    const cookie = await frontendAccessCookie(app);
+    const response = await app.inject({ url: "/order-stream", headers: { cookie } });
 
     assert.equal(response.statusCode, 200);
     assert.equal(response.headers["cache-control"], "no-store");
@@ -361,15 +468,19 @@ describe("authentication routes", () => {
     const app = buildApp({ config });
     apps.push(app);
 
+    const cookie = await frontendAccessCookie(app, "/docs/");
     const uiResponse = await app.inject("/docs/");
-    assert.equal(uiResponse.statusCode, 200);
-    assert.match(String(uiResponse.headers["content-type"] ?? ""), /text\/html/);
+    const authorizedUiResponse = await app.inject({ url: "/docs/", headers: { cookie } });
+    assert.equal(uiResponse.statusCode, 303);
+    assert.equal(authorizedUiResponse.statusCode, 200);
+    assert.match(String(authorizedUiResponse.headers["content-type"] ?? ""), /text\/html/);
 
-    const specResponse = await app.inject("/docs/json");
+    const specResponse = await app.inject({ url: "/docs/json", headers: { cookie } });
     assert.equal(specResponse.statusCode, 200);
     const spec = specResponse.json();
     assert.equal(spec.openapi, "3.0.3");
     assert.deepEqual(Object.keys(spec.paths).sort(), [
+      "/api/access/unlock",
       "/api/auth/login",
       "/api/auth/logout",
       "/api/auth/session",

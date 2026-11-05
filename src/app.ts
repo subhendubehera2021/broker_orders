@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import Fastify, { LogController, type FastifyInstance } from "fastify";
 import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
@@ -17,6 +18,7 @@ import {
   type PlaceNiftyOptionOrderInput,
 } from "./kotak-neo-client.js";
 import { renderLoginPage } from "./login-page.js";
+import { renderAccessPage } from "./access-page.js";
 import { renderMarginPage } from "./margin-page.js";
 import { renderOrdersPage } from "./orders-page.js";
 import { renderOrderStreamPage } from "./order-stream-page.js";
@@ -32,6 +34,11 @@ import { renderOptionChainPage } from "./option-chain-page.js";
 
 interface LoginBody {
   totp: string;
+}
+
+interface AccessUnlockBody {
+  passcode: string;
+  next?: string;
 }
 
 interface KotakLoginInput extends LoginBody {
@@ -130,6 +137,28 @@ export function buildApp({
           : undefined)
       : undefined);
 
+  const frontendSessions = new Map<string, number>();
+  let failedUnlocks = 0;
+  let unlockWindowStartedAt = 0;
+  let unlockBlockedUntil = 0;
+
+  app.addHook("preHandler", async (request, reply) => {
+    const path = request.url.split("?")[0] ?? "/";
+    if (path === "/access" || path.startsWith("/api/") || path === "/health") return;
+    const sessionId = cookieValue(request.headers.cookie, "neo_web_access");
+    const expiresAt = sessionId ? frontendSessions.get(sessionId) : undefined;
+    if (expiresAt && expiresAt > Date.now()) return;
+    if (sessionId) frontendSessions.delete(sessionId);
+    return reply.redirect(`/access?next=${encodeURIComponent(request.url)}`, 303);
+  });
+
+  app.get("/access", async (_request, reply) => {
+    return reply
+      .header("Cache-Control", "no-store")
+      .type("text/html; charset=utf-8")
+      .send(renderAccessPage());
+  });
+
   app.get("/", async (_request, reply) => {
     return reply
       .header("Cache-Control", "no-store")
@@ -214,6 +243,87 @@ export function buildApp({
         });
       return niftyContractsLoad;
     };
+
+    api.post<{ Body: AccessUnlockBody }>(
+      "/api/access/unlock",
+      {
+        schema: {
+          tags: ["Authentication"],
+          summary: "Unlock frontend access until India midnight",
+          body: {
+            type: "object",
+            required: ["passcode"],
+            additionalProperties: false,
+            properties: {
+              passcode: { type: "string", minLength: 1, maxLength: 32 },
+              next: { type: "string", maxLength: 2048 },
+            },
+          },
+          response: {
+            200: {
+              type: "object",
+              required: ["redirectTo"],
+              properties: { redirectTo: { type: "string" } },
+            },
+            400: errorResponseSchema,
+            429: errorResponseSchema,
+          },
+        },
+      },
+      async (request, reply) => {
+        const now = new Date();
+        const nowMs = now.getTime();
+        if (unlockBlockedUntil > nowMs) {
+          return reply.code(429).send({
+            error: "Too many incorrect passcodes. Wait one minute and try again.",
+          });
+        }
+        if (nowMs - unlockWindowStartedAt >= 60_000 || unlockWindowStartedAt === 0) {
+          unlockWindowStartedAt = nowMs;
+          failedUnlocks = 0;
+        }
+        const expected = `${config.webAccessPasscodePrefix}${indiaMinute(now)}`;
+        const provided = request.body.passcode;
+        const expectedBuffer = Buffer.from(expected);
+        const providedBuffer = Buffer.from(provided);
+        const isValid =
+          expectedBuffer.length === providedBuffer.length &&
+          timingSafeEqual(expectedBuffer, providedBuffer);
+        if (!isValid) {
+          failedUnlocks += 1;
+          if (failedUnlocks >= 5) {
+            unlockBlockedUntil = nowMs + 60_000;
+            failedUnlocks = 0;
+            unlockWindowStartedAt = 0;
+          }
+          return reply.code(400).send({
+            error: "Incorrect or expired passcode. Enter the current India-minute passcode.",
+          });
+        }
+
+        failedUnlocks = 0;
+        unlockWindowStartedAt = 0;
+        unlockBlockedUntil = 0;
+        const sessionId = randomBytes(32).toString("hex");
+        const expiresAt = indiaMidnightExpiry(now).getTime();
+        for (const [id, expiry] of frontendSessions) {
+          if (expiry <= nowMs) frontendSessions.delete(id);
+        }
+        frontendSessions.set(sessionId, expiresAt);
+        const expires = new Date(expiresAt);
+        const maxAge = Math.max(0, Math.floor((expiresAt - nowMs) / 1000));
+        const forwardedProtocol = request.headers["x-forwarded-proto"];
+        const secure =
+          request.protocol === "https" ||
+          (typeof forwardedProtocol === "string" &&
+            forwardedProtocol.split(",")[0]?.trim().toLowerCase() === "https");
+        reply.header(
+          "Set-Cookie",
+          `neo_web_access=${sessionId}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAge}; Expires=${expires.toUTCString()}${secure ? "; Secure" : ""}`,
+        );
+        return { redirectTo: safeFrontendPath(request.body.next) };
+      },
+    );
 
     api.get(
       "/health",
@@ -1347,6 +1457,48 @@ async function readLocalNseFoMaster(): Promise<string> {
     return await readFile(new URL("../src/nse_fo.csv", import.meta.url), "utf8");
   } catch {
     throw new KotakNeoError("Local NSE F&O Scrip Master file could not be read", 503);
+  }
+}
+
+function indiaMinute(date: Date): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function indiaMidnightExpiry(date: Date): Date {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const year = Number(parts.find(({ type }) => type === "year")?.value);
+  const month = Number(parts.find(({ type }) => type === "month")?.value);
+  const day = Number(parts.find(({ type }) => type === "day")?.value);
+  return new Date(Date.UTC(year, month - 1, day + 1) - 330 * 60_000);
+}
+
+function cookieValue(cookieHeader: string | undefined, name: string): string | undefined {
+  for (const cookie of cookieHeader?.split(";") ?? []) {
+    const separator = cookie.indexOf("=");
+    if (separator < 0 || cookie.slice(0, separator).trim() !== name) continue;
+    return cookie.slice(separator + 1).trim();
+  }
+  return undefined;
+}
+
+function safeFrontendPath(value: string | undefined): string {
+  if (!value || !value.startsWith("/") || value.startsWith("//") || value.includes("\\")) {
+    return "/";
+  }
+  try {
+    const url = new URL(value, "http://frontend.local");
+    if (url.origin !== "http://frontend.local" || url.pathname.startsWith("/api/")) return "/";
+    return `${url.pathname}${url.search}${url.hash}`;
+  } catch {
+    return "/";
   }
 }
 

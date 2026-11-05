@@ -20,6 +20,12 @@ npm run dev
 
 The checked-in environment template is configured for Kotak Neo production.
 
+The web frontend is protected by a daily passcode. Set
+`WEB_ACCESS_PASSCODE_PREFIX=SKB`; enter that prefix followed by the current
+India-time minute as two digits (for example, `SKB07`). A successful unlock
+stays active in that browser until midnight India time. API routes remain
+directly accessible and are not protected by this frontend gate.
+
 To run the compiled service under PM2, install PM2 globally and use:
 
 ```sh
