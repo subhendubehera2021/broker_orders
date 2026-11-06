@@ -5,7 +5,7 @@ import { loadConfig } from "./config.js";
 const validEnvironment: NodeJS.ProcessEnv = {
   HOST: "127.0.0.1",
   PORT: "3000",
-  WEB_ACCESS_PASSCODE_PREFIX: "SKB",
+  WEB_ACCESS_PASSCODE: "SKB9178",
   KOTAK_NEO_API_BASE_URL: "https://broker.example/",
   KOTAK_NEO_CONSUMER_KEY: "consumer-key",
   KOTAK_NEO_MOBILE_NUMBER: "+910000000000",
@@ -32,7 +32,7 @@ describe("loadConfig", () => {
     assert.deepEqual(loadConfig(validEnvironment), {
       host: "127.0.0.1",
       port: 3000,
-      webAccessPasscodePrefix: "SKB",
+      webAccessPasscode: "SKB9178",
       kotakNeo: {
         apiBaseUrl: "https://broker.example/",
         consumerKey: "consumer-key",
@@ -67,16 +67,16 @@ describe("loadConfig", () => {
     );
   });
 
-  it("requires a valid frontend passcode prefix", () => {
-    const { WEB_ACCESS_PASSCODE_PREFIX: _prefix, ...environmentWithoutPrefix } = validEnvironment;
+  it("requires a valid frontend passcode", () => {
+    const { WEB_ACCESS_PASSCODE: _passcode, ...environmentWithoutPasscode } = validEnvironment;
 
     assert.throws(
-      () => loadConfig(environmentWithoutPrefix),
-      /WEB_ACCESS_PASSCODE_PREFIX must be configured/,
+      () => loadConfig(environmentWithoutPasscode),
+      /WEB_ACCESS_PASSCODE must be configured/,
     );
     assert.throws(
-      () => loadConfig({ ...validEnvironment, WEB_ACCESS_PASSCODE_PREFIX: "bad-prefix" }),
-      /WEB_ACCESS_PASSCODE_PREFIX must be 1-16 uppercase letters or digits/,
+      () => loadConfig({ ...validEnvironment, WEB_ACCESS_PASSCODE: "bad-passcode" }),
+      /WEB_ACCESS_PASSCODE must be 1-32 uppercase letters or digits/,
     );
   });
 

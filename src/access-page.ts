@@ -25,7 +25,7 @@ export function renderAccessPage(): string {
   <body>
     <main>
       <h1>Enter access passcode</h1>
-      <p>Access remains unlocked in this browser until midnight India time. The passcode suffix is the current India-time minute, with two digits.</p>
+      <p>Access remains unlocked in this browser until midnight India time. Enter the configured passcode to continue.</p>
       <form id="access-form">
         <label for="passcode">Passcode
           <input id="passcode" name="passcode" type="password" autocomplete="one-time-code" required autofocus>

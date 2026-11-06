@@ -24,7 +24,7 @@ export interface KotakNeoConfig {
 export interface AppConfig {
   host: string;
   port: number;
-  webAccessPasscodePrefix: string;
+  webAccessPasscode: string;
   kotakNeo: KotakNeoConfig;
 }
 
@@ -41,12 +41,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   if (requestTimeoutMs < 1) {
     throw new Error("KOTAK_NEO_REQUEST_TIMEOUT_MS must be greater than zero");
   }
-  const webAccessPasscodePrefix = requiredValue(
-    env.WEB_ACCESS_PASSCODE_PREFIX,
-    "WEB_ACCESS_PASSCODE_PREFIX",
-  );
-  if (!/^[A-Z0-9]{1,16}$/.test(webAccessPasscodePrefix)) {
-    throw new Error("WEB_ACCESS_PASSCODE_PREFIX must be 1-16 uppercase letters or digits");
+  const webAccessPasscode = requiredValue(env.WEB_ACCESS_PASSCODE, "WEB_ACCESS_PASSCODE");
+  if (!/^[A-Z0-9]{1,32}$/.test(webAccessPasscode)) {
+    throw new Error("WEB_ACCESS_PASSCODE must be 1-32 uppercase letters or digits");
   }
 
   const apiBaseUrl = requiredValue(env.KOTAK_NEO_API_BASE_URL, "KOTAK_NEO_API_BASE_URL");
@@ -101,7 +98,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   return {
     host: requiredValue(env.HOST, "HOST"),
     port,
-    webAccessPasscodePrefix,
+    webAccessPasscode,
     kotakNeo: {
       apiBaseUrl,
       consumerKey: env.KOTAK_NEO_CONSUMER_KEY || undefined,

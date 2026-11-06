@@ -282,7 +282,7 @@ export function buildApp({
           unlockWindowStartedAt = nowMs;
           failedUnlocks = 0;
         }
-        const expected = `${config.webAccessPasscodePrefix}${indiaMinute(now)}`;
+        const expected = config.webAccessPasscode;
         const provided = request.body.passcode;
         const expectedBuffer = Buffer.from(expected);
         const providedBuffer = Buffer.from(provided);
@@ -297,7 +297,7 @@ export function buildApp({
             unlockWindowStartedAt = 0;
           }
           return reply.code(400).send({
-            error: "Incorrect or expired passcode. Enter the current India-minute passcode.",
+            error: "Incorrect passcode. Try again.",
           });
         }
 
@@ -1458,13 +1458,6 @@ async function readLocalNseFoMaster(): Promise<string> {
   } catch {
     throw new KotakNeoError("Local NSE F&O Scrip Master file could not be read", 503);
   }
-}
-
-function indiaMinute(date: Date): string {
-  return new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Asia/Kolkata",
-    minute: "2-digit",
-  }).format(date);
 }
 
 function indiaMidnightExpiry(date: Date): Date {

@@ -8,7 +8,7 @@ import { KotakNeoError, type AuthenticatedSession } from "./kotak-neo-client.js"
 const config: AppConfig = {
   host: "127.0.0.1",
   port: 3000,
-  webAccessPasscodePrefix: "SKB",
+  webAccessPasscode: "SKB9178",
   kotakNeo: {
     apiBaseUrl: "https://kotak.example/",
     consumerKey: "test-consumer-key",
@@ -44,14 +44,10 @@ async function frontendAccessCookie(
   app: FastifyInstance,
   next = "/",
 ): Promise<string> {
-  const minute = new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Asia/Kolkata",
-    minute: "2-digit",
-  }).format(new Date());
   const response = await app.inject({
     method: "POST",
     url: "/api/access/unlock",
-    payload: { passcode: `SKB${minute}`, next },
+    payload: { passcode: "SKB9178", next },
   });
   assert.equal(response.statusCode, 200, response.body);
   const setCookie = response.headers["set-cookie"];
@@ -79,7 +75,7 @@ describe("authentication routes", () => {
     assert.equal((await app.inject("/health")).statusCode, 200);
   });
 
-  it("unlocks frontend pages using the current India minute until midnight", async () => {
+  it("unlocks frontend pages using the configured passcode until midnight", async () => {
     const app = buildApp({ config });
     apps.push(app);
 
@@ -89,10 +85,7 @@ describe("authentication routes", () => {
       method: "POST",
       url: "/api/access/unlock",
       payload: {
-        passcode: `SKB${new Intl.DateTimeFormat("en-GB", {
-          timeZone: "Asia/Kolkata",
-          minute: "2-digit",
-        }).format(new Date())}`,
+        passcode: "SKB9178",
         next: "//example.com",
       },
     });
@@ -104,10 +97,7 @@ describe("authentication routes", () => {
       method: "POST",
       url: "/api/access/unlock",
       payload: {
-        passcode: `SKB${new Intl.DateTimeFormat("en-GB", {
-          timeZone: "Asia/Kolkata",
-          minute: "2-digit",
-        }).format(new Date())}`,
+        passcode: "SKB9178",
       },
     });
     assert.match(String(post.headers["set-cookie"]), /Expires=/);
@@ -123,21 +113,12 @@ describe("authentication routes", () => {
       method: "POST",
       url: "/api/access/unlock",
       payload: {
-        passcode: `SKB${String(
-          (Number(
-            new Intl.DateTimeFormat("en-GB", {
-              timeZone: "Asia/Kolkata",
-              minute: "2-digit",
-            }).format(new Date()),
-          ) +
-            1) %
-            60,
-        ).padStart(2, "0")}`,
+        passcode: "SKB9179",
       },
     });
 
     assert.equal(response.statusCode, 400);
-    assert.match(response.json().error, /Incorrect or expired passcode/);
+    assert.match(response.json().error, /Incorrect passcode/);
     assert.equal(response.headers["set-cookie"], undefined);
   });
 
