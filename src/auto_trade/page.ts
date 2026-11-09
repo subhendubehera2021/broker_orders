@@ -24,7 +24,7 @@ export function renderAutoTradePage(): string {
       h2 { margin: 0; font-size: 17px; }
       .intro { margin: 8px 0 22px; color: var(--muted); font-size: 12px; }
       .panel { margin-top: 16px; padding: 20px; border: 1px solid #26313d; border-radius: 14px; background: linear-gradient(145deg, #131a22, #10161d 80%); box-shadow: 0 18px 48px rgb(0 0 0 / 18%); }
-      .controls { display: grid; grid-template-columns: minmax(210px, 1.5fr) repeat(3, minmax(130px, 1fr)) auto; align-items: end; gap: 12px; }
+      .controls { display: grid; grid-template-columns: minmax(210px, 1.5fr) repeat(4, minmax(115px, 1fr)) auto; align-items: end; gap: 12px; }
       label { display: grid; gap: 7px; color: #a9b6c4; font-size: 10px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
       input, select, button { width: 100%; height: 42px; padding: 0 12px; border: 1px solid #303d4b; border-radius: 7px; background: #0e141b; color: #e3eaf1; font: inherit; font-size: 12px; }
       button { background: #1a302a; border-color: #416b60; color: #9ce0cb; cursor: pointer; font-weight: 750; }
@@ -47,7 +47,7 @@ export function renderAutoTradePage(): string {
       .side-low { color: #9ce0cb; }
       .state { color: #aab6c3; }
       .empty { padding: 30px 12px; color: var(--muted); text-align: center; }
-      @media (max-width: 820px) { .controls { grid-template-columns: repeat(2, minmax(0, 1fr)); } .controls button { grid-column: 1 / -1; } }
+      @media (max-width: 980px) { .controls { grid-template-columns: repeat(2, minmax(0, 1fr)); } .controls button { grid-column: 1 / -1; } }
       @media (max-width: 520px) { .shell { padding: 18px 14px; } .panel { padding: 14px; } .controls { grid-template-columns: 1fr; } .controls button { grid-column: auto; } }
     </style>
   </head>
@@ -72,11 +72,21 @@ export function renderAutoTradePage(): string {
                 <option value="10min">10 minutes</option><option value="15min">15 minutes</option><option value="30min">30 minutes</option>
                 <option value="60min">60 minutes</option><option value="D">Daily</option><option value="W">Weekly</option>
               </select></label>
+              <label>Pivot lookback<select id="pivot-lookback" name="pivotLookback">
+                <option value="3">3 candles</option><option value="5" selected>5 candles</option>
+                <option value="10">10 candles</option><option value="14">14 candles</option>
+                <option value="20">20 candles</option>
+              </select></label>
+              <label>Side<select id="swing-side" name="side">
+                <option value="high" selected>Swing high</option>
+                <option value="low">Swing low</option>
+                <option value="both">Both</option>
+              </select></label>
               <label>From<input id="from-date" name="fromdate" type="date" required></label>
               <label>To<input id="to-date" name="todate" type="date" required></label>
               <button id="analyze-button" type="submit">Find swings</button>
             </div>
-            <p class="hint">Pivot lookback: 14 candles. Historical data is limited by the selected Kotak interval.</p>
+            <p class="hint">Pivot lookback controls how many candles on each side confirm a swing. Historical data is limited by the selected Kotak interval.</p>
           </form>
         </section>
         <section class="panel" aria-label="Liquidity swing results">
@@ -95,12 +105,15 @@ export function renderAutoTradePage(): string {
       const form = document.querySelector("#swing-form");
       const instrumentInput = document.querySelector("#instrument");
       const intervalInput = document.querySelector("#interval");
+      const pivotLookbackInput = document.querySelector("#pivot-lookback");
+      const swingSideInput = document.querySelector("#swing-side");
       const fromInput = document.querySelector("#from-date");
       const toInput = document.querySelector("#to-date");
       const statusLabel = document.querySelector("#result-status");
       const countLabel = document.querySelector("#result-count");
       const resultBody = document.querySelector("#swing-results");
       const submitButton = document.querySelector("#analyze-button");
+      let allSwings = [];
       const maxDaysByInterval = { "1min": 30, "3min": 30, "5min": 30, "10min": 60, "15min": 60, "30min": 90, "60min": 90, D: 180, W: 180 };
       const priceFormat = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 });
       const volumeFormat = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 });
@@ -145,11 +158,14 @@ export function renderAutoTradePage(): string {
         row.append(cell);
       }
 
-      function renderSwings(swings) {
+      function renderSwings() {
+        const swings = allSwings.filter((swing) =>
+          swingSideInput.value === "both" || swing.side === swingSideInput.value,
+        );
         resultBody.replaceChildren();
         countLabel.textContent = swings.length + " swing" + (swings.length === 1 ? "" : "s");
         if (!swings.length) {
-          setEmpty("No confirmed swings in this date range.");
+          setEmpty("No confirmed " + (swingSideInput.value === "both" ? "" : swingSideInput.value + " ") + "swings in this date range.");
           return;
         }
         for (const swing of swings) {
@@ -164,6 +180,8 @@ export function renderAutoTradePage(): string {
           resultBody.append(row);
         }
       }
+
+      swingSideInput.addEventListener("change", renderSwings);
 
       function initializeDates() {
         const today = indiaToday();
@@ -188,12 +206,13 @@ export function renderAutoTradePage(): string {
         countLabel.textContent = "";
         setStatus("Loading historical candles and analyzing swings…");
         setEmpty("Loading swings…");
-        const query = new URLSearchParams({ instrument: instrumentInput.value.trim(), interval: intervalInput.value, fromdate: fromInput.value, todate: toInput.value });
+        const query = new URLSearchParams({ instrument: instrumentInput.value.trim(), interval: intervalInput.value, pivotLookback: pivotLookbackInput.value, fromdate: fromInput.value, todate: toInput.value });
         try {
           const response = await fetch("/api/auto-trade/liquidity-swings?" + query, { headers: { Accept: "application/json" } });
           const payload = await response.json();
           if (!response.ok) throw new Error(payload.error || "Could not load liquidity swings.");
-          renderSwings(payload.swings);
+          allSwings = payload.swings;
+          renderSwings();
           setStatus(payload.candleCount + " candles analyzed for " + payload.instrument + " (" + payload.interval + ").");
         } catch (error) {
           setEmpty("No swing results available.");

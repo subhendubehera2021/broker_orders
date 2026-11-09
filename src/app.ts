@@ -1095,6 +1095,7 @@ export function buildApp({
       Querystring: {
         instrument: string;
         interval: HistoricalCandleInterval;
+        pivotLookback?: number;
         fromdate: string;
         todate: string;
       };
@@ -1114,6 +1115,7 @@ export function buildApp({
                 type: "string",
                 enum: ["1min", "3min", "5min", "10min", "15min", "30min", "60min", "D", "W"],
               },
+              pivotLookback: { type: "integer", enum: [3, 5, 10, 14, 20], default: 5 },
               fromdate: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
               todate: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
             },
@@ -1172,6 +1174,7 @@ export function buildApp({
         }
 
         const { instrument, interval, fromdate, todate } = request.query;
+        const pivotLookback = request.query.pivotLookback ?? 5;
         const fromTime = parseDateOnly(fromdate);
         const toTime = parseDateOnly(todate);
         if (fromTime === undefined || toTime === undefined || toTime < fromTime) {
@@ -1205,7 +1208,7 @@ export function buildApp({
           const sortedCandles = [...candles].sort((left, right) =>
             Date.parse(left.timestamp) - Date.parse(right.timestamp),
           );
-          const analysis = analyzeLiquiditySwings(sortedCandles);
+          const analysis = analyzeLiquiditySwings(sortedCandles, { pivotLookback });
           const swings = [...analysis.highSwings, ...analysis.lowSwings]
             .map((swing) => ({
               side: swing.side,

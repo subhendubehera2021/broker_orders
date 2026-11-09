@@ -290,6 +290,10 @@ describe("authentication routes", () => {
     assert.match(response.body, /<h1>Liquidity swings<\/h1>/);
     assert.match(response.body, /value="NIFTY26N0925100PE"/);
     assert.match(response.body, /<option value="1min" selected>1 minute<\/option>/);
+    assert.match(response.body, /<option value="5" selected>5 candles<\/option>/);
+    assert.match(response.body, /<option value="high" selected>Swing high<\/option>/);
+    assert.match(response.body, /<option value="low">Swing low<\/option>/);
+    assert.match(response.body, /swingSideInput\.addEventListener\("change", renderSwings\)/);
     assert.match(response.body, /name="fromdate"/);
     assert.match(response.body, /name="todate"/);
     assert.match(response.body, /Detected swings/);
@@ -973,7 +977,7 @@ describe("authentication routes", () => {
     apps.push(app);
 
     const unauthorized = await app.inject(
-      "/api/auto-trade/liquidity-swings?instrument=NIFTY26N0925100PE&interval=1min&fromdate=2026-11-09&todate=2026-11-09",
+      "/api/auto-trade/liquidity-swings?instrument=NIFTY26N0925100PE&interval=1min&pivotLookback=14&fromdate=2026-11-09&todate=2026-11-09",
     );
     await app.inject({ method: "POST", url: "/api/auth/login", payload: { totp: "123456" } });
     const response = await app.inject(
@@ -994,7 +998,13 @@ describe("authentication routes", () => {
     assert.equal(response.json().swings.length, 1);
     assert.equal(response.json().swings[0].side, "high");
     assert.equal(response.json().swings[0].pivotTime, candles[17]!.timestamp);
-    assert.equal(response.json().swings[0].qualifiedAt, candles[32]!.timestamp);
+    assert.equal(response.json().swings[0].qualifiedAt, candles[23]!.timestamp);
+
+    const customLookbackResponse = await app.inject(
+      "/api/auto-trade/liquidity-swings?instrument=NIFTY26N0925100PE&interval=1min&pivotLookback=14&fromdate=2026-11-09&todate=2026-11-09",
+    );
+    assert.equal(customLookbackResponse.statusCode, 200);
+    assert.equal(customLookbackResponse.json().swings[0].qualifiedAt, candles[32]!.timestamp);
   });
 
   it("rejects historical candle ranges beyond Kotak interval limits", async () => {
