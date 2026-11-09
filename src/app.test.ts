@@ -144,6 +144,7 @@ describe("authentication routes", () => {
     assert.match(response.body, /href="\/option-chain">Open NIFTY option chain/);
     assert.match(response.body, /href="\/orders">View open and closed orders/);
     assert.match(response.body, /href="\/order-stream">View live order and position updates/);
+    assert.match(response.body, /href="\/auto-trade">Analyze liquidity swings/);
     assert.doesNotMatch(response.body, /id="margin-form"/);
     assert.match(response.body, /fetch\("\/api\/auth\/login"/);
   });
@@ -275,6 +276,24 @@ describe("authentication routes", () => {
     assert.doesNotMatch(response.body, /new Map\(\).*position/);
     assert.match(response.body, /new EventSource\("\/api\/orders\/stream"\)/);
     assert.match(response.body, /seenOrderEvents/);
+  });
+
+  it("serves the liquidity swing analysis page", async () => {
+    const app = buildApp({ config });
+    apps.push(app);
+
+    const cookie = await frontendAccessCookie(app);
+    const response = await app.inject({ url: "/auto-trade", headers: { cookie } });
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.headers["cache-control"], "no-store");
+    assert.match(response.body, /<h1>Liquidity swings<\/h1>/);
+    assert.match(response.body, /value="NIFTY26N0925100PE"/);
+    assert.match(response.body, /<option value="1min" selected>1 minute<\/option>/);
+    assert.match(response.body, /name="fromdate"/);
+    assert.match(response.body, /name="todate"/);
+    assert.match(response.body, /Detected swings/);
+    assert.match(response.body, /\/api\/auto-trade\/liquidity-swings/);
   });
 
   it("requires authentication for the live order stream", async () => {
@@ -465,6 +484,7 @@ describe("authentication routes", () => {
       "/api/auth/login",
       "/api/auth/logout",
       "/api/auth/session",
+      "/api/auto-trade/liquidity-swings",
       "/api/margin",
       "/api/market/nifty/stream",
       "/api/options/nifty/chain",
@@ -918,6 +938,83 @@ describe("authentication routes", () => {
     assert.deepEqual(response.json(), {
       error: "No NIFTY option contracts found for that expiry",
     });
+  });
+
+  it("uses the Scrip Master token and Kotak candles to return liquidity swings", async () => {
+    const expiryEpoch = String(Date.UTC(2026, 10, 9) / 1000 - 315_511_200);
+    const csv = [
+      "pSymbol,pInstType,pSymbolName,pTrdSymbol,pOptionType,pExpiryDate,dStrikePrice;,lLotSize",
+      `12345,OPTIDX,NIFTY,NIFTY26N0925100PE,PE,${expiryEpoch},2510000,65`,
+    ].join("\n");
+    const candles = Array.from({ length: 40 }, (_, index) => {
+      const timestamp = new Date(Date.UTC(2026, 10, 9, 3, 45 + index)).toISOString();
+      return {
+        timestamp,
+        open: 5,
+        high: index === 17 ? 20 : 10,
+        low: 1,
+        close: 5,
+        volume: 100 + index,
+      };
+    });
+    let candleRequest: unknown;
+    const app = buildApp({
+      config,
+      authClient: {
+        async login() { return authenticatedSession; },
+        async getScripMaster() { return { data: { filesPaths: [] } }; },
+        async getHistoricalCandles(_session, input) {
+          candleRequest = input;
+          return candles;
+        },
+      },
+      optionChainCsvLoader: async () => csv,
+    });
+    apps.push(app);
+
+    const unauthorized = await app.inject(
+      "/api/auto-trade/liquidity-swings?instrument=NIFTY26N0925100PE&interval=1min&fromdate=2026-11-09&todate=2026-11-09",
+    );
+    await app.inject({ method: "POST", url: "/api/auth/login", payload: { totp: "123456" } });
+    const response = await app.inject(
+      "/api/auto-trade/liquidity-swings?instrument=NIFTY26N0925100PE&interval=1min&fromdate=2026-11-09&todate=2026-11-09",
+    );
+
+    assert.equal(unauthorized.statusCode, 401);
+    assert.equal(response.statusCode, 200, response.body);
+    assert.deepEqual(candleRequest, {
+      instrumentToken: "12345",
+      exchangeSegment: "nse_fo",
+      fromDate: "2026-11-09",
+      toDate: "2026-11-09",
+      interval: "1min",
+    });
+    assert.equal(response.json().instrument, "NIFTY26N0925100PE");
+    assert.equal(response.json().candleCount, 40);
+    assert.equal(response.json().swings.length, 1);
+    assert.equal(response.json().swings[0].side, "high");
+    assert.equal(response.json().swings[0].pivotTime, candles[17]!.timestamp);
+    assert.equal(response.json().swings[0].qualifiedAt, candles[32]!.timestamp);
+  });
+
+  it("rejects historical candle ranges beyond Kotak interval limits", async () => {
+    const app = buildApp({
+      config,
+      authClient: {
+        async login() { return authenticatedSession; },
+        async getScripMaster() { return { data: { filesPaths: [] } }; },
+        async getHistoricalCandles() { return []; },
+      },
+    });
+    apps.push(app);
+    await app.inject({ method: "POST", url: "/api/auth/login", payload: { totp: "123456" } });
+
+    const response = await app.inject(
+      "/api/auto-trade/liquidity-swings?instrument=NIFTY26N0925100PE&interval=1min&fromdate=2026-10-01&todate=2026-11-09",
+    );
+
+    assert.equal(response.statusCode, 400);
+    assert.match(response.json().error, /maximum date range of 30 days/);
   });
 
   it("requires authentication before placing a NIFTY option order", async () => {

@@ -56,6 +56,8 @@ stays server-side; only the current TOTP is submitted by the browser.
 - `GET /scrip-master` — browse and search the full NSE F&O instrument list.
 - `GET /option-chain` — NIFTY option-chain UI using local contract data, with
   optional live index streaming after Kotak Neo sign-in.
+- `GET /auto-trade` — analyze historical Kotak Neo candles for NIFTY option
+  liquidity swings; choose an instrument, interval, and date range.
 - `GET /orders` — view the authenticated Kotak Neo order book, separated into
   all, open, and closed orders.
 - `GET /order-stream` — view live order lifecycle and position updates.
@@ -81,6 +83,10 @@ stays server-side; only the current TOTP is submitted by the browser.
   local NSE F&O CSV.
 - `GET /api/options/nifty/chain?expiry=DDMMMYYYY` — get local contract details
   for a selected NIFTY expiry.
+- `GET /api/auto-trade/liquidity-swings?instrument=NIFTY26N0925100PE&interval=1min&fromdate=2026-11-01&todate=2026-11-09`
+  — fetch historical OHLCV candles for the local NIFTY option contract and
+  return detected swing levels. Requires a Kotak Neo session. The endpoint
+  enforces Kotak's interval-specific maximum date ranges.
 - `POST /api/margin` — check the required margin for the supplied order details
   using the current authenticated session. This does not place an order.
 - `POST /api/options/nifty/order` — submit a live NIFTY option order. Requires an

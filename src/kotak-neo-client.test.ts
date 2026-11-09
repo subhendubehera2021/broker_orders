@@ -904,6 +904,115 @@ describe("KotakNeoClient", () => {
     );
   });
 
+  it("gets historical candles from the authenticated session base URL", async () => {
+    let capturedUrl: URL | undefined;
+    let capturedInit: RequestInit | undefined;
+    const responseBody = {
+      status: "success",
+      interval: "1min",
+      data: {
+        candles: [["2026-11-09T09:15:00+0530", 120, 122, 119, 121, 55, null]],
+      },
+    };
+    const client = new KotakNeoClient(prodConfig, async (input, init) => {
+      capturedUrl = new URL(input.toString());
+      capturedInit = init;
+      return Response.json(responseBody);
+    });
+
+    const candles = await client.getHistoricalCandles(
+      { ...testSession, baseUrl: "https://neo-gw.kotaksecurities.com/api/" },
+      {
+        instrumentToken: "12345",
+        exchangeSegment: "nse_fo",
+        fromDate: "2026-11-01",
+        toDate: "2026-11-09",
+        interval: "1min",
+      },
+    );
+
+    assert.equal(
+      capturedUrl?.href,
+      "https://neo-gw.kotaksecurities.com/api/market-data/1.0/historical/details?neosymbol=nse_fo%7C12345&fromdate=2026-11-01&todate=2026-11-09&interval=1min",
+    );
+    assert.equal(capturedInit?.method, "GET");
+    const headers = new Headers(capturedInit?.headers);
+    assert.equal(headers.get("authorization"), "consumer-key");
+    assert.equal(headers.get("content-type"), "application/json");
+    assert.deepEqual(candles, [
+      {
+        timestamp: "2026-11-09T09:15:00+0530",
+        open: 120,
+        high: 122,
+        low: 119,
+        close: 121,
+        volume: 55,
+      },
+    ]);
+  });
+
+  it("rejects malformed historical candle rows", async () => {
+    const client = new KotakNeoClient(prodConfig, async () =>
+      Response.json({ status: "success", data: { candles: [["2026-11-09T09:15:00+0530", 120]] } }),
+    );
+
+    await assert.rejects(
+      client.getHistoricalCandles(
+        { ...testSession, baseUrl: "https://neo-gw.kotaksecurities.com/api/" },
+        {
+          instrumentToken: "12345",
+          exchangeSegment: "nse_fo",
+          fromDate: "2026-11-01",
+          toDate: "2026-11-09",
+          interval: "1min",
+        },
+      ),
+      /invalid historical candle at row 0/,
+    );
+  });
+
+  it("accepts case-insensitive success status and preserves upstream fault codes", async () => {
+    const successClient = new KotakNeoClient(prodConfig, async () =>
+      Response.json({ status: "SUCCESS", data: { candles: [] } }),
+    );
+    const candles = await successClient.getHistoricalCandles(
+      { ...testSession, baseUrl: "https://neo-gw.kotaksecurities.com/api/" },
+      {
+        instrumentToken: "12345",
+        exchangeSegment: "nse_fo",
+        fromDate: "2026-11-01",
+        toDate: "2026-11-09",
+        interval: "1min",
+      },
+    );
+    assert.deepEqual(candles, []);
+
+    const errorClient = new KotakNeoClient(prodConfig, async () =>
+      Response.json({ status: "ERROR", fault: { code: 502 } }),
+    );
+    await assert.rejects(
+      errorClient.getHistoricalCandles(
+        { ...testSession, baseUrl: "https://neo-gw.kotaksecurities.com/api/" },
+        {
+          instrumentToken: "12345",
+          exchangeSegment: "nse_fo",
+          fromDate: "2026-11-01",
+          toDate: "2026-11-09",
+          interval: "1min",
+        },
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof KotakNeoError);
+        assert.equal(error.statusCode, 502);
+        assert.equal(error.upstreamCode, "502");
+        assert.equal(error.upstreamHttpStatusCode, 200);
+        assert.equal(error.upstreamStat, "ERROR");
+        assert.match(error.message, /upstream status: ERROR.*code: 502/);
+        return true;
+      },
+    );
+  });
+
   it("gets the authenticated order book from the session base URL", async () => {
     let capturedUrl: URL | undefined;
     let capturedInit: RequestInit | undefined;

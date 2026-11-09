@@ -67,6 +67,34 @@ export interface QuoteInstrument {
   exchangeSegment: string;
 }
 
+export type HistoricalCandleInterval =
+  | "1min"
+  | "3min"
+  | "5min"
+  | "10min"
+  | "15min"
+  | "30min"
+  | "60min"
+  | "D"
+  | "W";
+
+export interface HistoricalCandleRequest {
+  instrumentToken: string;
+  exchangeSegment: "nse_cm" | "nse_fo" | "bse_cm" | "bse_fo";
+  fromDate: string;
+  toDate: string;
+  interval: HistoricalCandleInterval;
+}
+
+export interface HistoricalCandle {
+  timestamp: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
 export interface PlaceNiftyOptionOrderInput {
   tradingSymbol: string;
   instrumentToken: string;
@@ -734,6 +762,78 @@ export class KotakNeoClient {
     }, session.baseUrl);
   }
 
+  async getHistoricalCandles(
+    session: AuthenticatedSession,
+    input: HistoricalCandleRequest,
+  ): Promise<HistoricalCandle[]> {
+    if (!session.baseUrl) {
+      throw new KotakNeoError(
+        "Kotak Neo did not return a market-data base URL; sign in again",
+        503,
+      );
+    }
+
+    const query = new URLSearchParams({
+      neosymbol: `${input.exchangeSegment}|${input.instrumentToken}`,
+      fromdate: input.fromDate,
+      todate: input.toDate,
+      interval: input.interval,
+    });
+    const response = await this.requestJson(
+      `market-data/1.0/historical/details?${query.toString()}`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: this.config.consumerKey,
+          "Content-Type": "application/json",
+        },
+      },
+      session.baseUrl,
+    );
+    if (
+      !isRecord(response) ||
+      typeof response.status !== "string" ||
+      response.status.toLowerCase() !== "success"
+    ) {
+      const fault = isRecord(response) && isRecord(response.fault) ? response.fault : undefined;
+      const message = sanitizeUpstreamMessage(
+        findErrorMessage(fault ?? response) ?? "",
+      );
+      const rawCode = fault?.code;
+      const upstreamCode =
+        typeof rawCode === "string" || typeof rawCode === "number" ? String(rawCode) : undefined;
+      const statusCode =
+        upstreamCode && /^\d{3}$/.test(upstreamCode) &&
+        Number(upstreamCode) >= 400 &&
+        Number(upstreamCode) <= 599
+          ? Number(upstreamCode)
+          : 502;
+      const responseStatus =
+        isRecord(response) && typeof response.status === "string"
+          ? sanitizeUpstreamMessage(response.status)
+          : undefined;
+      const errorMessage =
+        `Kotak Neo historical data request failed` +
+        (responseStatus ? ` (upstream status: ${responseStatus})` : "") +
+        (upstreamCode ? ` (code: ${upstreamCode})` : "") +
+        (message ? `: ${message}` : "");
+      throw new KotakNeoError(
+        errorMessage,
+        statusCode,
+        upstreamCode,
+        200,
+        message,
+        responseStatus,
+      );
+    }
+
+    const data = isRecord(response.data) ? response.data : undefined;
+    if (!data || !Array.isArray(data.candles)) {
+      throw new KotakNeoError("Kotak Neo returned invalid historical candle data", 502);
+    }
+    return data.candles.map((row, index) => parseHistoricalCandle(row, index));
+  }
+
   async placeNiftyOptionOrder(
     session: AuthenticatedSession,
     input: PlaceNiftyOptionOrderInput,
@@ -885,6 +985,27 @@ export class KotakNeoClient {
 
     return responseBody;
   }
+}
+
+function parseHistoricalCandle(row: unknown, index: number): HistoricalCandle {
+  if (
+    !Array.isArray(row) ||
+    typeof row[0] !== "string" ||
+    !Number.isFinite(Date.parse(row[0])) ||
+    row.length < 6 ||
+    !row.slice(1, 6).every((value) => typeof value === "number" && Number.isFinite(value))
+  ) {
+    throw new KotakNeoError(`Kotak Neo returned an invalid historical candle at row ${index}`, 502);
+  }
+  const [timestamp, open, high, low, close, volume] = row as [
+    string,
+    number,
+    number,
+    number,
+    number,
+    number,
+  ];
+  return { timestamp, open, high, low, close, volume };
 }
 
 interface UpstreamErrorDetails {

@@ -9,6 +9,7 @@ import {
   KotakNeoError,
   type AuthenticatedSession,
   type CancelOrderInput,
+  type HistoricalCandleInterval,
   type MarginCheckInput,
   type NiftyIndexTick,
   type NiftyOptionMarketInstrument,
@@ -31,6 +32,8 @@ import {
   type NiftyOptionContract,
 } from "./option-chain.js";
 import { renderOptionChainPage } from "./option-chain-page.js";
+import { renderAutoTradePage } from "./auto_trade/page.js";
+import { analyzeLiquiditySwings } from "./auto_trade/index.js";
 
 interface LoginBody {
   totp: string;
@@ -83,6 +86,23 @@ interface AuthClient {
     onError: (error: Error) => void,
   ): () => void;
   getNseFoScripMaster?(): Promise<string>;
+  getHistoricalCandles?(
+    session: AuthenticatedSession,
+    input: {
+      instrumentToken: string;
+      exchangeSegment: "nse_fo";
+      fromDate: string;
+      toDate: string;
+      interval: HistoricalCandleInterval;
+    },
+  ): Promise<Array<{
+    timestamp: string;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    volume: number;
+  }>>;
   streamNiftyIndexPrice?(
     session: AuthenticatedSession,
     onPrice: (tick: NiftyIndexTick) => void,
@@ -187,6 +207,13 @@ export function buildApp({
       .send(renderOptionChainPage());
   });
 
+  app.get("/auto-trade", async (_request, reply) => {
+    return reply
+      .header("Cache-Control", "no-store")
+      .type("text/html; charset=utf-8")
+      .send(renderAutoTradePage());
+  });
+
   app.get("/orders", async (_request, reply) => {
     return reply
       .header("Cache-Control", "no-store")
@@ -215,7 +242,7 @@ export function buildApp({
           { name: "Authentication", description: "Kotak Neo session authentication" },
           { name: "Scrip Master", description: "Kotak Neo instrument master files" },
           { name: "Margin", description: "Kotak Neo margin estimates" },
-          { name: "Options", description: "NIFTY contracts, market data, and option orders" },
+          { name: "Options", description: "NIFTY contracts, market data, liquidity swings, and option orders" },
           { name: "Orders", description: "Kotak Neo orders, positions, and activity streams" },
         ],
       },
@@ -1064,6 +1091,175 @@ export function buildApp({
       },
     );
 
+    api.get<{
+      Querystring: {
+        instrument: string;
+        interval: HistoricalCandleInterval;
+        fromdate: string;
+        todate: string;
+      };
+    }>(
+      "/api/auto-trade/liquidity-swings",
+      {
+        schema: {
+          tags: ["Options"],
+          summary: "Analyze historical Kotak candles for NIFTY option liquidity swings",
+          querystring: {
+            type: "object",
+            required: ["instrument", "interval", "fromdate", "todate"],
+            additionalProperties: false,
+            properties: {
+              instrument: { type: "string", minLength: 1, maxLength: 64, pattern: "^[A-Za-z0-9._-]+$" },
+              interval: {
+                type: "string",
+                enum: ["1min", "3min", "5min", "10min", "15min", "30min", "60min", "D", "W"],
+              },
+              fromdate: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+              todate: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+            },
+          },
+          response: {
+            200: {
+              type: "object",
+              required: ["instrument", "interval", "candleCount", "swings"],
+              properties: {
+                instrument: { type: "string" },
+                interval: { type: "string" },
+                candleCount: { type: "integer" },
+                swings: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    required: [
+                      "side",
+                      "pivotTime",
+                      "level",
+                      "zoneTop",
+                      "zoneBottom",
+                      "intersectionCount",
+                      "intersectionVolume",
+                    ],
+                    properties: {
+                      side: { type: "string", enum: ["high", "low"] },
+                      pivotTime: { type: "string" },
+                      level: { type: "number" },
+                      zoneTop: { type: "number" },
+                      zoneBottom: { type: "number" },
+                      intersectionCount: { type: "integer" },
+                      intersectionVolume: { type: "number" },
+                      qualifiedAt: { type: "string" },
+                      crossedAt: { type: "string" },
+                    },
+                  },
+                },
+              },
+            },
+            400: errorResponseSchema,
+            401: errorResponseSchema,
+            429: errorResponseSchema,
+            502: errorResponseSchema,
+            503: errorResponseSchema,
+            504: errorResponseSchema,
+          },
+        },
+      },
+      async (request, reply) => {
+        if (!session) {
+          return reply.code(401).send({ error: "Authenticate with Kotak Neo to analyze liquidity swings" });
+        }
+        if (!client?.getHistoricalCandles) {
+          return reply.code(503).send({ error: "Kotak Neo historical candle data is unavailable" });
+        }
+
+        const { instrument, interval, fromdate, todate } = request.query;
+        const fromTime = parseDateOnly(fromdate);
+        const toTime = parseDateOnly(todate);
+        if (fromTime === undefined || toTime === undefined || toTime < fromTime) {
+          return reply.code(400).send({ error: "Enter a valid date range with the start on or before the end" });
+        }
+        const maxDays = historicalRangeDays(interval);
+        if ((toTime - fromTime) / 86_400_000 > maxDays) {
+          return reply.code(400).send({
+            error: `The ${interval} interval supports a maximum date range of ${maxDays} days`,
+          });
+        }
+
+        try {
+          const contracts = await getNiftyContracts();
+          const contract = contracts.find(
+            ({ tradingSymbol }) => tradingSymbol.toUpperCase() === instrument.toUpperCase(),
+          );
+          if (!contract) {
+            return reply.code(400).send({
+              error: `Instrument ${instrument} was not found in the local NIFTY option Scrip Master`,
+            });
+          }
+
+          const candles = await client.getHistoricalCandles(session, {
+            instrumentToken: contract.instrumentToken,
+            exchangeSegment: "nse_fo",
+            fromDate: fromdate,
+            toDate: todate,
+            interval,
+          });
+          const sortedCandles = [...candles].sort((left, right) =>
+            Date.parse(left.timestamp) - Date.parse(right.timestamp),
+          );
+          const analysis = analyzeLiquiditySwings(sortedCandles);
+          const swings = [...analysis.highSwings, ...analysis.lowSwings]
+            .map((swing) => ({
+              side: swing.side,
+              pivotTime: sortedCandles[swing.pivotIndex]!.timestamp,
+              level: swing.level,
+              zoneTop: swing.zoneTop,
+              zoneBottom: swing.zoneBottom,
+              intersectionCount: swing.intersectionCount,
+              intersectionVolume: swing.intersectionVolume,
+              ...(swing.qualifiedAt === undefined
+                ? {}
+                : { qualifiedAt: sortedCandles[swing.qualifiedAt]!.timestamp }),
+              ...(swing.crossedAt === undefined
+                ? {}
+                : { crossedAt: sortedCandles[swing.crossedAt]!.timestamp }),
+            }))
+            .sort((left, right) => right.pivotTime.localeCompare(left.pivotTime));
+          return {
+            instrument: contract.tradingSymbol,
+            interval,
+            candleCount: sortedCandles.length,
+            swings,
+          };
+        } catch (error) {
+          const statusCode = brokerRequestStatus(error);
+          request.log.error(
+            {
+              statusCode,
+              instrument,
+              errorName: error instanceof Error ? error.name : "UnknownError",
+              ...(error instanceof KotakNeoError
+                ? {
+                    errorMessage: error.message,
+                    upstreamStatusCode: error.upstreamHttpStatusCode ?? error.statusCode,
+                    ...(error.upstreamCode ? { upstreamCode: error.upstreamCode } : {}),
+                    ...(error.upstreamMessage
+                      ? { upstreamErrorMessage: error.upstreamMessage }
+                      : {}),
+                    ...(error.upstreamStat ? { upstreamStat: error.upstreamStat } : {}),
+                  }
+                : {}),
+            },
+            "Liquidity swing analysis request failed",
+          );
+          return reply.code(statusCode).send({
+            error:
+              error instanceof KotakNeoError
+                ? error.message
+                : "Liquidity swings could not be calculated",
+          });
+        }
+      },
+    );
+
     api.get<{ Querystring: { expiry: string } }>(
       "/api/options/nifty/chain",
       {
@@ -1515,6 +1711,41 @@ function authenticationErrorStatus(error: unknown): 401 | 429 | 502 | 503 | 504 
     return error.statusCode;
   }
   return 502;
+}
+
+function parseDateOnly(value: string): number | undefined {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return undefined;
+  const year = Number(match[1]);
+  const month = Number(match[2]) - 1;
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month, day));
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month ||
+    date.getUTCDate() !== day
+  ) {
+    return undefined;
+  }
+  return date.getTime();
+}
+
+function historicalRangeDays(interval: HistoricalCandleInterval): number {
+  switch (interval) {
+    case "1min":
+    case "3min":
+    case "5min":
+      return 30;
+    case "10min":
+    case "15min":
+      return 60;
+    case "30min":
+    case "60min":
+      return 90;
+    case "D":
+    case "W":
+      return 180;
+  }
 }
 
 function brokerRequestStatus(error: unknown): 400 | 401 | 429 | 502 | 503 | 504 {
