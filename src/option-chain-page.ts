@@ -390,6 +390,7 @@ export function renderOptionChainPage(): string {
       let selectedSwingContract;
       let swingRequestId = 0;
       let analyzedSwings = [];
+      const swingOrderAttempts = new Set();
       const optionPrices = new Map();
       const volumeFormat = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 });
       const swingMaxDays = { "1min": 30, "3min": 30, "5min": 30, "10min": 60, "15min": 60, "30min": 90, "60min": 90, D: 180, W: 180 };
@@ -661,16 +662,23 @@ export function renderOptionChainPage(): string {
           buyButton.className = "swing-buy";
           buyButton.type = "button";
           buyButton.textContent = "BUY";
+          const orderKey =
+            selectedSwingContract.tradingSymbol + ":" + expirySelect.value + ":" +
+            swing.side + ":" + swing.pivotTime;
+          buyButton.disabled = orderSubmissionUncertain || swingOrderAttempts.has(orderKey);
+          if (buyButton.disabled) buyButton.textContent = orderSubmissionUncertain ? "Check order" : "Sent";
+          buyButton.title =
+            "Place live BUY stop-limit · 65 MIS units · limit and trigger ₹" +
+            numberFormat.format(swing.level);
           buyButton.setAttribute(
             "aria-label",
-            "Open buy order ticket for " + selectedSwingContract.tradingSymbol,
+            "Place BUY stop-limit order for " + selectedSwingContract.tradingSymbol +
+              " at " + numberFormat.format(swing.level),
           );
           buyButton.addEventListener("click", () => {
             const contract = selectedSwingContract;
             if (!contract) return;
-            swingRequestId += 1;
-            swingDialog.close();
-            void openOrderTicket(contract);
+            void placeSwingBuyOrder(contract, swing, orderKey, buyButton);
           });
           actionCell.append(buyButton);
           row.append(actionCell);
@@ -740,6 +748,96 @@ export function renderOptionChainPage(): string {
           );
         } finally {
           if (requestId === swingRequestId) swingAnalyzeButton.disabled = false;
+        }
+      }
+
+      async function placeSwingBuyOrder(contract, swing, orderKey, button) {
+        if (button.disabled || orderSubmissionUncertain || swingOrderAttempts.has(orderKey)) return;
+        const price = Number(swing.level.toFixed(4));
+        if (!Number.isFinite(price) || price <= 0) {
+          setSwingStatus("Cannot place an order: swing level must be a positive price.", "error");
+          return;
+        }
+
+        swingOrderAttempts.add(orderKey);
+        button.disabled = true;
+        button.textContent = "Sending…";
+        setSwingStatus(
+          "Placing BUY stop-limit · 65 MIS units · limit and trigger ₹" +
+            numberFormat.format(price) + "…",
+        );
+        const orderPayload = {
+          expiry: expirySelect.value,
+          tradingSymbol: contract.tradingSymbol,
+          transactionType: "B",
+          quantity: "65",
+          product: "MIS",
+          orderType: "SL",
+          price: String(price),
+          triggerPrice: String(price),
+          validity: "DAY",
+          amo: "NO",
+          disclosedQuantity: "0",
+          marketProtection: "0",
+        };
+        try {
+          const response = await fetch("/api/options/nifty/order", {
+            method: "POST",
+            headers: {
+              Accept: "application/json",
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(orderPayload),
+          });
+          const result = await response.json();
+          if (!response.ok) {
+            if (
+              typeof result.error === "string" &&
+              result.error.startsWith("Order outcome could not be confirmed")
+            ) {
+              orderSubmissionUncertain = true;
+              disableSwingBuyButtons();
+              renderChain();
+              button.textContent = "Check order";
+              const message =
+                result.error + "; do not retry until you check your Kotak Neo order book.";
+              setSwingStatus(message, "error");
+              setStatus(message, "error");
+              return;
+            }
+            swingOrderAttempts.delete(orderKey);
+            button.disabled = false;
+            button.textContent = "BUY";
+            setSwingStatus(result.error || "Kotak Neo could not place the order.", "error");
+            return;
+          }
+
+          button.textContent = "Sent";
+          const orderNumber = result.nOrdNo || result.orderId;
+          const message =
+            "BUY stop-limit sent · 65 MIS units · ₹" + numberFormat.format(price) +
+            (orderNumber ? " · " + orderNumber : "") +
+            ". Check the Kotak Neo order book for its status.";
+          setSwingStatus(message);
+          setStatus(message);
+          void loadOpenOrders();
+        } catch (error) {
+          orderSubmissionUncertain = true;
+          disableSwingBuyButtons();
+          renderChain();
+          button.textContent = "Check order";
+          const message =
+            "Order outcome is uncertain; check your Kotak Neo order book before retrying." +
+            (error instanceof Error ? " " + error.message : "");
+          setSwingStatus(message, "error");
+          setStatus(message, "error");
+        }
+      }
+
+      function disableSwingBuyButtons() {
+        for (const buyButton of swingRows.querySelectorAll(".swing-buy")) {
+          buyButton.disabled = true;
+          buyButton.textContent = "Check order";
         }
       }
 

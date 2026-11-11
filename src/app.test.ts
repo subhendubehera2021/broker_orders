@@ -221,8 +221,12 @@ describe("authentication routes", () => {
     assert.match(response.body, /api\/auto-trade\/liquidity-swings/);
     assert.match(response.body, /<th>Action<\/th>/);
     assert.match(response.body, /buyButton\.textContent = "BUY"/);
-    assert.match(response.body, /void openOrderTicket\(contract\)/);
-    assert.match(response.body, /window\.confirm\(confirmation\)/);
+    assert.match(response.body, /void placeSwingBuyOrder\(contract, swing, orderKey, buyButton\)/);
+    assert.match(response.body, /quantity: "65"/);
+    assert.match(response.body, /product: "MIS"/);
+    assert.match(response.body, /orderType: "SL"/);
+    assert.match(response.body, /triggerPrice: String\(price\)/);
+    assert.match(response.body, /fetch\("\/api\/options\/nifty\/order"/);
     assert.match(response.body, /button\.disabled = orderSubmissionUncertain/);
     assert.match(response.body, /\.option-row:hover \.buy-button, \.option-row:focus-within \.buy-button \{ opacity: \.9; pointer-events: auto; \}/);
     assert.match(response.body, /orderDialog\.showModal\(\)/);
