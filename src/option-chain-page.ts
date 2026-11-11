@@ -41,6 +41,18 @@ export function renderOptionChainPage(): string {
       .status { min-height: 18px; margin: 14px 0 12px; color: #a0adba; font-size: 11px; letter-spacing: .04em; }
       .status[data-kind="error"] { color: #f0a3a3; }
       .status a { color: var(--accent); }
+      .activity-status { min-height: 20px; margin: 12px 0 14px; color: #a0adba; font-size: 11px; }
+      .activity-status[data-state="connected"] { color: #9ce0cb; }
+      .activity-status[data-state="error"] { color: #f0a3a3; }
+      .activity-panel h2 { margin: 0 0 14px; font-size: 17px; }
+      .activity-panel + .activity-panel { margin-top: 16px; }
+      .activity-table-wrap { max-height: 48vh; overflow: auto; border: 1px solid #293541; border-radius: 10px; background: #0d131a; }
+      .activity-table { width: 100%; min-width: 760px; table-layout: auto; border-collapse: collapse; font-size: 12px; white-space: nowrap; }
+      .activity-table th, .activity-table td { padding: 11px 14px; border-bottom: 1px solid #222d38; text-align: left; }
+      .activity-table th { position: sticky; top: 0; z-index: 1; background: #171f27; color: #9baaba; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+      .activity-table td { color: #d7e0e9; font-variant-numeric: tabular-nums; }
+      .activity-table tbody tr:last-child td { border-bottom: 0; }
+      .activity-empty { padding: 24px 12px !important; color: #8d9aaa !important; text-align: center !important; }
       .orders-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
       .orders-heading h2 { margin: 0; font-size: 17px; }
       .orders-status { min-height: 18px; margin: 14px 0 12px; color: #a0adba; font-size: 11px; }
@@ -140,7 +152,7 @@ export function renderOptionChainPage(): string {
           <span class="brand-mark" aria-hidden="true">N.</span>
           <span><span class="brand-name">Neo Desk</span><br><span class="brand-caption">Trading API</span></span>
         </a>
-        <nav class="nav" aria-label="Main navigation"><a href="/orders">Orders</a><a href="/order-stream">Live activity</a><a href="/margin">Margin calculator</a><a href="/scrip-master">Scrip Master</a><a href="/">Sign in</a></nav>
+        <nav class="nav" aria-label="Main navigation"><a href="/orders">Orders</a><a href="#live-activity">Live activity</a><a href="/margin">Margin calculator</a><a href="/scrip-master">Scrip Master</a><a href="/">Sign in</a></nav>
       </header>
       <main>
         <section class="panel" aria-label="Open orders" style="margin-bottom: 20px">
@@ -190,6 +202,26 @@ export function renderOptionChainPage(): string {
                 <th class="put-subhead instrument-head">Instrument</th>
               </tr></thead>
               <tbody id="rows"></tbody>
+            </table>
+          </div>
+        </section>
+        <section class="panel activity-panel" id="live-activity" aria-label="Live order updates">
+          <h2>Live activity</h2>
+          <p class="activity-status" id="activity-stream-status" data-state="connecting" role="status" aria-live="polite">Checking your Kotak Neo session…</p>
+          <div class="activity-table-wrap">
+            <table class="activity-table">
+              <thead><tr><th>Order ID</th><th>Symbol</th><th>Side</th><th>Quantity</th><th>Filled</th><th>Average price</th><th>Status</th><th>Updated</th></tr></thead>
+              <tbody id="activity-order-updates"><tr><td class="activity-empty" colspan="8">Waiting for order updates…</td></tr></tbody>
+            </table>
+          </div>
+        </section>
+        <section class="panel activity-panel" aria-label="Live position updates">
+          <h2>Position updates</h2>
+          <p class="activity-status" id="activity-position-status" role="status" aria-live="polite">Loading current positions…</p>
+          <div class="activity-table-wrap">
+            <table class="activity-table">
+              <thead><tr><th>Trading symbol</th><th>Product</th><th>Net qty</th><th>Buy qty</th><th>Sell qty</th><th>Buy amount</th><th>Sell amount</th><th>P&amp;L (Sell - Buy)</th><th>Updated</th></tr></thead>
+              <tbody id="activity-position-updates"><tr><td class="activity-empty" colspan="9">Waiting for position updates…</td></tr></tbody>
             </table>
           </div>
         </section>
@@ -341,6 +373,10 @@ export function renderOptionChainPage(): string {
       const openOrdersStatus = document.querySelector("#open-orders-status");
       const openOrderRows = document.querySelector("#open-order-rows");
       const refreshOpenOrdersButton = document.querySelector("#refresh-open-orders");
+      const activityStatusLabel = document.querySelector("#activity-stream-status");
+      const activityOrderBody = document.querySelector("#activity-order-updates");
+      const activityPositionBody = document.querySelector("#activity-position-updates");
+      const activityPositionStatus = document.querySelector("#activity-position-status");
       const orderDialog = document.querySelector("#order-dialog");
       const swingDialog = document.querySelector("#swing-dialog");
       const swingInstrumentLabel = document.querySelector("#swing-instrument");
@@ -390,6 +426,10 @@ export function renderOptionChainPage(): string {
       let selectedSwingContract;
       let swingRequestId = 0;
       let analyzedSwings = [];
+      const activityOrderUpdates = new Map();
+      const seenActivityOrderEvents = new Set();
+      let activityPositionUpdates = [];
+      let activityEventSource;
       const swingOrderAttempts = new Set();
       const optionPrices = new Map();
       const volumeFormat = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 });
@@ -416,6 +456,197 @@ export function renderOptionChainPage(): string {
           if (result.length) return result;
         }
         return [];
+      }
+
+      function activityValue(record, key, fallback = "—") {
+        const item = record[key];
+        return item === undefined || item === null || item === "" ? fallback : String(item);
+      }
+
+      function activityPnl(position) {
+        const buyAmount = Number(position.buyAmt);
+        const sellAmount = Number(position.sellAmt);
+        if (
+          position.buyAmt === undefined ||
+          position.buyAmt === null ||
+          position.buyAmt === "" ||
+          position.sellAmt === undefined ||
+          position.sellAmt === null ||
+          position.sellAmt === "" ||
+          !Number.isFinite(buyAmount) ||
+          !Number.isFinite(sellAmount)
+        ) {
+          return "—";
+        }
+        return new Intl.NumberFormat("en-IN", {
+          style: "currency",
+          currency: "INR",
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        }).format(sellAmount - buyAmount);
+      }
+
+      function drawActivityRows(body, records, fields, emptyMessage) {
+        body.replaceChildren();
+        if (!records.length) {
+          const row = document.createElement("tr");
+          const cell = document.createElement("td");
+          cell.className = "activity-empty";
+          cell.colSpan = fields.length;
+          cell.textContent = emptyMessage;
+          row.append(cell);
+          body.append(row);
+          return;
+        }
+        for (const record of records) {
+          const row = document.createElement("tr");
+          for (const field of fields) {
+            const cell = document.createElement("td");
+            cell.textContent = field === "pnl" ? activityPnl(record) : activityValue(record, field);
+            row.append(cell);
+          }
+          body.append(row);
+        }
+      }
+
+      function handleActivityOrder(data) {
+        const orderNumber = activityValue(data, "nOrdNo", "");
+        if (!orderNumber) return;
+        const receivedAt = activityValue(data, "updRecvTm", "");
+        if (receivedAt) {
+          const eventKey = orderNumber + ":" + receivedAt;
+          if (seenActivityOrderEvents.has(eventKey)) return;
+          seenActivityOrderEvents.add(eventKey);
+          if (seenActivityOrderEvents.size > 2000) {
+            const oldest = seenActivityOrderEvents.values().next().value;
+            if (oldest) seenActivityOrderEvents.delete(oldest);
+          }
+        }
+        const previous = activityOrderUpdates.get(orderNumber) || {};
+        activityOrderUpdates.set(orderNumber, { ...previous, ...data });
+        drawActivityRows(
+          activityOrderBody,
+          [...activityOrderUpdates.values()],
+          ["nOrdNo", "trdSym", "trnsTp", "qty", "fldQty", "avgPrc", "ordSt", "ordDtTm"],
+          "Waiting for order updates…",
+        );
+      }
+
+      function activityPositionKey(data) {
+        const symbol = activityValue(data, "trdSym", activityValue(data, "sym", ""));
+        const identity = [
+          activityValue(data, "actId", ""),
+          symbol,
+          activityValue(data, "exSeg", ""),
+          activityValue(data, "prod", ""),
+        ];
+        return identity.some(Boolean) ? identity.join("|") : "";
+      }
+
+      function renderActivityPositions() {
+        drawActivityRows(
+          activityPositionBody,
+          activityPositionUpdates,
+          ["trdSym", "prod", "qty", "flBuyQty", "flSellQty", "buyAmt", "sellAmt", "pnl", "hsUpTm"],
+          "Waiting for position updates…",
+        );
+      }
+
+      function handleActivityPosition(data) {
+        const key = activityPositionKey(data);
+        const index = key
+          ? activityPositionUpdates.findIndex((position) => activityPositionKey(position) === key)
+          : -1;
+        if (index >= 0) activityPositionUpdates[index] = { ...activityPositionUpdates[index], ...data };
+        else activityPositionUpdates.push(data);
+        renderActivityPositions();
+        activityPositionStatus.textContent =
+          activityPositionUpdates.length + " position" +
+          (activityPositionUpdates.length === 1 ? "" : "s") + " · live update received";
+        activityPositionStatus.dataset.state = "connected";
+      }
+
+      function extractActivityPositions(payload) {
+        if (Array.isArray(payload)) {
+          return payload.filter((item) => item && typeof item === "object" && !Array.isArray(item));
+        }
+        if (!payload || typeof payload !== "object") return [];
+        if (["sym", "trdSym", "actId"].some((key) => payload[key] !== undefined)) {
+          return [payload];
+        }
+        for (const key of ["data", "positions", "positionBook", "positionbook"]) {
+          const records = extractActivityPositions(payload[key]);
+          if (records.length) return records;
+        }
+        return [];
+      }
+
+      async function connectActivityStream() {
+        try {
+          const response = await fetch("/api/auth/session", { headers: { Accept: "application/json" } });
+          if (!response.ok) throw new Error("Could not check the Kotak Neo session.");
+          const session = await response.json();
+          if (session.authenticated !== true) {
+            activityStatusLabel.textContent = "Sign in to Kotak Neo before opening live activity.";
+            activityStatusLabel.dataset.state = "error";
+            activityPositionStatus.textContent = "Sign in to load current positions.";
+            activityPositionStatus.dataset.state = "error";
+            return;
+          }
+
+          try {
+            const positionsResponse = await fetch("/api/positions", {
+              headers: { Accept: "application/json" },
+            });
+            const positionsPayload = await positionsResponse.json();
+            if (!positionsResponse.ok) {
+              throw new Error(positionsPayload.error || "Could not load current positions.");
+            }
+            activityPositionUpdates = extractActivityPositions(positionsPayload);
+            renderActivityPositions();
+            activityPositionStatus.textContent =
+              activityPositionUpdates.length + " current position" +
+              (activityPositionUpdates.length === 1 ? "" : "s") +
+              " loaded · waiting for live updates";
+            activityPositionStatus.dataset.state = "";
+          } catch (error) {
+            activityPositionStatus.textContent =
+              error instanceof Error ? error.message : "Could not load current positions.";
+            activityPositionStatus.dataset.state = "error";
+          }
+
+          activityEventSource = new EventSource("/api/orders/stream");
+          activityEventSource.addEventListener("connection", (event) => {
+            const message = JSON.parse(event.data);
+            activityStatusLabel.textContent =
+              message.state === "connected"
+                ? "Connected · receiving live updates"
+                : message.state === "reconnecting"
+                  ? "Reconnecting to Kotak Neo…"
+                  : "Connecting to Kotak Neo…";
+            activityStatusLabel.dataset.state =
+              message.state === "connected" ? "connected" : "connecting";
+          });
+          activityEventSource.addEventListener("order", (event) => {
+            handleActivityOrder(JSON.parse(event.data));
+          });
+          activityEventSource.addEventListener("position", (event) => {
+            handleActivityPosition(JSON.parse(event.data));
+          });
+          activityEventSource.addEventListener("stream-error", (event) => {
+            const message = JSON.parse(event.data);
+            activityStatusLabel.textContent = message.error || "Kotak Neo stream reported an error.";
+            activityStatusLabel.dataset.state = "error";
+          });
+          activityEventSource.onerror = () => {
+            activityStatusLabel.textContent = "Connection interrupted; reconnecting…";
+            activityStatusLabel.dataset.state = "connecting";
+          };
+        } catch (error) {
+          activityStatusLabel.textContent =
+            error instanceof Error ? error.message : "Could not open live activity.";
+          activityStatusLabel.dataset.state = "error";
+        }
       }
 
       function isOpenOrder(order) {
@@ -1346,8 +1577,13 @@ export function renderOptionChainPage(): string {
       refreshPriceButton.addEventListener("click", () => {
         void initializeLivePrice(expirySelect.value);
       });
+      window.addEventListener("beforeunload", () => {
+        marketFeed?.close();
+        activityEventSource?.close();
+      });
       initialize();
       void loadOpenOrders();
+      void connectActivityStream();
     </script>
   </body>
 </html>`;

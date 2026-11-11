@@ -194,6 +194,14 @@ describe("authentication routes", () => {
     assert.match(response.body, /\/api\/options\/nifty\/expiries/);
     assert.match(response.body, /\/api\/options\/nifty\/chain/);
     assert.match(response.body, /<h2>Open orders<\/h2>/);
+    assert.match(response.body, /id="live-activity" aria-label="Live order updates"/);
+    assert.match(response.body, /id="activity-stream-status"/);
+    assert.match(response.body, /id="activity-order-updates"/);
+    assert.match(response.body, /id="activity-position-updates"/);
+    assert.match(response.body, /new EventSource\("\/api\/orders\/stream"\)/);
+    assert.match(response.body, /fetch\("\/api\/positions"/);
+    assert.match(response.body, /void connectActivityStream\(\)/);
+    assert.match(response.body, /href="#live-activity">Live activity<\/a>/);
     assert.match(response.body, /id="refresh-open-orders"/);
     assert.match(response.body, /fetch\("\/api\/orders"/);
     assert.match(response.body, /openOrderRows\.append\(row\)/);
@@ -202,6 +210,10 @@ describe("authentication routes", () => {
     assert.ok(
       response.body.indexOf('aria-label="Open orders"') <
         response.body.indexOf('aria-label="NIFTY option chain"'),
+    );
+    assert.ok(
+      response.body.indexOf('aria-label="NIFTY option chain"') <
+        response.body.indexOf('id="live-activity" aria-label="Live order updates"'),
     );
     assert.match(response.body, /Reconnect<\/button>/);
     assert.match(response.body, /spotPrice\.id = "nifty-spot-price"/);
