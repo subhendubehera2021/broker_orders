@@ -814,7 +814,7 @@ export function buildApp({
               authenticatedSession,
               optionInstruments,
               (spotPrice) =>
-                selectNearbyNiftyOptionContracts(optionContracts, spotPrice).map(
+                selectNearbyNiftyOptionContracts(optionContracts, spotPrice, 5).map(
                   ({ instrumentToken, tradingSymbol }) => ({ instrumentToken, tradingSymbol }),
                 ),
               (tick) => writeEvent("price", tick),

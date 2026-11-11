@@ -186,7 +186,7 @@ export function renderAutoTradePage(): string {
       function initializeDates() {
         const today = indiaToday();
         toInput.value = today;
-        fromInput.value = dateBefore(today, 30);
+        fromInput.value = today;
       }
 
       intervalInput.addEventListener("change", () => {

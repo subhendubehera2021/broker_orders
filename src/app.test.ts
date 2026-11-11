@@ -207,6 +207,22 @@ describe("authentication routes", () => {
     assert.match(response.body, /spotPrice\.id = "nifty-spot-price"/);
     assert.match(response.body, /spotRow\.className = "spot-row"/);
     assert.match(response.body, /button\.textContent = "BUY"/);
+    assert.match(response.body, /swingButton\.textContent = "SW"/);
+    assert.match(response.body, /id="swing-dialog"/);
+    assert.match(response.body, /<h2 id="swing-title">Liquidity swings<\/h2>/);
+    assert.match(response.body, /id="swing-ltp" aria-live="polite">LTP unavailable/);
+    assert.match(response.body, /selectedSwingContract\?\.tradingSymbol === tick\.tradingSymbol/);
+    assert.match(response.body, /updateSwingLtp\(tick\.price\)/);
+    assert.match(response.body, /<option value="5" selected>5 candles<\/option>/);
+    assert.match(response.body, /<option value="high" selected>Swing high<\/option>/);
+    assert.match(response.body, /void openSwingModal\(contract\)/);
+    assert.match(response.body, /await loadContractSwings\(\)/);
+    assert.match(response.body, /pivotLookback: swingLookbackSelect\.value/);
+    assert.match(response.body, /api\/auto-trade\/liquidity-swings/);
+    assert.match(response.body, /<th>Action<\/th>/);
+    assert.match(response.body, /buyButton\.textContent = "BUY"/);
+    assert.match(response.body, /void openOrderTicket\(contract\)/);
+    assert.match(response.body, /window\.confirm\(confirmation\)/);
     assert.match(response.body, /button\.disabled = orderSubmissionUncertain/);
     assert.match(response.body, /\.option-row:hover \.buy-button, \.option-row:focus-within \.buy-button \{ opacity: \.9; pointer-events: auto; \}/);
     assert.match(response.body, /orderDialog\.showModal\(\)/);
@@ -866,7 +882,9 @@ describe("authentication routes", () => {
 
   it("streams selected NIFTY option prices from the authenticated market feed", async () => {
     const expiryEpoch = String(Date.UTC(2030, 0, 30) / 1000 - 315_511_200);
-    const strikes = [24850, 24900, 24950, 25050, 25100, 25150];
+    const strikes = [
+      24750, 24800, 24850, 24900, 24950, 25050, 25100, 25150, 25200, 25250,
+    ];
     const rows = strikes.flatMap((strike, index) => [
       `${100 + index * 2},OPTIDX,NIFTY,NIFTY30JAN2030CE${index || ""},CE,${expiryEpoch},${strike * 100},25`,
       `${101 + index * 2},OPTIDX,NIFTY,NIFTY30JAN2030PE${index || ""},PE,${expiryEpoch},${strike * 100},25`,
@@ -890,8 +908,8 @@ describe("authentication routes", () => {
           onError,
           onConnected,
         ) {
-          assert.equal(instruments.length, 12);
-          assert.equal(selectOptions(25000).length, 12);
+          assert.equal(instruments.length, 20);
+          assert.equal(selectOptions(25000).length, 20);
           onIndexPrice({ price: 25000, asOf: "2030-01-30T10:00:00.000Z" });
           onOptionPrice({
             tradingSymbol: "NIFTY30JAN2030CE",

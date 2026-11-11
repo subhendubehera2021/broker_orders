@@ -74,13 +74,39 @@ export function renderOptionChainPage(): string {
       td.strike-cell { background: #0d1217; color: #f0f3f6; font-size: 16px; font-weight: 750; text-align: center; }
       td.put-price { color: #e2e9ed; text-align: left; }
       td.put-instrument { text-align: right; }
-      .instrument-name { display: block; overflow: hidden; padding-right: 44px; color: #cbd6df; font-size: 11px; font-weight: 550; text-overflow: ellipsis; }
+      .instrument-name { display: block; overflow: hidden; padding-right: 100px; color: #cbd6df; font-size: 11px; font-weight: 550; text-overflow: ellipsis; }
       .buy-button { position: absolute; top: 50%; right: 8px; height: 26px; padding: 0 10px; transform: translateY(-50%); border: 1px solid #416b60; border-radius: 6px; background: #1b302a; color: #9ce0cb; font-size: 10px; font-weight: 800; letter-spacing: .06em; opacity: 0; pointer-events: none; transition: opacity .12s ease; }
       .option-row:hover .buy-button, .option-row:focus-within .buy-button { opacity: .9; pointer-events: auto; }
       .buy-button:disabled { cursor: default; opacity: 0; pointer-events: none; }
       .option-row:hover .buy-button:disabled, .option-row:focus-within .buy-button:disabled { opacity: .9; }
+      .swing-button { position: absolute; top: 50%; right: 54px; height: 26px; padding: 0 7px; transform: translateY(-50%); border: 1px solid #53677d; border-radius: 6px; background: #202b38; color: #c4d2e0; font-size: 9px; font-weight: 800; letter-spacing: .04em; opacity: 0; pointer-events: none; transition: opacity .12s ease; }
+      .option-row:hover .swing-button, .option-row:focus-within .swing-button { opacity: .9; pointer-events: auto; }
       .order-dialog { width: min(460px, calc(100vw - 28px)); max-height: min(90vh, 700px); padding: 0; overflow: auto; border: 1px solid #344250; border-radius: 14px; background: #111820; color: #e6edf3; box-shadow: 0 24px 80px rgb(0 0 0 / 55%); }
       .order-dialog::backdrop { background: rgb(0 0 0 / 72%); backdrop-filter: blur(3px); }
+      .swing-dialog { width: min(1040px, calc(100vw - 28px)); max-height: min(92vh, 850px); padding: 0; overflow: auto; border: 1px solid #344250; border-radius: 14px; background: #111820; color: #e6edf3; box-shadow: 0 24px 80px rgb(0 0 0 / 55%); }
+      .swing-dialog::backdrop { background: rgb(0 0 0 / 72%); backdrop-filter: blur(3px); }
+      .swing-content { padding: 22px; }
+      .swing-heading { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px; }
+      .swing-heading h2 { margin: 0; font-size: 19px; }
+      .swing-instrument { margin: 5px 0 0; color: #9aa8b7; font-size: 12px; }
+      .swing-ltp { display: inline-block; margin-left: 8px; color: #9ce0cb; font-variant-numeric: tabular-nums; font-weight: 700; }
+      .swing-close { width: 36px; min-width: 36px; height: 36px; padding: 0; font-size: 18px; }
+      .swing-controls { display: grid; grid-template-columns: repeat(6, minmax(100px, 1fr)); align-items: end; gap: 10px; margin-top: 20px; }
+      .swing-controls label { display: grid; gap: 6px; color: #a9b6c4; font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+      .swing-controls input, .swing-controls select { width: 100%; min-width: 0; height: 38px; padding: 0 9px; border: 1px solid #303d4b; border-radius: 7px; background: #0e141b; color: #e3eaf1; font: inherit; font-size: 11px; }
+      .swing-controls button { height: 38px; }
+      .swing-status { min-height: 18px; margin: 14px 0 10px; color: #a0adba; font-size: 11px; }
+      .swing-status[data-kind="error"] { color: #f0a3a3; }
+      .swing-table-wrap { max-height: 48vh; overflow: auto; border: 1px solid #293541; border-radius: 10px; background: #0d131a; }
+      .swing-table { width: 100%; min-width: 820px; table-layout: auto; border-collapse: collapse; font-size: 12px; white-space: nowrap; }
+      .swing-table th, .swing-table td { padding: 10px 12px; border-right: 0; text-align: left; }
+      .swing-table th { position: sticky; top: 0; z-index: 1; background: #171f27; color: #9baaba; font-size: 10px; letter-spacing: .08em; }
+      .swing-high { color: #f0a3a3 !important; }
+      .swing-low { color: #9ce0cb !important; }
+      .swing-empty { padding: 24px 12px !important; color: #8d9aaa !important; text-align: center !important; }
+      .swing-buy { height: 28px; padding: 0 10px; border: 1px solid #416b60; border-radius: 6px; background: #1b302a; color: #9ce0cb; font-size: 10px; font-weight: 750; cursor: pointer; }
+      .swing-buy:hover { border-color: #70d6bd; }
+      .swing-actions { display: flex; justify-content: flex-end; margin-top: 14px; }
       .order-form { padding: 22px; }
       .order-title { margin: 0; font-size: 18px; font-weight: 750; }
       .order-contract { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; margin: 6px 0 20px; color: #9aa8b7; font-size: 12px; }
@@ -102,8 +128,9 @@ export function renderOptionChainPage(): string {
       .spot-label { color: #39aef0; font-size: 13px; font-weight: 650; }
       .spot-price { color: #39aef0; font-size: 15px; font-variant-numeric: tabular-nums; font-weight: 750; }
       [hidden] { display: none !important; }
-      @media (hover: none) { .option-row .buy-button { opacity: .9; pointer-events: auto; } }
+      @media (hover: none) { .option-row .buy-button, .option-row .swing-button { opacity: .9; pointer-events: auto; } }
       @media (max-width: 600px) { .shell { padding: 18px 14px; } .panel { padding: 12px; } .nav { gap: 12px; } .nav a { font-size: 11px; } }
+      @media (max-width: 800px) { .swing-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); } .swing-controls button { grid-column: 1 / -1; } }
     </style>
   </head>
   <body>
@@ -263,6 +290,47 @@ export function renderOptionChainPage(): string {
         </div>
       </form>
     </dialog>
+    <dialog class="swing-dialog" id="swing-dialog" aria-labelledby="swing-title">
+      <div class="swing-content">
+        <div class="swing-heading">
+          <div><h2 id="swing-title">Liquidity swings</h2><p class="swing-instrument"><span id="swing-instrument"></span><span class="swing-ltp" id="swing-ltp" aria-live="polite">LTP unavailable</span></p></div>
+          <button class="swing-close" id="swing-close" type="button" aria-label="Close liquidity swings">×</button>
+        </div>
+        <form id="swing-form">
+          <div class="swing-controls">
+            <label for="swing-interval">Interval
+              <select id="swing-interval">
+                <option value="1min" selected>1 minute</option><option value="3min">3 minutes</option>
+                <option value="5min">5 minutes</option><option value="10min">10 minutes</option>
+                <option value="15min">15 minutes</option><option value="30min">30 minutes</option>
+                <option value="60min">60 minutes</option><option value="D">Daily</option><option value="W">Weekly</option>
+              </select>
+            </label>
+            <label for="swing-lookback">Pivot lookback
+              <select id="swing-lookback">
+                <option value="3">3 candles</option><option value="5" selected>5 candles</option>
+                <option value="10">10 candles</option><option value="14">14 candles</option>
+                <option value="20">20 candles</option>
+              </select>
+            </label>
+            <label for="swing-side">Side
+              <select id="swing-side"><option value="high" selected>Swing high</option><option value="low">Swing low</option><option value="both">Both</option></select>
+            </label>
+            <label for="swing-from">From<input id="swing-from" type="date" required></label>
+            <label for="swing-to">To<input id="swing-to" type="date" required></label>
+            <button type="submit" id="swing-analyze">Analyze</button>
+          </div>
+        </form>
+        <p class="swing-status" id="swing-status" role="status" aria-live="polite">Choose settings and analyze historical candles.</p>
+        <div class="swing-table-wrap">
+          <table class="swing-table">
+            <thead><tr><th>Side</th><th>Pivot time</th><th>Level</th><th>Zone</th><th>Touches</th><th>Volume</th><th>Status</th><th>Action</th></tr></thead>
+            <tbody id="swing-rows"><tr><td class="swing-empty" colspan="7">No swing results yet.</td></tr></tbody>
+          </table>
+        </div>
+        <div class="swing-actions"><button type="button" id="swing-done">Close</button></div>
+      </div>
+    </dialog>
     <script>
       const expirySelect = document.querySelector("#expiry");
       const status = document.querySelector("#status");
@@ -274,6 +342,18 @@ export function renderOptionChainPage(): string {
       const openOrderRows = document.querySelector("#open-order-rows");
       const refreshOpenOrdersButton = document.querySelector("#refresh-open-orders");
       const orderDialog = document.querySelector("#order-dialog");
+      const swingDialog = document.querySelector("#swing-dialog");
+      const swingInstrumentLabel = document.querySelector("#swing-instrument");
+      const swingLtpLabel = document.querySelector("#swing-ltp");
+      const swingForm = document.querySelector("#swing-form");
+      const swingIntervalSelect = document.querySelector("#swing-interval");
+      const swingLookbackSelect = document.querySelector("#swing-lookback");
+      const swingSideSelect = document.querySelector("#swing-side");
+      const swingFromInput = document.querySelector("#swing-from");
+      const swingToInput = document.querySelector("#swing-to");
+      const swingStatus = document.querySelector("#swing-status");
+      const swingRows = document.querySelector("#swing-rows");
+      const swingAnalyzeButton = document.querySelector("#swing-analyze");
       const orderForm = document.querySelector("#order-form");
       const orderContractLabel = document.querySelector("#order-contract");
       const orderLtpLabel = document.querySelector("#order-ltp");
@@ -307,7 +387,12 @@ export function renderOptionChainPage(): string {
       let displayedStrikesKey = "";
       let selectedOrderContract;
       let orderSubmissionUncertain = false;
+      let selectedSwingContract;
+      let swingRequestId = 0;
+      let analyzedSwings = [];
       const optionPrices = new Map();
+      const volumeFormat = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 });
+      const swingMaxDays = { "1min": 30, "3min": 30, "5min": 30, "10min": 60, "15min": 60, "30min": 90, "60min": 90, D: 180, W: 180 };
 
       function setStatus(text, kind = "") {
         status.textContent = text;
@@ -466,6 +551,17 @@ export function renderOptionChainPage(): string {
         name.textContent = contract?.tradingSymbol ?? "—";
         cell.append(name);
         if (contract) {
+          const swingButton = document.createElement("button");
+          swingButton.className = "swing-button";
+          swingButton.type = "button";
+          swingButton.textContent = "SW";
+          swingButton.title = "View liquidity swings for " + contract.tradingSymbol;
+          swingButton.setAttribute("aria-label", "View liquidity swings for " + contract.tradingSymbol);
+          swingButton.addEventListener("click", () => {
+            void openSwingModal(contract);
+          });
+          cell.append(swingButton);
+
           const button = document.createElement("button");
           button.className = "buy-button";
           button.type = "button";
@@ -482,6 +578,190 @@ export function renderOptionChainPage(): string {
         }
         row.append(cell);
       }
+
+      function todayInIndia() {
+        const parts = new Intl.DateTimeFormat("en-CA", {
+          timeZone: "Asia/Kolkata",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        }).formatToParts(new Date());
+        const part = (type) => parts.find((item) => item.type === type).value;
+        return part("year") + "-" + part("month") + "-" + part("day");
+      }
+
+      function dateBefore(date, days) {
+        const result = new Date(date + "T00:00:00Z");
+        result.setUTCDate(result.getUTCDate() - days);
+        return result.toISOString().slice(0, 10);
+      }
+
+      function setSwingStatus(message, kind = "") {
+        swingStatus.textContent = message;
+        swingStatus.dataset.kind = kind;
+      }
+
+      function updateSwingLtp(price = optionPrices.get(selectedSwingContract?.tradingSymbol)) {
+        swingLtpLabel.textContent =
+          Number.isFinite(price) && price > 0
+            ? "LTP ₹" + numberFormat.format(price)
+            : "LTP unavailable";
+      }
+
+      function setSwingEmpty(message) {
+        swingRows.replaceChildren();
+        const row = document.createElement("tr");
+        const cell = document.createElement("td");
+        cell.className = "swing-empty";
+        cell.colSpan = 8;
+        cell.textContent = message;
+        row.append(cell);
+        swingRows.append(row);
+      }
+
+      function addSwingCell(row, text, className = "") {
+        const cell = document.createElement("td");
+        cell.textContent = text;
+        if (className) cell.className = className;
+        row.append(cell);
+      }
+
+      function renderSwingRows() {
+        const visibleSwings = analyzedSwings.filter((swing) =>
+          swingSideSelect.value === "both" || swing.side === swingSideSelect.value,
+        );
+        swingRows.replaceChildren();
+        if (!visibleSwings.length) {
+          setSwingEmpty("No swings match this side in the selected date range.");
+          return;
+        }
+        for (const swing of visibleSwings) {
+          const row = document.createElement("tr");
+          addSwingCell(row, swing.side === "high" ? "Swing high" : "Swing low", "swing-" + swing.side);
+          const pivotDate = new Date(swing.pivotTime);
+          addSwingCell(
+            row,
+            Number.isNaN(pivotDate.getTime())
+              ? swing.pivotTime
+              : pivotDate.toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }),
+          );
+          addSwingCell(row, numberFormat.format(swing.level));
+          addSwingCell(
+            row,
+            numberFormat.format(swing.zoneBottom) + " – " + numberFormat.format(swing.zoneTop),
+          );
+          addSwingCell(row, String(swing.intersectionCount));
+          addSwingCell(row, volumeFormat.format(swing.intersectionVolume));
+          addSwingCell(
+            row,
+            swing.crossedAt ? "Broken" : swing.qualifiedAt ? "Qualified" : "Tracking",
+          );
+          const actionCell = document.createElement("td");
+          const buyButton = document.createElement("button");
+          buyButton.className = "swing-buy";
+          buyButton.type = "button";
+          buyButton.textContent = "BUY";
+          buyButton.setAttribute(
+            "aria-label",
+            "Open buy order ticket for " + selectedSwingContract.tradingSymbol,
+          );
+          buyButton.addEventListener("click", () => {
+            const contract = selectedSwingContract;
+            if (!contract) return;
+            swingRequestId += 1;
+            swingDialog.close();
+            void openOrderTicket(contract);
+          });
+          actionCell.append(buyButton);
+          row.append(actionCell);
+          swingRows.append(row);
+        }
+      }
+
+      async function openSwingModal(contract) {
+        selectedSwingContract = contract;
+        swingRequestId += 1;
+        analyzedSwings = [];
+        swingInstrumentLabel.textContent = contract.tradingSymbol + " · " + expirySelect.value;
+        updateSwingLtp();
+        swingIntervalSelect.value = "1min";
+        swingLookbackSelect.value = "5";
+        swingSideSelect.value = "high";
+        swingToInput.value = todayInIndia();
+        swingFromInput.value = swingToInput.value;
+        setSwingStatus("Loading historical candles…");
+        setSwingEmpty("Loading swings…");
+        swingDialog.showModal();
+        await loadContractSwings();
+      }
+
+      async function loadContractSwings() {
+        if (!selectedSwingContract) return;
+        const from = swingFromInput.value;
+        const to = swingToInput.value;
+        const maxDays = swingMaxDays[swingIntervalSelect.value];
+        const range = (Date.parse(to + "T00:00:00Z") - Date.parse(from + "T00:00:00Z")) / 86400000;
+        if (!from || !to || !Number.isFinite(range) || range < 0 || range > maxDays) {
+          setSwingStatus("Select a valid date range within " + maxDays + " days for this interval.", "error");
+          return;
+        }
+
+        const requestId = ++swingRequestId;
+        swingAnalyzeButton.disabled = true;
+        setSwingStatus("Loading historical candles and analyzing swings…");
+        setSwingEmpty("Loading swings…");
+        const query = new URLSearchParams({
+          instrument: selectedSwingContract.tradingSymbol,
+          interval: swingIntervalSelect.value,
+          pivotLookback: swingLookbackSelect.value,
+          fromdate: from,
+          todate: to,
+        });
+        try {
+          const response = await fetch(
+            "/api/auto-trade/liquidity-swings?" + query,
+            { headers: { Accept: "application/json" } },
+          );
+          const payload = await response.json();
+          if (!response.ok) throw new Error(payload.error || "Could not load liquidity swings.");
+          if (requestId !== swingRequestId) return;
+          analyzedSwings = payload.swings;
+          renderSwingRows();
+          setSwingStatus(
+            payload.candleCount + " candles analyzed for " + payload.instrument + " (" + payload.interval + ").",
+          );
+        } catch (error) {
+          if (requestId !== swingRequestId) return;
+          analyzedSwings = [];
+          setSwingEmpty("No swing results available.");
+          setSwingStatus(
+            error instanceof Error ? error.message : "Could not load liquidity swings.",
+            "error",
+          );
+        } finally {
+          if (requestId === swingRequestId) swingAnalyzeButton.disabled = false;
+        }
+      }
+
+      swingForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        void loadContractSwings();
+      });
+      swingSideSelect.addEventListener("change", renderSwingRows);
+      swingIntervalSelect.addEventListener("change", () => {
+        const days = swingMaxDays[swingIntervalSelect.value];
+        const range = (Date.parse(swingToInput.value + "T00:00:00Z") -
+          Date.parse(swingFromInput.value + "T00:00:00Z")) / 86400000;
+        if (range > days) swingFromInput.value = dateBefore(swingToInput.value, days);
+      });
+      document.querySelector("#swing-close").addEventListener("click", () => {
+        swingRequestId += 1;
+        swingDialog.close();
+      });
+      document.querySelector("#swing-done").addEventListener("click", () => {
+        swingRequestId += 1;
+        swingDialog.close();
+      });
 
       async function openOrderTicket(contract) {
         orderError.textContent = "";
@@ -763,6 +1043,9 @@ export function renderOptionChainPage(): string {
             }
             optionPrices.set(tick.tradingSymbol, tick.price);
             setFeedStatus("live", "Live");
+            if (selectedSwingContract?.tradingSymbol === tick.tradingSymbol) {
+              updateSwingLtp(tick.price);
+            }
             if (selectedOrderContract?.tradingSymbol === tick.tradingSymbol) {
               updateOrderLtp(tick.price);
             }
@@ -821,11 +1104,11 @@ export function renderOptionChainPage(): string {
         const belowStrikes = pairedStrikes
           .filter((strike) => strike < liveSpotPrice)
           .sort((left, right) => right - left)
-          .slice(0, 3);
+          .slice(0, 5);
         const aboveStrikes = pairedStrikes
           .filter((strike) => strike > liveSpotPrice)
           .sort((left, right) => left - right)
-          .slice(0, 3);
+          .slice(0, 5);
         const sorted = [...belowStrikes, ...aboveStrikes].sort((left, right) => right - left);
         const selectedSymbols = new Set(
           sorted.flatMap((strike) => [
