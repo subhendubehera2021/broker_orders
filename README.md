@@ -194,6 +194,18 @@ Check the Kotak Neo order book before submitting it again. The option-chain BUY
 buttons open a ticket prefilled with one lot; review and confirm the live order
 before submission.
 
+For app-submitted BUY orders using MIS or NRML, the server arms an automatic
+SELL after Kotak's order stream reports the full fill. The SELL is an SL-limit
+order for the filled quantity, with its limit and trigger set to ₹5 below the
+average fill price (rounded to the nearest ₹0.05). The app shows armed,
+submitted, or failed status in Live activity. CO and BO BUY orders are not
+eligible. This automation runs on the authenticated server-side order stream,
+not in the browser; it stays active while the service is running and logged in.
+Pending auto-sells are held in memory and are lost if the service restarts or
+you log out. Configure `KOTAK_NEO_ORDER_BOOK_PATH` to reconcile pending BUYs
+after a stream reconnect. An SL-limit order may not fill if the market moves
+past its limit price, so this is not a guaranteed exit or a guaranteed loss cap.
+
 ## Configuration
 
 Copy `.env.example` to `.env` and set the values supplied for your Kotak Neo

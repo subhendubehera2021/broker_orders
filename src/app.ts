@@ -73,6 +73,21 @@ interface NiftyOptionOrderBody {
   lastTradedPrice?: string;
 }
 
+interface AutoSellCandidate {
+  orderNumber: string;
+  session: AuthenticatedSession;
+  contract: NiftyOptionContract;
+  quantity: number;
+  product: "MIS" | "NRML";
+}
+
+interface AutoSellNotice {
+  sourceOrderNumber: string;
+  status: "armed" | "submitted" | "failed";
+  message: string;
+  sellOrderNumber?: string;
+}
+
 interface AuthClient {
   login(input: KotakLoginInput): Promise<AuthenticatedSession>;
   getScripMaster(): Promise<unknown>;
@@ -254,12 +269,264 @@ export function buildApp({
     let session: AuthenticatedSession | undefined;
     const activeNiftyStreams = new Set<() => void>();
     const activeOrderStreams = new Set<() => void>();
+    const autoSellCandidates = new Map<string, AutoSellCandidate>();
+    const recentOrderUpdates = new Map<string, Record<string, unknown>>();
+    const autoSellListeners = new Set<(notice: AutoSellNotice) => void>();
+    const orderStreamSubscribers = new Set<(name: string, value: unknown) => void>();
+    let orderStreamState: OrderPositionConnectionState = "connecting";
+    let autoSellStreamAvailable = false;
+    let stopAutoSellStream: (() => void) | undefined;
+    let autoSellReconciliation: Promise<void> | undefined;
     let niftyContractsLoad: Promise<NiftyOptionContract[]> | undefined;
 
     api.addHook("onClose", async () => {
       for (const closeStream of activeNiftyStreams) closeStream();
       for (const closeStream of activeOrderStreams) closeStream();
+      stopAutoSellStream?.();
+      stopAutoSellStream = undefined;
+      autoSellStreamAvailable = false;
+      autoSellCandidates.clear();
+      recentOrderUpdates.clear();
+      autoSellListeners.clear();
+      orderStreamSubscribers.clear();
     });
+
+    const notifyAutoSell = (notice: AutoSellNotice): void => {
+      for (const listener of autoSellListeners) listener(notice);
+    };
+
+    const processCompletedBuy = (
+      candidate: AutoSellCandidate,
+      order: Record<string, unknown>,
+      log: FastifyInstance["log"],
+    ): void => {
+      const filledValue = Number(orderRecordValue(order, ["fldQty", "filledQuantity", "filled_qty"]));
+      const orderQuantityValue = Number(orderRecordValue(order, ["qty", "quantity", "orderQty"]));
+      const orderQuantity =
+        Number.isSafeInteger(orderQuantityValue) && orderQuantityValue > 0
+          ? orderQuantityValue
+          : candidate.quantity;
+      const orderStatus = orderRecordValue(order, ["ordSt", "orderStatus", "status"])
+        .toLowerCase()
+        .replace(/[_-]+/g, " ")
+        .trim();
+      const isCompleteStatus = ["complete", "completed", "filled", "fully executed"].includes(orderStatus);
+      if (
+        !Number.isSafeInteger(filledValue) ||
+        filledValue <= 0 ||
+        filledValue < orderQuantity ||
+        (!isCompleteStatus && filledValue < candidate.quantity)
+      ) {
+        return;
+      }
+
+      const activeCandidate = autoSellCandidates.get(candidate.orderNumber);
+      if (activeCandidate !== candidate) return;
+      autoSellCandidates.delete(candidate.orderNumber);
+
+      const averagePrice = Number(orderRecordValue(order, ["avgPrc", "averagePrice", "avg_price"]));
+      const targetPrice = Math.round((averagePrice - 5) * 20) / 20;
+      const lotSize = Number(candidate.contract.lotSize);
+      if (
+        !Number.isFinite(averagePrice) ||
+        averagePrice <= 0 ||
+        !Number.isFinite(targetPrice) ||
+        targetPrice <= 0 ||
+        !Number.isSafeInteger(filledValue) ||
+        !Number.isSafeInteger(lotSize) ||
+        lotSize < 1 ||
+        filledValue % lotSize !== 0
+      ) {
+        const message =
+          "Auto-sell could not be placed: fill price, stop price, or filled quantity is invalid.";
+        log.error(
+          { sourceOrderNumber: candidate.orderNumber, filledQuantity: filledValue, averagePrice },
+          message,
+        );
+        notifyAutoSell({
+          sourceOrderNumber: candidate.orderNumber,
+          status: "failed",
+          message,
+        });
+        return;
+      }
+
+      void (async () => {
+        try {
+          if (session !== candidate.session || !client?.placeNiftyOptionOrder) {
+            throw new Error("Kotak Neo session is no longer active");
+          }
+          const result = await client.placeNiftyOptionOrder(candidate.session, {
+            tradingSymbol: candidate.contract.tradingSymbol,
+            instrumentToken: candidate.contract.instrumentToken,
+            transactionType: "S",
+            quantity: String(filledValue),
+            product: candidate.product,
+            orderType: "SL",
+            price: targetPrice.toFixed(2),
+            validity: "DAY",
+            amo: "NO",
+            disclosedQuantity: "0",
+            marketProtection: "0",
+            triggerPrice: targetPrice.toFixed(2),
+            tag: `AT5-${randomBytes(8).toString("hex")}`,
+          });
+          const sellOrderNumber = orderBookRecords(result)
+            .map((record) => orderRecordValue(record, ["nOrdNo", "orderId", "order_id"]))
+            .find(Boolean);
+          log.info(
+            {
+              sourceOrderNumber: candidate.orderNumber,
+              sellOrderNumber,
+              tradingSymbol: candidate.contract.tradingSymbol,
+              quantity: filledValue,
+              averagePrice,
+              stopPrice: targetPrice,
+            },
+            "Automatic SELL stop-limit order placed",
+          );
+          notifyAutoSell({
+            sourceOrderNumber: candidate.orderNumber,
+            status: "submitted",
+            message:
+              `SELL stop-limit submitted for ${filledValue} units at ₹${targetPrice.toFixed(2)}` +
+              (sellOrderNumber ? ` · order ${sellOrderNumber}` : ""),
+            ...(sellOrderNumber ? { sellOrderNumber } : {}),
+          });
+        } catch (error) {
+          const statusCode = orderRequestStatus(error);
+          const outcomeUncertain = statusCode === 502 || statusCode === 503 || statusCode === 504;
+          const message = outcomeUncertain
+            ? "Auto-sell outcome is uncertain; check the Kotak Neo order book before retrying."
+            : `Auto-sell failed: ${
+                error instanceof Error ? error.message : "Kotak Neo rejected the automatic SELL order"
+              }`;
+          log.error(
+            {
+              sourceOrderNumber: candidate.orderNumber,
+              tradingSymbol: candidate.contract.tradingSymbol,
+              quantity: filledValue,
+              stopPrice: targetPrice,
+              statusCode,
+              outcomeUncertain,
+              errorName: error instanceof Error ? error.name : "UnknownError",
+              errorMessage: error instanceof Error ? error.message : "unknown error",
+            },
+            "Automatic SELL stop-limit order failed",
+          );
+          notifyAutoSell({
+            sourceOrderNumber: candidate.orderNumber,
+            status: "failed",
+            message,
+          });
+        }
+      })();
+    };
+
+    const handleOrderUpdate = (
+      order: Record<string, unknown>,
+      log: FastifyInstance["log"],
+    ): void => {
+      const orderNumber = orderRecordValue(order, ["nOrdNo", "orderId", "order_id"]);
+      if (!orderNumber) return;
+      const mergedOrder = { ...(recentOrderUpdates.get(orderNumber) ?? {}), ...order };
+      recentOrderUpdates.delete(orderNumber);
+      recentOrderUpdates.set(orderNumber, mergedOrder);
+      if (recentOrderUpdates.size > 2000) {
+        const oldestOrderNumber = recentOrderUpdates.keys().next().value;
+        if (oldestOrderNumber) recentOrderUpdates.delete(oldestOrderNumber);
+      }
+      const candidate = autoSellCandidates.get(orderNumber);
+      if (candidate) processCompletedBuy(candidate, mergedOrder, log);
+    };
+
+    const reconcileAutoSellOrders = async (
+      authenticatedSession: AuthenticatedSession,
+      log: FastifyInstance["log"],
+    ): Promise<void> => {
+      if (
+        autoSellReconciliation ||
+        !autoSellCandidates.size ||
+        !client?.getOrderBook ||
+        !config.kotakNeo.orderBookPath
+      ) {
+        return;
+      }
+      autoSellReconciliation = (async () => {
+        try {
+          const orderBook = await client.getOrderBook!(authenticatedSession);
+          for (const order of orderBookRecords(orderBook)) {
+            handleOrderUpdate(order, log);
+          }
+        } catch (error) {
+          log.error(
+            {
+              errorName: error instanceof Error ? error.name : "UnknownError",
+              errorMessage: error instanceof Error ? error.message : "unknown error",
+            },
+            "Automatic SELL order reconciliation failed",
+          );
+        } finally {
+          autoSellReconciliation = undefined;
+        }
+      })();
+      await autoSellReconciliation;
+    };
+
+    const broadcastOrderStreamEvent = (name: string, value: unknown): void => {
+      for (const subscriber of orderStreamSubscribers) subscriber(name, value);
+    };
+
+    const startAutoSellStream = (authenticatedSession: AuthenticatedSession): void => {
+      autoSellStreamAvailable = false;
+      if (!client?.streamOrderPositionUpdates || !authenticatedSession.baseUrl) {
+        app.log.error(
+          { hasStreamClient: Boolean(client?.streamOrderPositionUpdates), hasBaseUrl: Boolean(authenticatedSession.baseUrl) },
+          "Automatic SELL monitoring could not start because the Kotak order stream is unavailable",
+        );
+        broadcastOrderStreamEvent("stream-error", {
+          error: "Automatic SELL monitoring is unavailable for this Kotak Neo session.",
+        });
+        return;
+      }
+      orderStreamState = "connecting";
+      try {
+        stopAutoSellStream = client.streamOrderPositionUpdates(
+          authenticatedSession,
+          (update) => {
+            broadcastOrderStreamEvent(update.type, update.data);
+            if (update.type === "order") handleOrderUpdate(update.data, app.log);
+          },
+          (state) => {
+            orderStreamState = state;
+            broadcastOrderStreamEvent("connection", { state });
+            if (state === "connected") {
+              void reconcileAutoSellOrders(authenticatedSession, app.log);
+            }
+          },
+          (error) => {
+            app.log.error(
+              { errorName: error.name, errorMessage: error.message },
+              "Kotak order and position stream reported an error",
+            );
+            broadcastOrderStreamEvent("stream-error", { error: error.message });
+          },
+        );
+        autoSellStreamAvailable = true;
+      } catch (error) {
+        autoSellStreamAvailable = false;
+        app.log.error(
+          {
+            errorName: error instanceof Error ? error.name : "UnknownError",
+            errorMessage: error instanceof Error ? error.message : "unknown error",
+          },
+          "Kotak order and position stream could not start",
+        );
+        broadcastOrderStreamEvent("stream-error", {
+          error: "Kotak order and position stream could not start",
+        });
+      }
+    };
 
     const getNiftyContracts = (): Promise<NiftyOptionContract[]> => {
       niftyContractsLoad ??= optionChainCsvLoader()
@@ -423,7 +690,6 @@ export function buildApp({
           });
         }
 
-        const authenticatedSession = session;
         reply.hijack();
         const response = reply.raw;
         response.writeHead(200, {
@@ -435,7 +701,6 @@ export function buildApp({
         response.write("retry: 3000\n\n");
 
         let closed = false;
-        let stopStream: (() => void) | undefined;
         const keepAlive = setInterval(() => {
           if (!closed && !response.destroyed) response.write(": keep-alive\n\n");
         }, 20_000);
@@ -445,7 +710,8 @@ export function buildApp({
           clearInterval(keepAlive);
           response.off("close", closeStream);
           activeOrderStreams.delete(closeStream);
-          stopStream?.();
+          autoSellListeners.delete(writeAutoSellEvent);
+          orderStreamSubscribers.delete(writeOrderEvent);
           if (!response.destroyed && !response.writableEnded) response.end();
         };
         const writeEvent = (name: string, value: unknown) => {
@@ -453,31 +719,13 @@ export function buildApp({
             response.write(`event: ${name}\ndata: ${JSON.stringify(value)}\n\n`);
           }
         };
+        const writeAutoSellEvent = (notice: AutoSellNotice) => writeEvent("auto-sell", notice);
+        const writeOrderEvent = (name: string, value: unknown) => writeEvent(name, value);
+        autoSellListeners.add(writeAutoSellEvent);
+        orderStreamSubscribers.add(writeOrderEvent);
         activeOrderStreams.add(closeStream);
         response.once("close", closeStream);
-
-        try {
-          stopStream = client.streamOrderPositionUpdates(
-            authenticatedSession,
-            (update) => writeEvent(update.type, update.data),
-            (state) => writeEvent("connection", { state }),
-            (error) => {
-              request.log.error(
-                { errorName: error.name, errorMessage: error.message },
-                "Kotak order and position stream reported an error",
-              );
-              writeEvent("stream-error", { error: error.message });
-            },
-          );
-          if (closed) stopStream();
-        } catch (error) {
-          request.log.error(
-            { errorName: error instanceof Error ? error.name : "UnknownError" },
-            "Kotak order and position stream could not start",
-          );
-          writeEvent("stream-error", { error: "Kotak order and position stream could not start" });
-          closeStream();
-        }
+        writeEvent("connection", { state: orderStreamState });
         return reply;
       },
     );
@@ -894,6 +1142,11 @@ export function buildApp({
 
         for (const closeStream of activeNiftyStreams) closeStream();
         for (const closeStream of activeOrderStreams) closeStream();
+        stopAutoSellStream?.();
+        stopAutoSellStream = undefined;
+        autoSellStreamAvailable = false;
+        autoSellCandidates.clear();
+        recentOrderUpdates.clear();
         session = undefined;
         try {
           session = await client.login({
@@ -902,6 +1155,7 @@ export function buildApp({
             mpin,
             totp: request.body.totp,
           });
+          startAutoSellStream(session);
           return { authenticated: true };
         } catch (error) {
           const statusCode = authenticationErrorStatus(error);
@@ -935,6 +1189,11 @@ export function buildApp({
       async () => {
         for (const closeStream of activeNiftyStreams) closeStream();
         for (const closeStream of activeOrderStreams) closeStream();
+        stopAutoSellStream?.();
+        stopAutoSellStream = undefined;
+        autoSellStreamAvailable = false;
+        autoSellCandidates.clear();
+        recentOrderUpdates.clear();
         session = undefined;
         return { authenticated: false };
       },
@@ -1545,7 +1804,7 @@ export function buildApp({
           }
 
           brokerRequestStarted = true;
-          return await client.placeNiftyOptionOrder(authenticatedSession, {
+          const orderResponse = await client.placeNiftyOptionOrder(authenticatedSession, {
             tradingSymbol: contract.tradingSymbol,
             instrumentToken: contract.instrumentToken,
             transactionType: body.transactionType,
@@ -1567,6 +1826,67 @@ export function buildApp({
             ...(body.trailingSlValue !== undefined ? { trailingSlValue: body.trailingSlValue } : {}),
             ...(body.lastTradedPrice ? { lastTradedPrice: body.lastTradedPrice } : {}),
           });
+          if (body.transactionType === "B") {
+            if (body.product !== "MIS" && body.product !== "NRML") {
+              notifyAutoSell({
+                sourceOrderNumber: "",
+                status: "failed",
+                message: `Auto-sell is not supported for ${body.product} BUY orders.`,
+              });
+            } else {
+              const orderNumber = orderBookRecords(orderResponse)
+                .map((record) => orderRecordValue(record, ["nOrdNo", "orderId", "order_id"]))
+                .find(Boolean);
+              if (!orderNumber) {
+                request.log.warn(
+                  { tradingSymbol: contract.tradingSymbol },
+                  "Auto-sell could not be armed because Kotak Neo did not return the BUY order number",
+                );
+                notifyAutoSell({
+                  sourceOrderNumber: "",
+                  status: "failed",
+                  message: "Auto-sell could not be armed: Kotak Neo did not return the BUY order number.",
+                });
+              } else if (!autoSellStreamAvailable) {
+                request.log.error(
+                  { orderNumber },
+                  "Auto-sell could not be armed because the server-side order stream is unavailable",
+                );
+                notifyAutoSell({
+                  sourceOrderNumber: orderNumber,
+                  status: "failed",
+                  message: "Auto-sell could not be armed: the server-side Kotak order stream is unavailable.",
+                });
+              } else if (autoSellCandidates.size >= 2000) {
+                request.log.error(
+                  { orderNumber },
+                  "Auto-sell candidate limit reached; BUY order will not be monitored",
+                );
+                notifyAutoSell({
+                  sourceOrderNumber: orderNumber,
+                  status: "failed",
+                  message: "Auto-sell could not be armed: too many pending app BUY orders.",
+                });
+              } else {
+                const candidate: AutoSellCandidate = {
+                  orderNumber,
+                  session: authenticatedSession,
+                  contract,
+                  quantity: Number(body.quantity),
+                  product: body.product,
+                };
+                autoSellCandidates.set(orderNumber, candidate);
+                notifyAutoSell({
+                  sourceOrderNumber: orderNumber,
+                  status: "armed",
+                  message: `Auto-sell armed for BUY order ${orderNumber}; waiting for full fill.`,
+                });
+                const recentUpdate = recentOrderUpdates.get(orderNumber);
+                if (recentUpdate) processCompletedBuy(candidate, recentUpdate, request.log);
+              }
+            }
+          }
+          return orderResponse;
         } catch (error) {
           const statusCode = orderRequestStatus(error);
           const outcomeUncertain =

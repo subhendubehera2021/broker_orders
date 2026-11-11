@@ -208,6 +208,7 @@ export function renderOptionChainPage(): string {
         <section class="panel activity-panel" id="live-activity" aria-label="Live order updates">
           <h2>Live activity</h2>
           <p class="activity-status" id="activity-stream-status" data-state="connecting" role="status" aria-live="polite">Checking your Kotak Neo session…</p>
+          <p class="activity-status" id="activity-auto-sell-status" role="status" aria-live="polite">Auto-sell: waiting for app BUY orders.</p>
           <div class="activity-table-wrap">
             <table class="activity-table">
               <thead><tr><th>Order ID</th><th>Symbol</th><th>Side</th><th>Quantity</th><th>Filled</th><th>Average price</th><th>Status</th><th>Updated</th></tr></thead>
@@ -374,6 +375,7 @@ export function renderOptionChainPage(): string {
       const openOrderRows = document.querySelector("#open-order-rows");
       const refreshOpenOrdersButton = document.querySelector("#refresh-open-orders");
       const activityStatusLabel = document.querySelector("#activity-stream-status");
+      const activityAutoSellStatus = document.querySelector("#activity-auto-sell-status");
       const activityOrderBody = document.querySelector("#activity-order-updates");
       const activityPositionBody = document.querySelector("#activity-position-updates");
       const activityPositionStatus = document.querySelector("#activity-position-status");
@@ -637,6 +639,12 @@ export function renderOptionChainPage(): string {
             const message = JSON.parse(event.data);
             activityStatusLabel.textContent = message.error || "Kotak Neo stream reported an error.";
             activityStatusLabel.dataset.state = "error";
+          });
+          activityEventSource.addEventListener("auto-sell", (event) => {
+            const notice = JSON.parse(event.data);
+            activityAutoSellStatus.textContent = notice.message || "Automatic SELL update received.";
+            activityAutoSellStatus.dataset.state =
+              notice.status === "failed" ? "error" : notice.status === "submitted" ? "connected" : "";
           });
           activityEventSource.onerror = () => {
             activityStatusLabel.textContent = "Connection interrupted; reconnecting…";
@@ -1223,13 +1231,20 @@ export function renderOptionChainPage(): string {
         const sideLabel = side === "B" ? "BUY" : "SELL";
         const orderTypeLabel = orderTypeSelect.selectedOptions[0].textContent;
         const productLabel = orderProductSelect.selectedOptions[0].textContent;
+        const autoSellNote =
+          side !== "B"
+            ? ""
+            : product === "MIS" || product === "NRML"
+              ? "\\nAuto-sell: after full fill, place an SL-limit SELL 5 points below the average fill price."
+              : "\\nAuto-sell is not enabled for " + product + " BUY orders.";
         const confirmation =
           "Place a LIVE " + sideLabel + " order?\\n\\n" +
           selectedOrderContract.tradingSymbol + " · " + expirySelect.value + "\\n" +
           quantity + " units (" + lots + " lot" + (lots === 1 ? "" : "s") + ") · " +
           productLabel + " · " + orderTypeLabel + " · " + orderValiditySelect.value +
           "\\nPrice ₹" + numberFormat.format(price) +
-          (triggerRequired ? " · Trigger ₹" + numberFormat.format(triggerPrice) : "");
+          (triggerRequired ? " · Trigger ₹" + numberFormat.format(triggerPrice) : "") +
+          autoSellNote;
         if (!window.confirm(confirmation)) return;
 
         orderSubmitButton.disabled = true;

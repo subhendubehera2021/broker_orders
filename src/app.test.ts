@@ -3,7 +3,11 @@ import { afterEach, describe, it } from "node:test";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "./app.js";
 import type { AppConfig } from "./config.js";
-import { KotakNeoError, type AuthenticatedSession } from "./kotak-neo-client.js";
+import {
+  KotakNeoError,
+  type AuthenticatedSession,
+  type PlaceNiftyOptionOrderInput,
+} from "./kotak-neo-client.js";
 
 const config: AppConfig = {
   host: "127.0.0.1",
@@ -196,9 +200,12 @@ describe("authentication routes", () => {
     assert.match(response.body, /<h2>Open orders<\/h2>/);
     assert.match(response.body, /id="live-activity" aria-label="Live order updates"/);
     assert.match(response.body, /id="activity-stream-status"/);
+    assert.match(response.body, /id="activity-auto-sell-status"/);
     assert.match(response.body, /id="activity-order-updates"/);
     assert.match(response.body, /id="activity-position-updates"/);
     assert.match(response.body, /new EventSource\("\/api\/orders\/stream"\)/);
+    assert.match(response.body, /addEventListener\("auto-sell"/);
+    assert.match(response.body, /Auto-sell: after full fill, place an SL-limit SELL 5 points below the average fill price/);
     assert.match(response.body, /fetch\("\/api\/positions"/);
     assert.match(response.body, /void connectActivityStream\(\)/);
     assert.match(response.body, /href="#live-activity">Live activity<\/a>/);
@@ -1233,6 +1240,119 @@ describe("authentication routes", () => {
       triggerPrice: "0",
       tag: "test-order",
     });
+  });
+
+  it("places one automatic SELL stop-limit after an app BUY order is fully filled", async () => {
+    const expiryEpoch = String(Date.UTC(2030, 0, 30) / 1000 - 315_511_200);
+    const csv = [
+      "pSymbol,pInstType,pSymbolName,pTrdSymbol,pOptionType,pExpiryDate,dStrikePrice;,lLotSize",
+      `123,OPTIDX,NIFTY,NIFTY30JAN2030CE,CE,${expiryEpoch},2500000,25`,
+    ].join("\n");
+    const orderInputs: PlaceNiftyOptionOrderInput[] = [];
+    let receiveOrderUpdate:
+      | ((update: { type: "order" | "position"; data: Record<string, unknown> }) => void)
+      | undefined;
+    let resolveSell: (() => void) | undefined;
+    const sellPlaced = new Promise<void>((resolve) => {
+      resolveSell = resolve;
+    });
+    const app = buildApp({
+      config: {
+        ...config,
+        kotakNeo: {
+          ...config.kotakNeo,
+          placeOrderPath: "quick/order/place",
+          orderSource: "NEOTRADEAPI",
+        },
+      },
+      authClient: {
+        async login() {
+          return { ...authenticatedSession, baseUrl: "https://kotak.example/" };
+        },
+        async getScripMaster() { return { data: { filesPaths: [] } }; },
+        streamOrderPositionUpdates(_session, onUpdate, onState) {
+          receiveOrderUpdate = onUpdate;
+          onState("connected");
+          return () => {};
+        },
+        async placeNiftyOptionOrder(_session, input) {
+          orderInputs.push(input);
+          if (input.transactionType === "S") resolveSell?.();
+          return {
+            stat: "Ok",
+            nOrdNo: input.transactionType === "B" ? "buy-42" : "sell-42",
+          };
+        },
+      },
+      optionChainCsvLoader: async () => csv,
+    });
+    apps.push(app);
+
+    await app.inject({ method: "POST", url: "/api/auth/login", payload: { totp: "123456" } });
+    assert.ok(receiveOrderUpdate);
+    const buyResponse = await app.inject({
+      method: "POST",
+      url: "/api/options/nifty/order",
+      payload: {
+        expiry: "30JAN2030",
+        tradingSymbol: "NIFTY30JAN2030CE",
+        transactionType: "B",
+        quantity: "50",
+        product: "MIS",
+        orderType: "L",
+        price: "102.50",
+        validity: "DAY",
+      },
+    });
+    assert.equal(buyResponse.statusCode, 200);
+
+    receiveOrderUpdate({
+      type: "order",
+      data: { nOrdNo: "buy-42", trnsTp: "B", ordSt: "open", qty: "50", fldQty: "25", avgPrc: "102.50" },
+    });
+    assert.equal(orderInputs.length, 1, "partial fills must not submit an automatic SELL");
+
+    receiveOrderUpdate({
+      type: "order",
+      data: {
+        nOrdNo: "buy-42",
+        trnsTp: "B",
+        ordSt: "complete",
+        qty: "50",
+        fldQty: "50",
+        avgPrc: "102.50",
+      },
+    });
+    await sellPlaced;
+    receiveOrderUpdate({
+      type: "order",
+      data: {
+        nOrdNo: "buy-42",
+        trnsTp: "B",
+        ordSt: "complete",
+        qty: "50",
+        fldQty: "50",
+        avgPrc: "102.50",
+      },
+    });
+
+    assert.equal(orderInputs.length, 2, "duplicate fill events must not submit duplicate SELL orders");
+    assert.deepEqual(orderInputs[1], {
+      tradingSymbol: "NIFTY30JAN2030CE",
+      instrumentToken: "123",
+      transactionType: "S",
+      quantity: "50",
+      product: "MIS",
+      orderType: "SL",
+      price: "97.50",
+      validity: "DAY",
+      amo: "NO",
+      disclosedQuantity: "0",
+      marketProtection: "0",
+      triggerPrice: "97.50",
+      tag: orderInputs[1]?.tag,
+    });
+    assert.match(String(orderInputs[1]?.tag), /^AT5-[0-9a-f]{16}$/);
   });
 
   it("accepts each documented NIFTY order type and sends bracket parameters", async () => {
