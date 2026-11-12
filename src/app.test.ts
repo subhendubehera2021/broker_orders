@@ -211,6 +211,16 @@ describe("authentication routes", () => {
     assert.match(response.body, /href="#live-activity">Live activity<\/a>/);
     assert.match(response.body, /id="refresh-open-orders"/);
     assert.match(response.body, /aria-label="Refresh orders" title="Refresh orders"/);
+    assert.match(response.body, /aria-label="Closed orders"/);
+    assert.match(response.body, /<h2>Closed orders<\/h2>/);
+    assert.match(response.body, /id="closed-orders-status"/);
+    assert.match(response.body, /id="closed-order-rows"/);
+    assert.match(response.body, /function isClosedOrder\(order\)/);
+    assert.match(response.body, /renderClosedOrders\(orders\)/);
+    assert.ok(
+      response.body.indexOf('aria-label="Closed orders"') >
+        response.body.indexOf('aria-label="Live position updates"'),
+    );
     assert.match(response.body, /class="panel orders-panel"/);
     assert.match(response.body, /open-orders-table \{ min-width: 780px; font-size: 12px; \}/);
     assert.match(response.body, /<th scope="col">Select<\/th>/);

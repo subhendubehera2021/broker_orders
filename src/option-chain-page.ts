@@ -250,6 +250,16 @@ export function renderOptionChainPage(): string {
             </table>
           </div>
         </section>
+        <section class="panel activity-panel" aria-label="Closed orders">
+          <h2>Closed orders</h2>
+          <p class="activity-status" id="closed-orders-status" role="status" aria-live="polite">Loading closed orders…</p>
+          <div class="activity-table-wrap">
+            <table class="activity-table">
+              <thead><tr><th>Order ID</th><th>Instrument</th><th>Side</th><th>Qty</th><th>Price</th><th>Average price</th><th>Status</th><th>Time</th><th>Reason</th></tr></thead>
+              <tbody id="closed-order-rows"><tr><td class="activity-empty" colspan="9">Loading closed orders…</td></tr></tbody>
+            </table>
+          </div>
+        </section>
       </main>
     </div>
     <dialog class="order-dialog" id="order-dialog" aria-labelledby="order-title">
@@ -398,6 +408,8 @@ export function renderOptionChainPage(): string {
       const openOrdersStatus = document.querySelector("#open-orders-status");
       const openOrderRows = document.querySelector("#open-order-rows");
       const refreshOpenOrdersButton = document.querySelector("#refresh-open-orders");
+      const closedOrdersStatus = document.querySelector("#closed-orders-status");
+      const closedOrderRows = document.querySelector("#closed-order-rows");
       const orderTitle = document.querySelector("#order-title");
       const activityStatusLabel = document.querySelector("#activity-stream-status");
       const activityAutoSellStatus = document.querySelector("#activity-auto-sell-status");
@@ -734,6 +746,24 @@ export function renderOptionChainPage(): string {
         ].includes(orderStatus);
       }
 
+      function isClosedOrder(order) {
+        const orderStatus = orderValue(order, ["ordSt", "orderStatus", "status", "stat"])
+          .toLowerCase()
+          .replace(/[_-]+/g, " ")
+          .trim();
+        return [
+          "complete",
+          "completed",
+          "traded",
+          "fully executed",
+          "cancelled",
+          "canceled",
+          "rejected",
+          "expired",
+          "closed",
+        ].includes(orderStatus);
+      }
+
       function renderOpenOrders(orders) {
         const openOrders = orders.filter(isOpenOrder);
         openOrdersByNumber.clear();
@@ -808,6 +838,47 @@ export function renderOptionChainPage(): string {
           openOrderRows.append(row);
         }
         return openOrders.length;
+      }
+
+      function renderClosedOrders(orders) {
+        const closedOrders = orders.filter(isClosedOrder);
+        closedOrderRows.replaceChildren();
+        closedOrdersStatus.dataset.kind = "";
+        if (!closedOrders.length) {
+          const row = document.createElement("tr");
+          const cell = document.createElement("td");
+          cell.className = "activity-empty";
+          cell.colSpan = 9;
+          cell.textContent = "No closed orders.";
+          row.append(cell);
+          closedOrderRows.append(row);
+          closedOrdersStatus.textContent = "0 closed orders.";
+          return 0;
+        }
+
+        for (const order of closedOrders) {
+          const row = document.createElement("tr");
+          const fields = [
+            ["nOrdNo", "orderId", "order_id"],
+            ["trdSym", "tradingSymbol", "trading_symbol", "ts"],
+            ["trnsTp", "transactionType", "transaction_type", "tt"],
+            ["qty", "quantity", "qt"],
+            ["prc", "price", "pr"],
+            ["avgPrc", "averagePrice", "average_price"],
+            ["ordSt", "orderStatus", "status", "stat"],
+            ["ordDtTm", "orderDateTime", "order_datetime", "timestamp"],
+            ["rejRsn", "rejectionReason", "rejection_reason"],
+          ];
+          for (const keys of fields) {
+            const cell = document.createElement("td");
+            cell.textContent = orderValue(order, keys);
+            row.append(cell);
+          }
+          closedOrderRows.append(row);
+        }
+        closedOrdersStatus.textContent =
+          closedOrders.length + " closed order" + (closedOrders.length === 1 ? "" : "s") + ".";
+        return closedOrders.length;
       }
 
       async function openModifyOrder(order) {
@@ -1051,7 +1122,9 @@ export function renderOptionChainPage(): string {
           const payload = await response.json();
           if (!response.ok) throw new Error(payload.error || "Could not load open orders.");
           uncertainPriceModifications.clear();
-          const count = renderOpenOrders(extractOrders(payload));
+          const orders = extractOrders(payload);
+          const count = renderOpenOrders(orders);
+          renderClosedOrders(orders);
           openOrdersStatus.textContent =
             count + " open order" + (count === 1 ? "" : "s") + ".";
         } catch (error) {
@@ -1065,6 +1138,17 @@ export function renderOptionChainPage(): string {
           openOrdersStatus.textContent =
             error instanceof Error ? error.message : "Could not load open orders.";
           openOrdersStatus.dataset.kind = "error";
+          closedOrderRows.replaceChildren();
+          const closedRow = document.createElement("tr");
+          const closedCell = document.createElement("td");
+          closedCell.className = "activity-empty";
+          closedCell.colSpan = 9;
+          closedCell.textContent = "Closed orders could not be loaded.";
+          closedRow.append(closedCell);
+          closedOrderRows.append(closedRow);
+          closedOrdersStatus.textContent =
+            error instanceof Error ? error.message : "Could not load closed orders.";
+          closedOrdersStatus.dataset.kind = "error";
         } finally {
           refreshOpenOrdersButton.disabled = false;
         }
