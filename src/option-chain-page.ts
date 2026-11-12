@@ -90,7 +90,6 @@ export function renderOptionChainPage(): string {
       .column-head th { top: 36px; height: 38px; background: #111820; color: #aab7c5; font-size: 10px; }
       th.call-subhead { background: #172126; }
       th.put-subhead { background: #11191d; }
-      th.instrument-head { text-align: left; }
       th.price-head { text-align: right; }
       th.strike-head { color: var(--accent); text-align: center; }
       td { color: #d7e0e9; font-variant-numeric: tabular-nums; }
@@ -99,21 +98,22 @@ export function renderOptionChainPage(): string {
       tbody tr:not(.spot-row):last-child td { border-bottom: 0; }
       th.call-head { color: #a9ddd0 !important; text-align: center; }
       th.put-head { color: #b6c2ce !important; text-align: center; }
-      td.call-instrument, td.call-price { background: #171f24; }
-      td.put-price, td.put-instrument { background: #12191e; }
-      td.call-instrument, td.put-instrument { position: relative; }
+      td.call-price { background: #171f24; }
+      td.put-price { background: #12191e; }
       td.call-price, td.strike-cell, td.put-price { font-size: 15px; font-weight: 650; }
       td.call-price { color: #e2e9ed; text-align: right; }
       td.strike-cell { background: #0d1217; color: #f0f3f6; font-size: 16px; font-weight: 750; text-align: center; }
       td.put-price { color: #e2e9ed; text-align: left; }
-      td.put-instrument { text-align: right; }
-      .instrument-name { display: block; overflow: hidden; padding-right: 100px; color: #cbd6df; font-size: 11px; font-weight: 550; text-overflow: ellipsis; }
-      .buy-button { position: absolute; top: 50%; right: 8px; height: 26px; padding: 0 10px; transform: translateY(-50%); border: 1px solid #416b60; border-radius: 6px; background: #1b302a; color: #9ce0cb; font-size: 10px; font-weight: 800; letter-spacing: .06em; opacity: 0; pointer-events: none; transition: opacity .12s ease; }
-      .option-row:hover .buy-button, .option-row:focus-within .buy-button { opacity: .9; pointer-events: auto; }
-      .buy-button:disabled { cursor: default; opacity: 0; pointer-events: none; }
-      .option-row:hover .buy-button:disabled, .option-row:focus-within .buy-button:disabled { opacity: .9; }
-      .swing-button { position: absolute; top: 50%; right: 54px; height: 26px; padding: 0 7px; transform: translateY(-50%); border: 1px solid #53677d; border-radius: 6px; background: #202b38; color: #c4d2e0; font-size: 9px; font-weight: 800; letter-spacing: .04em; opacity: 0; pointer-events: none; transition: opacity .12s ease; }
-      .option-row:hover .swing-button, .option-row:focus-within .swing-button { opacity: .9; pointer-events: auto; }
+      .price-action-wrap { display: flex; width: 100%; min-width: 0; align-items: center; justify-content: space-between; gap: 8px; }
+      td.call-price .price-action-wrap { flex-direction: row-reverse; }
+      .option-price { min-width: 0; }
+      .option-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 4px; }
+      .buy-button, .swing-button { position: static; height: 26px; padding: 0 7px; transform: none; border-radius: 6px; font-size: 9px; font-weight: 800; letter-spacing: .04em; opacity: 1; pointer-events: auto; transition: border-color .12s ease, color .12s ease; }
+      .buy-button { border: 1px solid #416b60; background: #1b302a; color: #9ce0cb; }
+      .buy-button:hover:not(:disabled) { border-color: #70d6bd; }
+      .buy-button:disabled { cursor: default; opacity: .45; }
+      .swing-button { border: 1px solid #53677d; background: #202b38; color: #c4d2e0; }
+      .swing-button:hover { border-color: #8095aa; color: #e6edf3; }
       .order-dialog { width: min(460px, calc(100vw - 28px)); max-height: min(90vh, 700px); padding: 0; overflow: auto; border: 1px solid #344250; border-radius: 14px; background: #111820; color: #e6edf3; box-shadow: 0 24px 80px rgb(0 0 0 / 55%); }
       .order-dialog::backdrop { background: rgb(0 0 0 / 72%); backdrop-filter: blur(3px); }
       .swing-dialog { width: min(1040px, calc(100vw - 28px)); max-height: min(92vh, 850px); padding: 0; overflow: auto; border: 1px solid #344250; border-radius: 14px; background: #111820; color: #e6edf3; box-shadow: 0 24px 80px rgb(0 0 0 / 55%); }
@@ -161,7 +161,6 @@ export function renderOptionChainPage(): string {
       .spot-label { color: #39aef0; font-size: 13px; font-weight: 650; }
       .spot-price { color: #39aef0; font-size: 15px; font-variant-numeric: tabular-nums; font-weight: 750; }
       [hidden] { display: none !important; }
-      @media (hover: none) { .option-row .buy-button, .option-row .swing-button { opacity: .9; pointer-events: auto; } }
       @media (max-width: 600px) { .shell { padding: 18px 14px; } .panel { padding: 12px; } .nav { gap: 12px; } .nav a { font-size: 11px; } }
       @media (max-width: 800px) { .swing-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); } .swing-controls button { grid-column: 1 / -1; } }
     </style>
@@ -227,18 +226,16 @@ export function renderOptionChainPage(): string {
           <div class="table-wrap" id="table-wrap" hidden>
             <table>
               <colgroup>
-                <col style="width:23%"><col style="width:17%"><col style="width:20%"><col style="width:17%"><col style="width:23%">
+                <col style="width:35%"><col style="width:30%"><col style="width:35%">
               </colgroup>
               <thead><tr class="group-head">
-                <th class="call-head" colspan="2">CALLS</th>
+                <th class="call-head">CALLS</th>
                 <th class="strike-head">STRIKE</th>
-                <th class="put-head" colspan="2">PUTS</th>
+                <th class="put-head">PUTS</th>
               </tr><tr class="column-head">
-                <th class="call-subhead instrument-head">Instrument</th>
                 <th class="call-subhead price-head">LTP</th>
                 <th class="strike-head">Strike</th>
                 <th class="put-subhead price-head">LTP</th>
-                <th class="put-subhead instrument-head">Instrument</th>
               </tr></thead>
               <tbody id="rows"></tbody>
             </table>
@@ -1365,42 +1362,6 @@ export function renderOptionChainPage(): string {
         priceStatus.querySelector(".feed-label").textContent = text;
       }
 
-      function makeInstrumentCell(row, contract, side) {
-        const cell = document.createElement("td");
-        cell.className = side + "-instrument";
-        const name = document.createElement("span");
-        name.className = "instrument-name";
-        name.textContent = contract?.tradingSymbol ?? "—";
-        cell.append(name);
-        if (contract) {
-          const swingButton = document.createElement("button");
-          swingButton.className = "swing-button";
-          swingButton.type = "button";
-          swingButton.textContent = "SW";
-          swingButton.title = "View liquidity swings for " + contract.tradingSymbol;
-          swingButton.setAttribute("aria-label", "View liquidity swings for " + contract.tradingSymbol);
-          swingButton.addEventListener("click", () => {
-            void openSwingModal(contract);
-          });
-          cell.append(swingButton);
-
-          const button = document.createElement("button");
-          button.className = "buy-button";
-          button.type = "button";
-          button.disabled = orderSubmissionUncertain;
-          button.textContent = "BUY";
-          button.title = orderSubmissionUncertain
-            ? "Check your Kotak Neo order book before retrying"
-            : "Open a live BUY order ticket for " + contract.tradingSymbol;
-          button.setAttribute("aria-label", "Buy " + contract.tradingSymbol);
-          button.addEventListener("click", () => {
-            void openOrderTicket(contract);
-          });
-          cell.append(button);
-        }
-        row.append(cell);
-      }
-
       function todayInIndia() {
         const parts = new Intl.DateTimeFormat("en-CA", {
           timeZone: "Asia/Kolkata",
@@ -1962,13 +1923,40 @@ export function renderOptionChainPage(): string {
       function makePriceCell(row, contract, side) {
         const cell = document.createElement("td");
         cell.className = side + "-price";
+        const content = document.createElement("div");
+        content.className = "price-action-wrap";
         const price = document.createElement("span");
         price.className = "option-price";
         price.dataset.symbol = contract.tradingSymbol;
         price.textContent = optionPrices.has(contract.tradingSymbol)
           ? "₹" + numberFormat.format(optionPrices.get(contract.tradingSymbol))
           : "—";
-        cell.append(price);
+        const actions = document.createElement("div");
+        actions.className = "option-actions";
+        const swingButton = document.createElement("button");
+        swingButton.className = "swing-button";
+        swingButton.type = "button";
+        swingButton.textContent = "SW";
+        swingButton.title = "View liquidity swings for " + contract.tradingSymbol;
+        swingButton.setAttribute("aria-label", "View liquidity swings for " + contract.tradingSymbol);
+        swingButton.addEventListener("click", () => {
+          void openSwingModal(contract);
+        });
+        const buyButton = document.createElement("button");
+        buyButton.className = "buy-button";
+        buyButton.type = "button";
+        buyButton.disabled = orderSubmissionUncertain;
+        buyButton.textContent = "BUY";
+        buyButton.title = orderSubmissionUncertain
+          ? "Check your Kotak Neo order book before retrying"
+          : "Open a live BUY order ticket for " + contract.tradingSymbol;
+        buyButton.setAttribute("aria-label", "Buy " + contract.tradingSymbol);
+        buyButton.addEventListener("click", () => {
+          void openOrderTicket(contract);
+        });
+        actions.append(swingButton, buyButton);
+        content.append(price, actions);
+        cell.append(content);
         row.append(cell);
       }
 
@@ -2136,7 +2124,7 @@ export function renderOptionChainPage(): string {
         const spotRow = document.createElement("tr");
         spotRow.className = "spot-row";
         const spotCell = document.createElement("td");
-        spotCell.colSpan = 5;
+        spotCell.colSpan = 3;
         const spotMarker = document.createElement("div");
         spotMarker.className = "spot-marker";
         const spotPill = document.createElement("div");
@@ -2161,14 +2149,12 @@ export function renderOptionChainPage(): string {
           row.className = "option-row";
           const call = pair.CE;
           const put = pair.PE;
-          makeInstrumentCell(row, call, "call");
           makePriceCell(row, call, "call");
           const strikeCell = document.createElement("td");
           strikeCell.className = "strike-cell";
           strikeCell.textContent = numberFormat.format(strike);
           row.append(strikeCell);
           makePriceCell(row, put, "put");
-          makeInstrumentCell(row, put, "put");
           tableBody.append(row);
         }
         if (sorted.length === 0) tableBody.prepend(spotRow);

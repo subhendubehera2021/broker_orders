@@ -308,7 +308,7 @@ describe("authentication routes", () => {
     assert.match(response.body, /triggerPrice: String\(price\)/);
     assert.match(response.body, /fetch\("\/api\/options\/nifty\/order"/);
     assert.match(response.body, /button\.disabled = orderSubmissionUncertain/);
-    assert.match(response.body, /\.option-row:hover \.buy-button, \.option-row:focus-within \.buy-button \{ opacity: \.9; pointer-events: auto; \}/);
+    assert.match(response.body, /\.buy-button, \.swing-button \{ position: static;/);
     assert.match(response.body, /orderDialog\.showModal\(\)/);
     assert.match(response.body, /Place BUY order/);
     assert.match(response.body, /id="order-ltp" aria-live="polite">LTP unavailable/);
@@ -321,8 +321,10 @@ describe("authentication routes", () => {
     assert.match(response.body, /orderType,/);
     assert.match(response.body, /squareOffType: orderSquareOffTypeSelect\.value/);
     assert.match(response.body, /trailingStopLoss: orderTrailingStopSelect\.value/);
-    assert.match(response.body, /option-row:hover \.buy-button/);
     assert.match(response.body, /className = "option-price"/);
+    assert.match(response.body, /className = "option-actions"/);
+    assert.match(response.body, /actions\.append\(swingButton, buyButton\)/);
+    assert.doesNotMatch(response.body, /instrument-head|instrument-name|makeInstrumentCell/);
     assert.match(response.body, /<th scope="col">LTP<\/th>/);
     assert.match(response.body, /className = "open-order-ltp"/);
     assert.match(response.body, /new URLSearchParams\(\{ expiry \}\)/);
@@ -331,8 +333,9 @@ describe("authentication routes", () => {
     assert.match(response.body, /addEventListener\("feed-connected"/);
     assert.match(response.body, /data-state="idle"/);
     assert.match(response.body, /href="\/orders">Orders<\/a>/);
-    assert.match(response.body, /class="call-head" colspan="2">CALLS/);
-    assert.match(response.body, /class="put-head" colspan="2">PUTS/);
+    assert.match(response.body, /<th class="call-head">CALLS<\/th>/);
+    assert.match(response.body, /<th class="put-head">PUTS<\/th>/);
+    assert.match(response.body, /spotCell\.colSpan = 3/);
     assert.match(response.body, /spotPill\.className = "spot-pill"/);
     assert.doesNotMatch(response.body, /<th>Token<\/th>|<th>Lot size<\/th>/);
     assert.match(response.body, /api\/market\/nifty\/stream/);
