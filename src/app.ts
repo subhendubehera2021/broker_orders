@@ -1088,7 +1088,7 @@ export function buildApp({
       },
     );
 
-    api.get<{ Querystring: { expiry?: string } }>(
+    api.get<{ Querystring: { expiry?: string; symbols?: string } }>(
       "/api/market/nifty/stream",
       {
         schema: {
@@ -1097,13 +1097,16 @@ export function buildApp({
           querystring: {
             type: "object",
             additionalProperties: false,
-            properties: { expiry: { type: "string", pattern: "^\\d{2}[A-Z]{3}\\d{4}$" } },
+            properties: {
+              expiry: { type: "string", pattern: "^\\d{2}[A-Z]{3}\\d{4}$" },
+              symbols: { type: "string", maxLength: 4096 },
+            },
           },
           response: {
             200: {
               type: "string",
               description:
-                "Server-Sent Events with NIFTY index prices and, when expiry is supplied, current option prices.",
+                "Server-Sent Events with NIFTY index prices and option prices for the selected expiry and requested symbols.",
             },
             400: errorResponseSchema,
             401: errorResponseSchema,
@@ -1117,14 +1120,29 @@ export function buildApp({
         }
 
         const expiry = request.query.expiry;
+        const requestedSymbols = new Set(
+          (request.query.symbols ?? "")
+            .split(",")
+            .map((symbol) => symbol.trim())
+            .filter(Boolean),
+        );
+        const needsOptionFeed = Boolean(expiry || requestedSymbols.size > 0);
         let optionContracts: NiftyOptionContract[] = [];
-        if (expiry) {
+        let openOrderContracts: NiftyOptionContract[] = [];
+        if (needsOptionFeed) {
           try {
-            optionContracts = (await getNiftyContracts()).filter(
-              (contract) => contract.expiry === expiry,
-            );
-            if (optionContracts.length === 0) {
+            const contracts = await getNiftyContracts();
+            if (expiry) {
+              optionContracts = contracts.filter((contract) => contract.expiry === expiry);
+            }
+            if (expiry && optionContracts.length === 0) {
               return reply.code(400).send({ error: "No NIFTY option contracts found for that expiry" });
+            }
+            openOrderContracts = contracts.filter((contract) =>
+              requestedSymbols.has(contract.tradingSymbol),
+            );
+            if (!expiry && requestedSymbols.size > 0 && openOrderContracts.length === 0) {
+              return reply.code(400).send({ error: "No matching NIFTY option contracts found" });
             }
           } catch (error) {
             const statusCode = brokerRequestStatus(error);
@@ -1147,7 +1165,7 @@ export function buildApp({
           }
         }
         if (
-          expiry
+          needsOptionFeed
             ? !client?.streamNiftyMarketData
             : !client?.streamNiftyIndexPrice
         ) {
@@ -1188,18 +1206,36 @@ export function buildApp({
         response.once("close", closeStream);
 
         try {
-          if (expiry && client?.streamNiftyMarketData) {
-            const optionInstruments = optionContracts.map(({ instrumentToken, tradingSymbol }) => ({
+          if (needsOptionFeed && client?.streamNiftyMarketData) {
+            const feedContracts = [
+              ...new Map(
+                [...optionContracts, ...openOrderContracts].map((contract) => [
+                  contract.instrumentToken,
+                  contract,
+                ]),
+              ).values(),
+            ];
+            const optionInstruments = feedContracts.map(({ instrumentToken, tradingSymbol }) => ({
               instrumentToken,
               tradingSymbol,
             }));
             stopFeed = client.streamNiftyMarketData(
               authenticatedSession,
               optionInstruments,
-              (spotPrice) =>
-                selectNearbyNiftyOptionContracts(optionContracts, spotPrice, 5).map(
-                  ({ instrumentToken, tradingSymbol }) => ({ instrumentToken, tradingSymbol }),
-                ),
+              (spotPrice) => [
+                ...new Map(
+                  [
+                    ...selectNearbyNiftyOptionContracts(optionContracts, spotPrice, 5),
+                    ...openOrderContracts,
+                  ].map((contract) => [
+                    contract.instrumentToken,
+                    {
+                      instrumentToken: contract.instrumentToken,
+                      tradingSymbol: contract.tradingSymbol,
+                    },
+                  ]),
+                ).values(),
+              ],
               (tick) => writeEvent("price", tick),
               (tick) => writeEvent("option-price", tick),
               (error) => {

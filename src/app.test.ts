@@ -309,7 +309,10 @@ describe("authentication routes", () => {
     assert.match(response.body, /trailingStopLoss: orderTrailingStopSelect\.value/);
     assert.match(response.body, /option-row:hover \.buy-button/);
     assert.match(response.body, /className = "option-price"/);
-    assert.match(response.body, /api\/market\/nifty\/stream\?expiry=/);
+    assert.match(response.body, /<th scope="col">LTP<\/th>/);
+    assert.match(response.body, /className = "open-order-ltp"/);
+    assert.match(response.body, /new URLSearchParams\(\{ expiry \}\)/);
+    assert.match(response.body, /params\.set\("symbols", orderSymbols\.join\(","\)\)/);
     assert.match(response.body, /addEventListener\("option-price"/);
     assert.match(response.body, /addEventListener\("feed-connected"/);
     assert.match(response.body, /data-state="idle"/);
@@ -1035,6 +1038,7 @@ describe("authentication routes", () => {
 
   it("streams selected NIFTY option prices from the authenticated market feed", async () => {
     const expiryEpoch = String(Date.UTC(2030, 0, 30) / 1000 - 315_511_200);
+    const openOrderExpiryEpoch = String(Date.UTC(2030, 1, 6) / 1000 - 315_511_200);
     const strikes = [
       24750, 24800, 24850, 24900, 24950, 25050, 25100, 25150, 25200, 25250,
     ];
@@ -1042,6 +1046,7 @@ describe("authentication routes", () => {
       `${100 + index * 2},OPTIDX,NIFTY,NIFTY30JAN2030CE${index || ""},CE,${expiryEpoch},${strike * 100},25`,
       `${101 + index * 2},OPTIDX,NIFTY,NIFTY30JAN2030PE${index || ""},PE,${expiryEpoch},${strike * 100},25`,
     ]);
+    rows.push(`999,OPTIDX,NIFTY,NIFTY06FEB2030CE,CE,${openOrderExpiryEpoch},5000000,25`);
     const csv = [
       "pSymbol,pInstType,pSymbolName,pTrdSymbol,pOptionType,pExpiryDate,dStrikePrice;,lLotSize",
       ...rows,
@@ -1061,8 +1066,10 @@ describe("authentication routes", () => {
           onError,
           onConnected,
         ) {
-          assert.equal(instruments.length, 20);
-          assert.equal(selectOptions(25000).length, 20);
+          assert.equal(instruments.length, 21);
+          const selectedOptions = selectOptions(25000);
+          assert.equal(selectedOptions.length, 21);
+          assert.ok(selectedOptions.some(({ tradingSymbol }) => tradingSymbol === "NIFTY06FEB2030CE"));
           onIndexPrice({ price: 25000, asOf: "2030-01-30T10:00:00.000Z" });
           onOptionPrice({
             tradingSymbol: "NIFTY30JAN2030CE",
@@ -1079,7 +1086,9 @@ describe("authentication routes", () => {
     apps.push(app);
 
     await app.inject({ method: "POST", url: "/api/auth/login", payload: { totp: "123456" } });
-    const response = await app.inject("/api/market/nifty/stream?expiry=30JAN2030");
+    const response = await app.inject(
+      "/api/market/nifty/stream?expiry=30JAN2030&symbols=NIFTY06FEB2030CE",
+    );
 
     assert.equal(response.statusCode, 200);
     assert.match(response.body, /event: price\ndata: \{"price":25000,"asOf":"2030-01-30T10:00:00\.000Z"\}/);

@@ -73,6 +73,7 @@ export function renderOptionChainPage(): string {
       .open-orders-table tbody tr:has(input[type="radio"]:checked) { background: rgb(112 214 189 / 5%); }
       .open-orders-table th:last-child, .open-orders-table td:last-child { width: 114px; }
       .open-order-actions { display: flex; align-items: center; gap: 6px; }
+      .open-orders-table td.open-order-ltp { color: #9ce0cb; font-variant-numeric: tabular-nums; font-weight: 700; }
       .open-order-actions button { flex: 0 0 auto; }
       .open-order-actions .order-action-button { display: grid; width: 36px; height: 36px; place-items: center; padding: 0; }
       .order-action-button svg { width: 17px; height: 17px; }
@@ -193,11 +194,12 @@ export function renderOptionChainPage(): string {
                 <th scope="col">Side</th>
                 <th scope="col">Qty</th>
                 <th scope="col">Price</th>
+                <th scope="col">LTP</th>
                 <th scope="col">Type</th>
                 <th scope="col">Status</th>
                 <th scope="col">Action</th>
               </tr></thead>
-              <tbody id="open-order-rows"><tr><td colspan="9">Loading…</td></tr></tbody>
+              <tbody id="open-order-rows"><tr><td colspan="10">Loading…</td></tr></tbody>
             </table>
           </div>
         </section>
@@ -457,6 +459,8 @@ export function renderOptionChainPage(): string {
       const numberFormat = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 });
       let expiryValues = [];
       let marketFeed;
+      let activeMarketExpiry;
+      let activeOrderPriceSymbolsKey = "";
       let liveSpotPrice;
       let loadedContracts = [];
       let displayedStrikesKey = "";
@@ -474,6 +478,7 @@ export function renderOptionChainPage(): string {
       const swingOrderAttempts = new Set();
       const optionPrices = new Map();
       const openOrdersByNumber = new Map();
+      const openOrderPriceSymbols = new Set();
       const pendingPriceModifications = new Set();
       const uncertainPriceModifications = new Set();
       const volumeFormat = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 });
@@ -776,11 +781,16 @@ export function renderOptionChainPage(): string {
       function renderOpenOrders(orders) {
         const openOrders = orders.filter(isOpenOrder);
         openOrdersByNumber.clear();
+        openOrderPriceSymbols.clear();
+        for (const order of openOrders) {
+          const symbol = orderValue(order, ["trdSym", "tradingSymbol", "trading_symbol", "ts"]);
+          if (/^NIFTY.*(CE|PE)$/i.test(symbol)) openOrderPriceSymbols.add(symbol);
+        }
         openOrderRows.replaceChildren();
         if (!openOrders.length) {
           const row = document.createElement("tr");
           const cell = document.createElement("td");
-          cell.colSpan = 9;
+          cell.colSpan = 10;
           cell.textContent = "No open orders.";
           row.append(cell);
           openOrderRows.append(row);
@@ -816,7 +826,20 @@ export function renderOptionChainPage(): string {
             ["prcTp", "orderType", "order_type", "pt"],
             ["ordSt", "orderStatus", "status", "stat"],
           ];
-          for (const keys of fields) {
+          const tradingSymbol = orderValue(order, ["trdSym", "tradingSymbol", "trading_symbol", "ts"]);
+          for (const keys of fields.slice(0, 5)) {
+            const cell = document.createElement("td");
+            cell.textContent = orderValue(order, keys);
+            row.append(cell);
+          }
+          const ltpCell = document.createElement("td");
+          ltpCell.className = "open-order-ltp";
+          ltpCell.dataset.symbol = tradingSymbol;
+          ltpCell.textContent = optionPrices.has(tradingSymbol)
+            ? "₹" + numberFormat.format(optionPrices.get(tradingSymbol))
+            : "—";
+          row.append(ltpCell);
+          for (const keys of fields.slice(5)) {
             const cell = document.createElement("td");
             cell.textContent = orderValue(order, keys);
             row.append(cell);
@@ -825,7 +848,6 @@ export function renderOptionChainPage(): string {
           const actionButtons = document.createElement("div");
           actionButtons.className = "open-order-actions";
           if (orderNumber !== "—") {
-            const tradingSymbol = orderValue(order, ["trdSym", "tradingSymbol", "trading_symbol", "ts"]);
             const product = orderValue(order, ["prod", "product", "pc"]).toUpperCase();
             if (/^NIFTY.*(CE|PE)$/i.test(tradingSymbol) && ["MIS", "NRML"].includes(product)) {
               const modifyButton = createOpenOrderAction("Modify order " + orderNumber, "modify");
@@ -1193,6 +1215,7 @@ export function renderOptionChainPage(): string {
           const orders = extractOrders(payload);
           const count = renderOpenOrders(orders);
           renderClosedOrders(orders);
+          syncOpenOrderPriceFeed();
           if (!preserveStatus) {
             openOrdersStatus.textContent =
               count + " open order" + (count === 1 ? "" : "s") + ".";
@@ -1201,7 +1224,7 @@ export function renderOptionChainPage(): string {
           openOrderRows.replaceChildren();
           const row = document.createElement("tr");
           const cell = document.createElement("td");
-          cell.colSpan = 9;
+          cell.colSpan = 10;
           cell.textContent = "Open orders could not be loaded.";
           row.append(cell);
           openOrderRows.append(row);
@@ -1840,12 +1863,26 @@ export function renderOptionChainPage(): string {
         row.append(cell);
       }
 
+      function getOpenOrderPriceSymbols() {
+        return [...openOrderPriceSymbols].sort();
+      }
+
+      function syncOpenOrderPriceFeed() {
+        const symbolsKey = getOpenOrderPriceSymbols().join(",");
+        if (activeMarketExpiry && symbolsKey !== activeOrderPriceSymbolsKey) {
+          connectNiftyPriceStream(activeMarketExpiry);
+        }
+      }
+
       function connectNiftyPriceStream(expiry) {
         marketFeed?.close();
+        activeMarketExpiry = expiry;
+        const orderSymbols = getOpenOrderPriceSymbols();
+        activeOrderPriceSymbolsKey = orderSymbols.join(",");
         setFeedStatus("connecting", "Connecting");
-        const source = new EventSource(
-          "/api/market/nifty/stream?expiry=" + encodeURIComponent(expiry),
-        );
+        const params = new URLSearchParams({ expiry });
+        if (orderSymbols.length > 0) params.set("symbols", orderSymbols.join(","));
+        const source = new EventSource("/api/market/nifty/stream?" + params.toString());
         marketFeed = source;
         source.onopen = () => setFeedStatus("connecting", "Connecting");
         source.addEventListener("feed-connected", () => setFeedStatus("live", "Live"));
@@ -1883,6 +1920,11 @@ export function renderOptionChainPage(): string {
             }
             if (selectedOrderContract?.tradingSymbol === tick.tradingSymbol) {
               updateOrderLtp(tick.price);
+            }
+            for (const ltp of document.querySelectorAll(".open-order-ltp")) {
+              if (ltp.dataset.symbol === tick.tradingSymbol) {
+                ltp.textContent = "₹" + numberFormat.format(tick.price);
+              }
             }
             for (const price of document.querySelectorAll(".option-price")) {
               if (price.dataset.symbol === tick.tradingSymbol) {
@@ -1945,12 +1987,13 @@ export function renderOptionChainPage(): string {
           .sort((left, right) => left - right)
           .slice(0, 5);
         const sorted = [...belowStrikes, ...aboveStrikes].sort((left, right) => right - left);
-        const selectedSymbols = new Set(
-          sorted.flatMap((strike) => [
+        const selectedSymbols = new Set([
+          ...sorted.flatMap((strike) => [
             strikes.get(strike).CE.tradingSymbol,
             strikes.get(strike).PE.tradingSymbol,
           ]),
-        );
+          ...getOpenOrderPriceSymbols(),
+        ]);
         for (const symbol of optionPrices.keys()) {
           if (!selectedSymbols.has(symbol)) optionPrices.delete(symbol);
         }
@@ -2021,7 +2064,12 @@ export function renderOptionChainPage(): string {
         displayedStrikesKey = "";
         loadedContracts = [];
         optionPrices.clear();
+        for (const ltp of document.querySelectorAll(".open-order-ltp")) {
+          ltp.textContent = "—";
+        }
         marketFeed?.close();
+        activeMarketExpiry = undefined;
+        activeOrderPriceSymbolsKey = "";
         setStatus("Loading local option contracts…");
         try {
           const response = await fetch("/api/options/nifty/chain?expiry=" + encodeURIComponent(expiry), {
