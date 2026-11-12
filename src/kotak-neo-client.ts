@@ -124,6 +124,23 @@ export interface CancelOrderInput {
   tradingSymbol?: string;
 }
 
+export interface ModifyOrderInput {
+  orderNumber: string;
+  instrumentToken: string;
+  tradingSymbol: string;
+  transactionType: "B" | "S";
+  quantity: string;
+  filledQuantity: string;
+  product: "NRML" | "MIS";
+  orderType: "L" | "MKT" | "SL" | "SL-M";
+  price: string;
+  validity: "DAY" | "IOC";
+  amo: "YES" | "NO";
+  disclosedQuantity: string;
+  marketProtection: string;
+  triggerPrice: string;
+}
+
 interface KotakResponse {
   data?: Record<string, unknown>;
   [key: string]: unknown;
@@ -724,6 +741,73 @@ export class KotakNeoClient {
       const sanitizedMessage = message ? sanitizeUpstreamMessage(message) : undefined;
       throw new KotakNeoError(
         `Kotak Neo rejected the order cancellation${code ? ` (stCode=${code})` : ""}${sanitizedMessage ? `: ${sanitizedMessage}` : ""}`,
+        code === "100008" ? 401 : 400,
+        code,
+        200,
+        sanitizedMessage,
+        response.stat,
+      );
+    }
+    return response;
+  }
+
+  async modifyOrder(
+    session: AuthenticatedSession,
+    input: ModifyOrderInput,
+  ): Promise<unknown> {
+    if (!this.config.modifyOrderPath) {
+      throw new KotakNeoError(
+        "Kotak Neo modify-order API is not configured; set KOTAK_NEO_MODIFY_ORDER_PATH",
+        503,
+      );
+    }
+    const modifyData = {
+      am: input.amo,
+      dq: input.disclosedQuantity,
+      dd: "NA",
+      es: "nse_fo",
+      fq: input.filledQuantity,
+      mp: input.marketProtection,
+      no: input.orderNumber,
+      pc: input.product,
+      pf: "N",
+      pr: input.price,
+      pt: input.orderType,
+      qt: input.quantity,
+      vd: input.validity,
+      tp: input.triggerPrice,
+      tk: input.instrumentToken,
+      ts: input.tradingSymbol,
+      tt: input.transactionType,
+    };
+    const response = await this.requestJson(
+      this.config.modifyOrderPath,
+      {
+        method: "POST",
+        headers: {
+          Auth: session.tradeToken,
+          Sid: session.sid,
+          "neo-fin-key": this.config.financialKey,
+          Accept: "application/json",
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({ jData: JSON.stringify(modifyData) }),
+      },
+      session.baseUrl,
+    );
+    if (
+      isRecord(response) &&
+      typeof response.stat === "string" &&
+      response.stat.toLowerCase() !== "ok"
+    ) {
+      const code =
+        typeof response.stCode === "string" || typeof response.stCode === "number"
+          ? String(response.stCode)
+          : undefined;
+      const message = findErrorMessage(response);
+      const sanitizedMessage = message ? sanitizeUpstreamMessage(message) : undefined;
+      throw new KotakNeoError(
+        `Kotak Neo rejected the order modification${code ? ` (stCode=${code})` : ""}${sanitizedMessage ? `: ${sanitizedMessage}` : ""}`,
         code === "100008" ? 401 : 400,
         code,
         200,

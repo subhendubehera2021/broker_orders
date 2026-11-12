@@ -212,7 +212,14 @@ describe("authentication routes", () => {
     assert.match(response.body, /id="refresh-open-orders"/);
     assert.match(response.body, /fetch\("\/api\/orders"/);
     assert.match(response.body, /openOrderRows\.append\(row\)/);
-    assert.match(response.body, /Cancel open order/);
+    assert.match(response.body, /open-order-actions/);
+    assert.match(response.body, /actionButtons\.append\(modifyButton\)/);
+    assert.match(response.body, /actionButtons\.append\(cancelButton\)/);
+    assert.match(response.body, /Modify order/);
+    assert.match(response.body, /\/api\/orders\/" \+ encodeURIComponent\(modifyingOrderNumber\) \+ "\/modify/);
+    assert.match(response.body, /Review & modify live order/);
+    assert.match(response.body, /async function cancelOpenOrder\(orderNumber\)/);
+    assert.doesNotMatch(response.body, /confirm\("Cancel open order/);
     assert.match(response.body, /\/api\/orders\/" \+ encodeURIComponent\(orderNumber\) \+ "\/cancel/);
     assert.ok(
       response.body.indexOf('aria-label="Open orders"') <
@@ -474,6 +481,122 @@ describe("authentication routes", () => {
     assert.deepEqual(response.json(), { stat: "Ok", nOrdNo: "123" });
   });
 
+  it("modifies only a current open NIFTY option using Scrip Master details", async () => {
+    const expiryEpoch = String(Date.UTC(2030, 0, 30) / 1000 - 315_511_200);
+    const csv = [
+      "pSymbol,pInstType,pSymbolName,pTrdSymbol,pOptionType,pExpiryDate,dStrikePrice;,lLotSize",
+      `123,OPTIDX,NIFTY,NIFTY30JAN2030CE,CE,${expiryEpoch},2500000,25`,
+    ].join("\n");
+    let modifyInput: unknown;
+    let orderStatus = "open";
+    let filledQuantity = "25";
+    let modifyCalls = 0;
+    const app = buildApp({
+      config: {
+        ...config,
+        kotakNeo: {
+          ...config.kotakNeo,
+          orderBookPath: "quick/user/orders",
+          modifyOrderPath: "quick/order/vr/modify",
+        },
+      },
+      authClient: {
+        async login() { return authenticatedSession; },
+        async getScripMaster() { return { data: { filesPaths: [] } }; },
+        async getOrderBook(session) {
+          assert.deepEqual(session, authenticatedSession);
+          return {
+            stat: "Ok",
+            data: [{
+              nOrdNo: "123",
+              ordSt: orderStatus,
+              trdSym: "NIFTY30JAN2030CE",
+              trnsTp: "B",
+              prod: "MIS",
+              qty: "50",
+              fldQty: filledQuantity,
+            }],
+          };
+        },
+        async modifyOrder(session, input) {
+          assert.deepEqual(session, authenticatedSession);
+          modifyCalls += 1;
+          modifyInput = input;
+          return { stat: "Ok", nOrdNo: "123" };
+        },
+      },
+      optionChainCsvLoader: async () => csv,
+    });
+    apps.push(app);
+
+    await app.inject({ method: "POST", url: "/api/auth/login", payload: { totp: "123456" } });
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/orders/123/modify",
+      payload: {
+        quantity: "75",
+        product: "NRML",
+        orderType: "SL",
+        price: "110",
+        triggerPrice: "109",
+        validity: "DAY",
+      },
+    });
+
+    assert.equal(response.statusCode, 200, response.body);
+    assert.deepEqual(modifyInput, {
+      orderNumber: "123",
+      instrumentToken: "123",
+      tradingSymbol: "NIFTY30JAN2030CE",
+      transactionType: "B",
+      quantity: "75",
+      filledQuantity: "25",
+      product: "NRML",
+      orderType: "SL",
+      price: "110",
+      validity: "DAY",
+      amo: "NO",
+      disclosedQuantity: "0",
+      marketProtection: "0",
+      triggerPrice: "109",
+    });
+    assert.deepEqual(response.json(), { stat: "Ok", nOrdNo: "123" });
+
+    orderStatus = "complete";
+    const completedOrder = await app.inject({
+      method: "POST",
+      url: "/api/orders/123/modify",
+      payload: {
+        quantity: "75",
+        product: "NRML",
+        orderType: "SL",
+        price: "110",
+        triggerPrice: "109",
+        validity: "DAY",
+      },
+    });
+    assert.equal(completedOrder.statusCode, 400);
+    assert.match(completedOrder.json().error, /Only open orders can be modified/);
+
+    orderStatus = "open";
+    filledQuantity = "50";
+    const quantityBelowFills = await app.inject({
+      method: "POST",
+      url: "/api/orders/123/modify",
+      payload: {
+        quantity: "25",
+        product: "NRML",
+        orderType: "SL",
+        price: "110",
+        triggerPrice: "109",
+        validity: "DAY",
+      },
+    });
+    assert.equal(quantityBelowFills.statusCode, 400);
+    assert.match(quantityBelowFills.json().error, /cannot be less than the quantity already filled/);
+    assert.equal(modifyCalls, 1);
+  });
+
   it("refuses to cancel an order that is not open", async () => {
     let cancelCalls = 0;
     const app = buildApp({
@@ -536,6 +659,7 @@ describe("authentication routes", () => {
       "/api/orders",
       "/api/orders/stream",
       "/api/orders/{orderNumber}/cancel",
+      "/api/orders/{orderNumber}/modify",
       "/api/positions",
       "/api/scrip-master",
       "/api/scrip-master/nse-fo",

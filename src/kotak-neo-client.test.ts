@@ -12,6 +12,7 @@ const prodConfig = {
   marginPath: "quick/user/check-margin",
   orderBookPath: "quick/user/orders",
   cancelOrderPath: "quick/order/cancel",
+  modifyOrderPath: "quick/order/vr/modify",
   positionsPath: "quick/user/positions",
   placeOrderPath: "quick/order/rule/ms/place",
   orderSource: "NEOTRADEAPI",
@@ -159,6 +160,68 @@ describe("KotakNeoClient", () => {
     assert.equal(headers.get("content-type"), "application/x-www-form-urlencoded");
     const form = new URLSearchParams(String(capturedInit?.body));
     assert.deepEqual(JSON.parse(form.get("jData") ?? ""), { on: "123", am: "NO" });
+    assert.deepEqual(response, { stat: "Ok", nOrdNo: "123" });
+  });
+
+  it("modifies an order with the order-book fields and authenticated Kotak request", async () => {
+    let capturedUrl: URL | undefined;
+    let capturedInit: RequestInit | undefined;
+    const client = new KotakNeoClient(prodConfig, async (input, init) => {
+      capturedUrl = new URL(input.toString());
+      capturedInit = init;
+      return Response.json({ stat: "Ok", nOrdNo: "123" });
+    });
+
+    const response = await client.modifyOrder(
+      { ...testSession, baseUrl: "https://neo-gw.kotaksecurities.com/api/" },
+      {
+        orderNumber: "123",
+        instrumentToken: "456",
+        tradingSymbol: "NIFTY30JAN2030CE",
+        transactionType: "B",
+        quantity: "50",
+        filledQuantity: "0",
+        product: "MIS",
+        orderType: "L",
+        price: "110",
+        validity: "DAY",
+        amo: "NO",
+        disclosedQuantity: "0",
+        marketProtection: "0",
+        triggerPrice: "0",
+      },
+    );
+
+    assert.equal(
+      capturedUrl?.href,
+      "https://neo-gw.kotaksecurities.com/api/quick/order/vr/modify",
+    );
+    assert.equal(capturedInit?.method, "POST");
+    const headers = new Headers(capturedInit?.headers);
+    assert.equal(headers.get("auth"), "test-trade-token");
+    assert.equal(headers.get("sid"), "test-sid");
+    assert.equal(headers.get("neo-fin-key"), "test-prod-financial-key");
+    assert.equal(headers.get("content-type"), "application/x-www-form-urlencoded");
+    const form = new URLSearchParams(String(capturedInit?.body));
+    assert.deepEqual(JSON.parse(form.get("jData") ?? ""), {
+      am: "NO",
+      dq: "0",
+      dd: "NA",
+      es: "nse_fo",
+      fq: "0",
+      mp: "0",
+      no: "123",
+      pc: "MIS",
+      pf: "N",
+      pr: "110",
+      pt: "L",
+      qt: "50",
+      vd: "DAY",
+      tp: "0",
+      tk: "456",
+      ts: "NIFTY30JAN2030CE",
+      tt: "B",
+    });
     assert.deepEqual(response, { stat: "Ok", nOrdNo: "123" });
   });
 

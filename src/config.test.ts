@@ -18,6 +18,7 @@ const validEnvironment: NodeJS.ProcessEnv = {
   KOTAK_NEO_MARGIN_PATH: "quick/user/check-margin",
   KOTAK_NEO_ORDER_BOOK_PATH: "quick/user/orders",
   KOTAK_NEO_CANCEL_ORDER_PATH: "quick/order/cancel",
+  KOTAK_NEO_MODIFY_ORDER_PATH: "quick/order/vr/modify",
   KOTAK_NEO_POSITIONS_PATH: "quick/user/positions",
   KOTAK_NEO_PLACE_ORDER_PATH: "quick/order/rule/ms/place",
   KOTAK_NEO_ORDER_SOURCE: "NEOTRADEAPI",
@@ -46,6 +47,7 @@ describe("loadConfig", () => {
         marginPath: "quick/user/check-margin",
         orderBookPath: "quick/user/orders",
         cancelOrderPath: "quick/order/cancel",
+        modifyOrderPath: "quick/order/vr/modify",
         positionsPath: "quick/user/positions",
         placeOrderPath: "quick/order/rule/ms/place",
         orderSource: "NEOTRADEAPI",
@@ -113,6 +115,17 @@ describe("loadConfig", () => {
     const config = loadConfig(environmentWithoutCancelOrderPath);
 
     assert.equal(config.kotakNeo.cancelOrderPath, undefined);
+  });
+
+  it("allows startup without optional modify-order settings", () => {
+    const {
+      KOTAK_NEO_MODIFY_ORDER_PATH: _modifyOrderPath,
+      ...environmentWithoutModifyOrderPath
+    } = validEnvironment;
+
+    const config = loadConfig(environmentWithoutModifyOrderPath);
+
+    assert.equal(config.kotakNeo.modifyOrderPath, undefined);
   });
 
   it("allows startup without optional positions settings", () => {

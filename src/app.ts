@@ -16,6 +16,7 @@ import {
   type NiftyOptionPriceTick,
   type OrderPositionConnectionState,
   type OrderPositionUpdate,
+  type ModifyOrderInput,
   type PlaceNiftyOptionOrderInput,
 } from "./kotak-neo-client.js";
 import { renderLoginPage } from "./login-page.js";
@@ -73,6 +74,17 @@ interface NiftyOptionOrderBody {
   lastTradedPrice?: string;
 }
 
+interface ModifyNiftyOptionOrderBody {
+  quantity: string;
+  product: "MIS" | "NRML";
+  orderType: "L" | "MKT" | "SL" | "SL-M";
+  price: string;
+  validity: "DAY" | "IOC";
+  triggerPrice?: string;
+  disclosedQuantity?: string;
+  marketProtection?: string;
+}
+
 interface AutoSellCandidate {
   orderNumber: string;
   session: AuthenticatedSession;
@@ -94,6 +106,7 @@ interface AuthClient {
   getOrderBook?(session: AuthenticatedSession): Promise<unknown>;
   getPositions?(session: AuthenticatedSession): Promise<unknown>;
   cancelOrder?(session: AuthenticatedSession, input: CancelOrderInput): Promise<unknown>;
+  modifyOrder?(session: AuthenticatedSession, input: ModifyOrderInput): Promise<unknown>;
   streamOrderPositionUpdates?(
     session: AuthenticatedSession,
     onUpdate: (update: OrderPositionUpdate) => void,
@@ -849,6 +862,211 @@ export function buildApp({
           );
           return reply.code(statusCode).send({
             error: error instanceof Error ? error.message : "Kotak Neo positions request failed",
+          });
+        }
+      },
+    );
+
+    api.post<{ Params: { orderNumber: string }; Body: ModifyNiftyOptionOrderBody }>(
+      "/api/orders/:orderNumber/modify",
+      {
+        schema: {
+          tags: ["Orders"],
+          summary: "Modify an open NIFTY option order",
+          params: {
+            type: "object",
+            required: ["orderNumber"],
+            additionalProperties: false,
+            properties: { orderNumber: { type: "string", pattern: "^\\d{1,32}$" } },
+          },
+          body: {
+            type: "object",
+            required: ["quantity", "product", "orderType", "price", "validity"],
+            additionalProperties: false,
+            properties: {
+              quantity: { type: "string", pattern: "^[1-9]\\d{0,7}$" },
+              product: { type: "string", enum: ["MIS", "NRML"] },
+              orderType: { type: "string", enum: ["L", "MKT", "SL", "SL-M"] },
+              price: { type: "string", pattern: "^\\d+(\\.\\d{1,4})?$" },
+              validity: { type: "string", enum: ["DAY", "IOC"] },
+              triggerPrice: { type: "string", pattern: "^\\d+(\\.\\d{1,4})?$" },
+              disclosedQuantity: { type: "string", pattern: "^\\d{1,8}$" },
+              marketProtection: { type: "string", pattern: "^\\d+(\\.\\d{1,2})?$" },
+            },
+          },
+          response: {
+            200: {
+              type: "object",
+              additionalProperties: true,
+              description: "Kotak Neo order modification response.",
+            },
+            400: errorResponseSchema,
+            401: errorResponseSchema,
+            429: errorResponseSchema,
+            502: errorResponseSchema,
+            503: errorResponseSchema,
+            504: errorResponseSchema,
+          },
+        },
+      },
+      async (request, reply) => {
+        if (!session) {
+          return reply.code(401).send({ error: "Authenticate with Kotak Neo before modifying an order" });
+        }
+        if (!client?.getOrderBook || !client.modifyOrder) {
+          return reply.code(503).send({ error: "Kotak Neo order modification is not configured" });
+        }
+        if (!config.kotakNeo.orderBookPath || !config.kotakNeo.modifyOrderPath) {
+          return reply.code(503).send({
+            error: "Set KOTAK_NEO_ORDER_BOOK_PATH and KOTAK_NEO_MODIFY_ORDER_PATH to enable order modification",
+          });
+        }
+
+        try {
+          const orderNumber = request.params.orderNumber;
+          const orders = orderBookRecords(await client.getOrderBook(session));
+          const order = orders.find(
+            (item) => orderRecordValue(item, ["nOrdNo", "orderId", "order_id"]) === orderNumber,
+          );
+          if (!order) {
+            return reply.code(400).send({ error: "Order was not found in the current order book" });
+          }
+          if (!isOpenOrderRecord(order)) {
+            return reply.code(400).send({ error: "Only open orders can be modified" });
+          }
+
+          const tradingSymbol = orderRecordValue(order, [
+            "trdSym",
+            "tradingSymbol",
+            "trading_symbol",
+            "ts",
+          ]);
+          const transactionType = orderRecordValue(order, [
+            "trnsTp",
+            "transactionType",
+            "transaction_type",
+            "tt",
+          ]).toUpperCase();
+          const currentProduct = orderRecordValue(order, ["prod", "product", "pc"]).toUpperCase();
+          if (transactionType !== "B" && transactionType !== "S") {
+            return reply.code(400).send({ error: "The order book is missing a valid order side" });
+          }
+          if (currentProduct !== "MIS" && currentProduct !== "NRML") {
+            return reply.code(400).send({
+              error: "Only MIS and NRML NIFTY option orders can be modified from this page",
+            });
+          }
+
+          const contracts = await getNiftyContracts();
+          const contract = contracts.find(
+            ({ tradingSymbol: symbol }) => symbol.toUpperCase() === tradingSymbol.toUpperCase(),
+          );
+          if (!contract) {
+            return reply.code(400).send({
+              error: "Only NIFTY option orders in the local Scrip Master can be modified from this page",
+            });
+          }
+
+          const body = request.body;
+          const quantity = Number(body.quantity);
+          const lotSize = Number(contract.lotSize);
+          const filledQuantityText = orderRecordValue(order, [
+            "fldQty",
+            "filledQuantity",
+            "filled_qty",
+            "fq",
+          ]);
+          const filledQuantityValue = Number(filledQuantityText || "0");
+          if (!Number.isSafeInteger(filledQuantityValue) || filledQuantityValue < 0) {
+            return reply.code(400).send({
+              error: "The order book returned an invalid filled quantity; refresh the order and try again",
+            });
+          }
+          const filledQuantity = filledQuantityValue;
+          if (!Number.isSafeInteger(lotSize) || lotSize < 1 || quantity % lotSize !== 0) {
+            return reply.code(400).send({
+              error: "Modified quantity must be a whole number of lots for this contract",
+            });
+          }
+          if (quantity < filledQuantity) {
+            return reply.code(400).send({
+              error: "Modified quantity cannot be less than the quantity already filled",
+            });
+          }
+
+          const isMarketOrder = body.orderType === "MKT" || body.orderType === "SL-M";
+          const isStopOrder = body.orderType === "SL" || body.orderType === "SL-M";
+          const price = Number(body.price);
+          const triggerPrice = Number(body.triggerPrice ?? "0");
+          if (
+            isMarketOrder !== (price === 0) ||
+            (!isMarketOrder && price <= 0) ||
+            (isStopOrder !== (triggerPrice > 0))
+          ) {
+            return reply.code(400).send({
+              error: "Price and trigger price do not match the modified order type",
+            });
+          }
+          if (
+            body.orderType === "SL" &&
+            (transactionType === "B" ? price < triggerPrice : price > triggerPrice)
+          ) {
+            return reply.code(400).send({
+              error:
+                transactionType === "B"
+                  ? "BUY stop-limit price must be greater than or equal to its trigger price"
+                  : "SELL stop-limit price must be less than or equal to its trigger price",
+            });
+          }
+          const disclosedQuantity = Number(body.disclosedQuantity ?? "0");
+          if (disclosedQuantity > quantity) {
+            return reply.code(400).send({ error: "Disclosed quantity cannot exceed order quantity" });
+          }
+
+          const amo =
+            orderRecordValue(order, ["ordGenTp", "orderGenerationType", "amo", "am"]).toUpperCase() ===
+              "AMO" ||
+            orderRecordValue(order, ["amo", "am"]).toUpperCase() === "YES"
+              ? "YES"
+              : "NO";
+          return await client.modifyOrder(session, {
+            orderNumber,
+            instrumentToken: contract.instrumentToken,
+            tradingSymbol: contract.tradingSymbol,
+            transactionType,
+            quantity: body.quantity,
+            filledQuantity: String(filledQuantity),
+            product: body.product,
+            orderType: body.orderType,
+            price: body.price,
+            validity: body.validity,
+            amo,
+            disclosedQuantity: body.disclosedQuantity ?? "0",
+            marketProtection: body.marketProtection ?? "0",
+            triggerPrice: body.triggerPrice ?? "0",
+          });
+        } catch (error) {
+          const statusCode = brokerRequestStatus(error);
+          request.log.error(
+            {
+              statusCode,
+              errorName: error instanceof Error ? error.name : "UnknownError",
+              ...(error instanceof KotakNeoError
+                ? {
+                    ...(error.upstreamHttpStatusCode !== undefined
+                      ? { upstreamStatusCode: error.upstreamHttpStatusCode }
+                      : {}),
+                    ...(error.upstreamCode ? { upstreamCode: error.upstreamCode } : {}),
+                    ...(error.upstreamMessage
+                      ? { upstreamErrorMessage: error.upstreamMessage }
+                      : {}),
+                  }
+                : {}),
+            },
+            "Kotak Neo order modification failed",
+          );
+          return reply.code(statusCode).send({
+            error: error instanceof Error ? error.message : "Kotak Neo order modification failed",
           });
         }
       },

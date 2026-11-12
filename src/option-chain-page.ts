@@ -57,9 +57,12 @@ export function renderOptionChainPage(): string {
       .orders-heading h2 { margin: 0; font-size: 17px; }
       .orders-status { min-height: 18px; margin: 14px 0 12px; color: #a0adba; font-size: 11px; }
       .orders-status[data-kind="error"] { color: #f0a3a3; }
-      .open-orders-table { min-width: 680px; }
+      .open-orders-table { min-width: 900px; }
       .open-orders-table th { position: static; height: auto; padding: 11px 14px; background: #171f27; text-align: left; }
       .open-orders-table td { padding: 11px 14px; }
+      .open-orders-table th:last-child, .open-orders-table td:last-child { width: 190px; }
+      .open-order-actions { display: flex; align-items: center; gap: 8px; }
+      .open-order-actions button { flex: 0 0 auto; }
       .table-wrap { max-height: 72vh; overflow: auto; border: 1px solid #293541; border-radius: 10px; background: #0d131a; }
       table { width: 100%; min-width: 760px; table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: 13px; white-space: nowrap; }
       th, td { overflow: hidden; padding: 13px 16px; border-right: 1px solid #242e38; border-bottom: 1px solid #222d38; text-overflow: ellipsis; }
@@ -374,6 +377,7 @@ export function renderOptionChainPage(): string {
       const openOrdersStatus = document.querySelector("#open-orders-status");
       const openOrderRows = document.querySelector("#open-order-rows");
       const refreshOpenOrdersButton = document.querySelector("#refresh-open-orders");
+      const orderTitle = document.querySelector("#order-title");
       const activityStatusLabel = document.querySelector("#activity-stream-status");
       const activityAutoSellStatus = document.querySelector("#activity-auto-sell-status");
       const activityOrderBody = document.querySelector("#activity-order-updates");
@@ -424,6 +428,7 @@ export function renderOptionChainPage(): string {
       let loadedContracts = [];
       let displayedStrikesKey = "";
       let selectedOrderContract;
+      let modifyingOrderNumber;
       let orderSubmissionUncertain = false;
       let selectedSwingContract;
       let swingRequestId = 0;
@@ -442,12 +447,12 @@ export function renderOptionChainPage(): string {
         status.dataset.kind = kind;
       }
 
-      function orderValue(order, keys) {
+      function orderValue(order, keys, fallback = "—") {
         for (const key of keys) {
           const value = order[key];
           if (value !== undefined && value !== null && value !== "") return String(value);
         }
-        return "—";
+        return fallback;
       }
 
       function extractOrders(payload) {
@@ -706,16 +711,31 @@ export function renderOptionChainPage(): string {
             row.append(cell);
           }
           const actionCell = document.createElement("td");
+          const actionButtons = document.createElement("div");
+          actionButtons.className = "open-order-actions";
           const orderNumber = orderValue(order, ["nOrdNo", "orderId", "order_id"]);
           if (orderNumber !== "—") {
+            const tradingSymbol = orderValue(order, ["trdSym", "tradingSymbol", "trading_symbol", "ts"]);
+            const product = orderValue(order, ["prod", "product", "pc"]).toUpperCase();
+            if (/^NIFTY.*(CE|PE)$/i.test(tradingSymbol) && ["MIS", "NRML"].includes(product)) {
+              const modifyButton = document.createElement("button");
+              modifyButton.type = "button";
+              modifyButton.textContent = "Modify";
+              modifyButton.setAttribute("aria-label", "Modify order " + orderNumber);
+              modifyButton.addEventListener("click", () => {
+                void openModifyOrder(order);
+              });
+              actionButtons.append(modifyButton);
+            }
             const cancelButton = document.createElement("button");
             cancelButton.type = "button";
             cancelButton.textContent = "Cancel";
             cancelButton.setAttribute("aria-label", "Cancel order " + orderNumber);
             cancelButton.addEventListener("click", () => {
-              void cancelOpenOrder(orderNumber, orderValue(order, ["trdSym", "tradingSymbol", "ts"]));
+              void cancelOpenOrder(orderNumber);
             });
-            actionCell.append(cancelButton);
+            actionButtons.append(cancelButton);
+            actionCell.append(actionButtons);
           } else {
             actionCell.textContent = "—";
           }
@@ -725,8 +745,59 @@ export function renderOptionChainPage(): string {
         return openOrders.length;
       }
 
-      async function cancelOpenOrder(orderNumber, tradingSymbol) {
-        if (!window.confirm("Cancel open order " + orderNumber + " (" + tradingSymbol + ")?")) return;
+      async function openModifyOrder(order) {
+        const orderNumber = orderValue(order, ["nOrdNo", "orderId", "order_id"]);
+        const tradingSymbol = orderValue(order, ["trdSym", "tradingSymbol", "trading_symbol", "ts"]);
+        const product = orderValue(order, ["prod", "product", "pc"]).toUpperCase();
+        const contract = loadedContracts.find(
+          (item) => item.tradingSymbol.toUpperCase() === tradingSymbol.toUpperCase(),
+        );
+        try {
+          const response = await fetch("/api/auth/session", { headers: { Accept: "application/json" } });
+          if (!response.ok) throw new Error("Could not check the Kotak Neo session.");
+          const auth = await response.json();
+          if (auth.authenticated !== true) throw new Error("Sign in before modifying an order.");
+
+          modifyingOrderNumber = orderNumber;
+          selectedOrderContract = {
+            tradingSymbol,
+            lotSize: contract?.lotSize ?? "1",
+          };
+          orderTitle.textContent = "Modify order " + orderNumber;
+          orderContractLabel.textContent = tradingSymbol;
+          updateOrderLtp(optionPrices.get(tradingSymbol));
+          orderQuantityInput.value = orderValue(order, ["qty", "quantity", "qt"], "");
+          orderSideSelect.value = orderValue(order, ["trnsTp", "transactionType", "transaction_type", "tt"]);
+          orderProductSelect.value = product;
+          orderTypeSelect.value = orderValue(order, ["prcTp", "orderType", "order_type", "pt"]);
+          orderValiditySelect.value = orderValue(order, ["validity", "vd", "rt"], "DAY");
+          orderAmoSelect.value =
+            orderValue(order, ["ordGenTp", "orderGenerationType", "amo", "am"]).toUpperCase() === "AMO" ||
+            orderValue(order, ["amo", "am"]).toUpperCase() === "YES"
+              ? "YES"
+              : "NO";
+          orderTriggerInput.value = orderValue(order, ["trgPrc", "triggerPrice", "tp"], "");
+          orderPriceInput.value = orderValue(order, ["prc", "price", "pr"], "0");
+          orderDisclosedQuantityInput.value = orderValue(order, ["dscQty", "disclosedQuantity", "dq"], "0");
+          orderMarketProtectionInput.value = orderValue(order, ["mktPro", "marketProtection", "mp"], "0");
+          orderTagInput.value = "";
+          orderSquareOffValueInput.value = "";
+          orderStopLossValueInput.value = "";
+          orderTrailingStopSelect.value = "N";
+          orderTrailingValueInput.value = "0";
+          orderError.textContent = "";
+          orderSubmitButton.textContent = "Review & modify live order";
+          updateOrderFields();
+          orderDialog.showModal();
+          orderQuantityInput.focus();
+        } catch (error) {
+          openOrdersStatus.textContent =
+            error instanceof Error ? error.message : "Could not open the modify order form.";
+          openOrdersStatus.dataset.kind = "error";
+        }
+      }
+
+      async function cancelOpenOrder(orderNumber) {
         const cancelButton = [...openOrderRows.querySelectorAll("button")].find((button) =>
           button.getAttribute("aria-label") === "Cancel order " + orderNumber,
         );
@@ -1102,6 +1173,7 @@ export function renderOptionChainPage(): string {
 
       async function openOrderTicket(contract) {
         orderError.textContent = "";
+        modifyingOrderNumber = undefined;
         try {
           const response = await fetch("/api/auth/session", {
             headers: { Accept: "application/json" },
@@ -1113,6 +1185,8 @@ export function renderOptionChainPage(): string {
             return;
           }
           selectedOrderContract = contract;
+          orderTitle.textContent = "Place BUY order";
+          orderSubmitButton.textContent = "Review & place live BUY";
           orderContractLabel.textContent = contract.tradingSymbol + " · " + expirySelect.value;
           updateOrderLtp();
           orderQuantityInput.value = String(contract.lotSize);
@@ -1188,9 +1262,9 @@ export function renderOptionChainPage(): string {
           orderType === "SL" || orderType === "SL-M" || product === "CO";
         if (
           !Number.isSafeInteger(quantity) ||
-          !Number.isSafeInteger(lotSize) ||
-          lotSize < 1 ||
-          quantity % lotSize !== 0
+          quantity < 1 ||
+          (!modifyingOrderNumber &&
+            (!Number.isSafeInteger(lotSize) || lotSize < 1 || quantity % lotSize !== 0))
         ) {
           orderError.textContent = "Quantity must be a whole number of lots (" + lotSize + " units per lot).";
           return;
@@ -1238,20 +1312,34 @@ export function renderOptionChainPage(): string {
               ? "\\nAuto-sell: after full fill, place an SL-limit SELL 5 points below the average fill price."
               : "\\nAuto-sell is not enabled for " + product + " BUY orders.";
         const confirmation =
-          "Place a LIVE " + sideLabel + " order?\\n\\n" +
-          selectedOrderContract.tradingSymbol + " · " + expirySelect.value + "\\n" +
+          (modifyingOrderNumber
+            ? "Modify LIVE order " + modifyingOrderNumber + "?\\n\\n"
+            : "Place a LIVE " + sideLabel + " order?\\n\\n") +
+          selectedOrderContract.tradingSymbol +
+          (modifyingOrderNumber ? "" : " · " + expirySelect.value) + "\\n" +
           quantity + " units (" + lots + " lot" + (lots === 1 ? "" : "s") + ") · " +
           productLabel + " · " + orderTypeLabel + " · " + orderValiditySelect.value +
           "\\nPrice ₹" + numberFormat.format(price) +
           (triggerRequired ? " · Trigger ₹" + numberFormat.format(triggerPrice) : "") +
-          autoSellNote;
+          (modifyingOrderNumber ? "" : autoSellNote);
         if (!window.confirm(confirmation)) return;
 
         orderSubmitButton.disabled = true;
         orderSubmitButton.textContent = "Submitting…";
         orderError.textContent = "";
         const orderTag = orderTagInput.value.trim();
-        const orderPayload = {
+        const orderPayload = modifyingOrderNumber
+          ? {
+              quantity: String(quantity),
+              product,
+              orderType,
+              price: String(price),
+              validity: orderValiditySelect.value,
+              triggerPrice: triggerRequired ? String(triggerPrice) : "0",
+              disclosedQuantity: orderDisclosedQuantityInput.value,
+              marketProtection: orderMarketProtectionInput.value,
+            }
+          : {
           expiry: expirySelect.value,
           tradingSymbol: selectedOrderContract.tradingSymbol,
           transactionType: side,
@@ -1281,14 +1369,21 @@ export function renderOptionChainPage(): string {
           ...(orderTag ? { tag: orderTag } : {}),
         };
         try {
-          const response = await fetch("/api/options/nifty/order", {
+          const wasModification = Boolean(modifyingOrderNumber);
+          const modifiedOrderNumber = modifyingOrderNumber;
+          const response = await fetch(
+            wasModification
+              ? "/api/orders/" + encodeURIComponent(modifyingOrderNumber) + "/modify"
+              : "/api/options/nifty/order",
+            {
             method: "POST",
             headers: {
               Accept: "application/json",
               "Content-Type": "application/json",
             },
             body: JSON.stringify(orderPayload),
-          });
+            },
+          );
           const result = await response.json();
           if (!response.ok) {
             if (
@@ -1309,9 +1404,13 @@ export function renderOptionChainPage(): string {
           }
 
           orderDialog.close();
+          modifyingOrderNumber = undefined;
+          orderTitle.textContent = "Place BUY order";
           const orderNumber = result.nOrdNo || result.orderId;
           setStatus(
-            "Order request sent" + (orderNumber ? " · " + orderNumber : "") +
+            (wasModification
+              ? "Modification requested for order " + modifiedOrderNumber
+              : "Order request sent" + (orderNumber ? " · " + orderNumber : "")) +
             ". Check your Kotak Neo order book for its status.",
           );
           void loadOpenOrders();
@@ -1326,7 +1425,9 @@ export function renderOptionChainPage(): string {
           );
         } finally {
           orderSubmitButton.disabled = false;
-          orderSubmitButton.textContent = "Review & place live " + (orderSideSelect.value === "B" ? "BUY" : "SELL");
+          orderSubmitButton.textContent = modifyingOrderNumber
+            ? "Review & modify live order"
+            : "Review & place live " + (orderSideSelect.value === "B" ? "BUY" : "SELL");
         }
       });
 
@@ -1334,6 +1435,9 @@ export function renderOptionChainPage(): string {
 
       document.querySelector("#order-cancel").addEventListener("click", () => {
         orderDialog.close();
+        modifyingOrderNumber = undefined;
+        orderTitle.textContent = "Place BUY order";
+        orderSubmitButton.textContent = "Review & place live BUY";
       });
 
       function makePriceCell(row, contract, side) {
