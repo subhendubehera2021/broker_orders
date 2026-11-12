@@ -857,7 +857,7 @@ export function renderOptionChainPage(): string {
         }
       }
 
-      async function cancelOpenOrder(orderNumber) {
+      async function cancelOpenOrder(orderNumber, showResult = false) {
         const cancelButton = [...openOrderRows.querySelectorAll("button")].find((button) =>
           button.getAttribute("aria-label") === "Cancel order " + orderNumber,
         );
@@ -874,29 +874,43 @@ export function renderOptionChainPage(): string {
           await loadOpenOrders();
           openOrdersStatus.textContent =
             "Cancellation requested for order " + orderNumber + "; open orders refreshed.";
+          if (showResult) {
+            window.alert(
+              "Kotak accepted the cancellation request for order " + orderNumber +
+                ". The order may remain visible until its status updates.",
+            );
+          }
         } catch (error) {
           openOrdersStatus.textContent =
             error instanceof Error ? error.message : "Could not cancel this order.";
           openOrdersStatus.dataset.kind = "error";
           if (cancelButton) cancelButton.disabled = false;
+          if (showResult) {
+            window.alert("Cancellation failed for order " + orderNumber + ": " + openOrdersStatus.textContent);
+          }
         }
       }
 
-      openOrderRows.addEventListener("keydown", (event) => {
-        if (event.key !== "ArrowRight") return;
-        const selector = event.target;
+      window.addEventListener("keydown", (event) => {
+        if (event.key !== "ArrowRight" && event.keyCode !== 39) return;
+        const focusedRadio = document.activeElement;
+        const selectedRadio = document.querySelector(
+          'input[name="selected-open-order"]:checked',
+        );
         if (
-          !(selector instanceof HTMLInputElement) ||
-          selector.type !== "radio" ||
-          selector.name !== "selected-open-order" ||
-          !selector.checked ||
-          selector.value.startsWith("row-")
+          focusedRadio instanceof HTMLInputElement &&
+          focusedRadio === selectedRadio &&
+          focusedRadio.value !== "" &&
+          !focusedRadio.value.startsWith("row-")
         ) {
+          event.preventDefault();
+          event.stopPropagation();
+          window.alert("Right Arrow detected. Sending cancel for order " + focusedRadio.value + ".");
+          void cancelOpenOrder(focusedRadio.value, true);
           return;
         }
-        event.preventDefault();
-        void cancelOpenOrder(selector.value);
-      });
+        window.alert("Right Arrow detected. Focus the selected order radio to cancel it.");
+      }, true);
 
       async function loadOpenOrders() {
         refreshOpenOrdersButton.disabled = true;
