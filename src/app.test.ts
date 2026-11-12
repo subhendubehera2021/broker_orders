@@ -210,6 +210,18 @@ describe("authentication routes", () => {
     assert.match(response.body, /void connectActivityStream\(\)/);
     assert.match(response.body, /href="#live-activity">Live activity<\/a>/);
     assert.match(response.body, /id="refresh-open-orders"/);
+    assert.match(response.body, /aria-label="Refresh orders" title="Refresh orders"/);
+    assert.match(response.body, /class="panel orders-panel"/);
+    assert.match(response.body, /open-orders-table \{ min-width: 780px; font-size: 12px; \}/);
+    assert.match(response.body, /<th scope="col">Select<\/th>/);
+    assert.match(response.body, /selector\.type = "radio"/);
+    assert.match(response.body, /selector\.name = "selected-open-order"/);
+    assert.match(response.body, /selector\.checked = index === 0/);
+    assert.match(response.body, /input\[type="radio"\]:checked::before/);
+    assert.match(response.body, /input\[type="radio"\]:focus-visible/);
+    assert.match(response.body, /Focus selected row · Right Arrow cancels/);
+    assert.match(response.body, /event\.key !== "ArrowRight"/);
+    assert.match(response.body, /void cancelOpenOrder\(selector\.value\)/);
     assert.match(response.body, /fetch\("\/api\/orders"/);
     assert.match(response.body, /openOrderRows\.append\(row\)/);
     assert.match(response.body, /open-order-actions/);

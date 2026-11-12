@@ -53,15 +53,26 @@ export function renderOptionChainPage(): string {
       .activity-table td { color: #d7e0e9; font-variant-numeric: tabular-nums; }
       .activity-table tbody tr:last-child td { border-bottom: 0; }
       .activity-empty { padding: 24px 12px !important; color: #8d9aaa !important; text-align: center !important; }
-      .orders-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
-      .orders-heading h2 { margin: 0; font-size: 17px; }
-      .orders-status { min-height: 18px; margin: 14px 0 12px; color: #a0adba; font-size: 11px; }
+      .orders-panel { padding: 14px; }
+      .orders-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 2px; }
+      .orders-heading h2 { margin: 0; font-size: 15px; }
+      .orders-shortcut { margin-left: auto; color: var(--muted); font-size: 10px; }
+      .refresh-orders-button { display: grid; width: 32px; height: 32px; place-items: center; padding: 0; }
+      .refresh-orders-button svg { width: 16px; height: 16px; }
+      .orders-status { min-height: 14px; margin: 7px 0; color: #a0adba; font-size: 10px; }
       .orders-status[data-kind="error"] { color: #f0a3a3; }
-      .open-orders-table { min-width: 840px; }
-      .open-orders-table th { position: static; height: auto; padding: 11px 14px; background: #171f27; text-align: left; }
-      .open-orders-table td { padding: 11px 14px; }
-      .open-orders-table th:last-child, .open-orders-table td:last-child { width: 130px; }
-      .open-order-actions { display: flex; align-items: center; gap: 8px; }
+      .open-orders-table { min-width: 780px; font-size: 12px; }
+      .open-orders-table th { position: static; height: auto; padding: 8px 10px; background: #171f27; text-align: left; }
+      .open-orders-table td { padding: 7px 10px; }
+      .open-orders-table th:first-child, .open-orders-table td:first-child { width: 42px; padding-right: 4px; padding-left: 4px; text-align: center; }
+      .open-orders-table input[type="radio"] { display: inline-grid; width: 17px; height: 17px; margin: 0; appearance: none; place-content: center; border: 1.5px solid #53677d; border-radius: 50%; background: #0e141b; cursor: pointer; vertical-align: middle; transition: border-color .15s ease, box-shadow .15s ease; }
+      .open-orders-table input[type="radio"]::before { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); content: ""; transform: scale(0); transition: transform .12s ease; }
+      .open-orders-table input[type="radio"]:checked { border-color: var(--accent); box-shadow: 0 0 0 3px rgb(112 214 189 / 12%); }
+      .open-orders-table input[type="radio"]:checked::before { transform: scale(1); }
+      .open-orders-table input[type="radio"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+      .open-orders-table tbody tr:has(input[type="radio"]:checked) { background: rgb(112 214 189 / 5%); }
+      .open-orders-table th:last-child, .open-orders-table td:last-child { width: 114px; }
+      .open-order-actions { display: flex; align-items: center; gap: 6px; }
       .open-order-actions button { flex: 0 0 auto; }
       .open-order-actions .order-action-button { display: grid; width: 36px; height: 36px; place-items: center; padding: 0; }
       .order-action-button svg { width: 17px; height: 17px; }
@@ -162,15 +173,21 @@ export function renderOptionChainPage(): string {
         <nav class="nav" aria-label="Main navigation"><a href="/orders">Orders</a><a href="#live-activity">Live activity</a><a href="/margin">Margin calculator</a><a href="/scrip-master">Scrip Master</a><a href="/">Sign in</a></nav>
       </header>
       <main>
-        <section class="panel" aria-label="Open orders" style="margin-bottom: 20px">
+        <section class="panel orders-panel" aria-label="Open orders" style="margin-bottom: 20px">
           <div class="orders-heading">
             <h2>Open orders</h2>
-            <button id="refresh-open-orders" type="button">Refresh orders</button>
+            <span class="orders-shortcut">Focus selected row · Right Arrow cancels</span>
+            <button id="refresh-open-orders" class="refresh-orders-button" type="button" aria-label="Refresh orders" title="Refresh orders">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                <path d="M20 7v5h-5"></path><path d="M19 12a7 7 0 1 1-2-4.9L20 12"></path>
+              </svg>
+            </button>
           </div>
           <p class="orders-status" id="open-orders-status" role="status" aria-live="polite">Loading open orders…</p>
           <div class="table-wrap">
             <table class="open-orders-table">
               <thead><tr>
+                <th scope="col">Select</th>
                 <th scope="col">Order ID</th>
                 <th scope="col">Instrument</th>
                 <th scope="col">Side</th>
@@ -180,7 +197,7 @@ export function renderOptionChainPage(): string {
                 <th scope="col">Status</th>
                 <th scope="col">Action</th>
               </tr></thead>
-              <tbody id="open-order-rows"><tr><td colspan="8">Loading…</td></tr></tbody>
+              <tbody id="open-order-rows"><tr><td colspan="9">Loading…</td></tr></tbody>
             </table>
           </div>
         </section>
@@ -720,15 +737,32 @@ export function renderOptionChainPage(): string {
         if (!openOrders.length) {
           const row = document.createElement("tr");
           const cell = document.createElement("td");
-          cell.colSpan = 8;
+          cell.colSpan = 9;
           cell.textContent = "No open orders.";
           row.append(cell);
           openOrderRows.append(row);
           return 0;
         }
 
-        for (const order of openOrders) {
+        for (const [index, order] of openOrders.entries()) {
           const row = document.createElement("tr");
+          const selectionCell = document.createElement("td");
+          const orderNumber = orderValue(order, ["nOrdNo", "orderId", "order_id"]);
+          const selector = document.createElement("input");
+          selector.type = "radio";
+          selector.name = "selected-open-order";
+          selector.checked = index === 0;
+          selector.value = orderNumber === "—" ? "row-" + index : orderNumber;
+          selector.setAttribute(
+            "aria-label",
+            orderNumber === "—" ? "Select open order row " + (index + 1) : "Select order " + orderNumber,
+          );
+          if (orderNumber !== "—") {
+            selector.setAttribute("aria-keyshortcuts", "ArrowRight");
+            selector.title = "Focus this selected row and press Right Arrow to cancel immediately";
+          }
+          selectionCell.append(selector);
+          row.append(selectionCell);
           const fields = [
             ["nOrdNo", "orderId", "order_id"],
             ["trdSym", "tradingSymbol", "trading_symbol", "ts"],
@@ -746,7 +780,6 @@ export function renderOptionChainPage(): string {
           const actionCell = document.createElement("td");
           const actionButtons = document.createElement("div");
           actionButtons.className = "open-order-actions";
-          const orderNumber = orderValue(order, ["nOrdNo", "orderId", "order_id"]);
           if (orderNumber !== "—") {
             const tradingSymbol = orderValue(order, ["trdSym", "tradingSymbol", "trading_symbol", "ts"]);
             const product = orderValue(order, ["prod", "product", "pc"]).toUpperCase();
@@ -849,6 +882,22 @@ export function renderOptionChainPage(): string {
         }
       }
 
+      openOrderRows.addEventListener("keydown", (event) => {
+        if (event.key !== "ArrowRight") return;
+        const selector = event.target;
+        if (
+          !(selector instanceof HTMLInputElement) ||
+          selector.type !== "radio" ||
+          selector.name !== "selected-open-order" ||
+          !selector.checked ||
+          selector.value.startsWith("row-")
+        ) {
+          return;
+        }
+        event.preventDefault();
+        void cancelOpenOrder(selector.value);
+      });
+
       async function loadOpenOrders() {
         refreshOpenOrdersButton.disabled = true;
         openOrdersStatus.textContent = "Loading open orders…";
@@ -864,7 +913,7 @@ export function renderOptionChainPage(): string {
           openOrderRows.replaceChildren();
           const row = document.createElement("tr");
           const cell = document.createElement("td");
-          cell.colSpan = 8;
+          cell.colSpan = 9;
           cell.textContent = "Open orders could not be loaded.";
           row.append(cell);
           openOrderRows.append(row);
