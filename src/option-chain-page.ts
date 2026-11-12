@@ -851,6 +851,13 @@ export function renderOptionChainPage(): string {
 
       function renderClosedOrders(orders) {
         const closedOrders = orders.filter(isClosedOrder);
+        closedOrders.sort((left, right) => {
+          const leftTimestamp = orderTimestamp(left);
+          const rightTimestamp = orderTimestamp(right);
+          if (leftTimestamp === null) return rightTimestamp === null ? 0 : 1;
+          if (rightTimestamp === null) return -1;
+          return rightTimestamp - leftTimestamp;
+        });
         closedOrderRows.replaceChildren();
         closedOrdersStatus.dataset.kind = "";
         if (!closedOrders.length) {
@@ -888,6 +895,42 @@ export function renderOptionChainPage(): string {
         closedOrdersStatus.textContent =
           closedOrders.length + " closed order" + (closedOrders.length === 1 ? "" : "s") + ".";
         return closedOrders.length;
+      }
+
+      function orderTimestamp(order) {
+        const value = orderValue(
+          order,
+          ["ordDtTm", "orderDateTime", "order_datetime", "timestamp"],
+          "",
+        );
+        const kotakDateTime = value.match(
+          /^(\d{1,2})-([A-Za-z]{3})-(\d{4})\s+(\d{2}):(\d{2}):(\d{2})$/,
+        );
+        if (kotakDateTime) {
+          const month = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
+            .indexOf(kotakDateTime[2].toLowerCase());
+          if (month >= 0) {
+            const timestamp = Date.UTC(
+              Number(kotakDateTime[3]),
+              month,
+              Number(kotakDateTime[1]),
+              Number(kotakDateTime[4]),
+              Number(kotakDateTime[5]),
+              Number(kotakDateTime[6]),
+            );
+            const parsedDate = new Date(timestamp);
+            if (
+              parsedDate.getUTCFullYear() === Number(kotakDateTime[3]) &&
+              parsedDate.getUTCMonth() === month &&
+              parsedDate.getUTCDate() === Number(kotakDateTime[1])
+            ) {
+              return timestamp;
+            }
+          }
+          return null;
+        }
+        const timestamp = Date.parse(value);
+        return Number.isFinite(timestamp) ? timestamp : null;
       }
 
       async function openModifyOrder(order) {

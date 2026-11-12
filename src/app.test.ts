@@ -217,6 +217,8 @@ describe("authentication routes", () => {
     assert.match(response.body, /id="closed-order-rows"/);
     assert.match(response.body, /function isClosedOrder\(order\)/);
     assert.match(response.body, /renderClosedOrders\(orders\)/);
+    assert.match(response.body, /closedOrders\.sort\(\(left, right\)/);
+    assert.match(response.body, /function orderTimestamp\(order\)/);
     assert.ok(
       response.body.indexOf('aria-label="Closed orders"') >
         response.body.indexOf('aria-label="Live position updates"'),
