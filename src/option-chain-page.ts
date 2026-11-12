@@ -893,23 +893,19 @@ export function renderOptionChainPage(): string {
 
       window.addEventListener("keydown", (event) => {
         if (event.key !== "ArrowRight" && event.keyCode !== 39) return;
-        const focusedRadio = document.activeElement;
         const selectedRadio = document.querySelector(
           'input[name="selected-open-order"]:checked',
         );
         if (
-          focusedRadio instanceof HTMLInputElement &&
-          focusedRadio === selectedRadio &&
-          focusedRadio.value !== "" &&
-          !focusedRadio.value.startsWith("row-")
+          selectedRadio instanceof HTMLInputElement &&
+          selectedRadio.value !== "" &&
+          !selectedRadio.value.startsWith("row-")
         ) {
           event.preventDefault();
           event.stopPropagation();
-          window.alert("Right Arrow detected. Sending cancel for order " + focusedRadio.value + ".");
-          void cancelOpenOrder(focusedRadio.value, true);
+          void cancelOpenOrder(selectedRadio.value, true);
           return;
         }
-        window.alert("Right Arrow detected. Focus the selected order radio to cancel it.");
       }, true);
 
       async function loadOpenOrders() {

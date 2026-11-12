@@ -223,7 +223,9 @@ describe("authentication routes", () => {
     assert.match(response.body, /window\.addEventListener\("keydown"/);
     assert.match(response.body, /event\.key !== "ArrowRight"/);
     assert.match(response.body, /event\.keyCode !== 39/);
-    assert.match(response.body, /Right Arrow detected\. Sending cancel for order/);
+    assert.match(response.body, /input\[name="selected-open-order"\]:checked/);
+    assert.match(response.body, /void cancelOpenOrder\(selectedRadio\.value, true\)/);
+    assert.doesNotMatch(response.body, /focusedRadio === selectedRadio/);
     assert.match(response.body, /Kotak accepted the cancellation request for order/);
     assert.match(response.body, /Cancellation failed for order/);
     assert.match(response.body, /fetch\("\/api\/orders"/);
