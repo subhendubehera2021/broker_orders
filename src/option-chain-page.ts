@@ -1,4 +1,5 @@
-export function renderOptionChainPage(): string {
+export function renderOptionChainPage(openOrderPriceStep = 1): string {
+  const openOrderPriceStepTicks = Math.round(openOrderPriceStep * 20);
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -178,7 +179,7 @@ export function renderOptionChainPage(): string {
         <section class="panel orders-panel" aria-label="Open orders" style="margin-bottom: 20px">
           <div class="orders-heading">
             <h2>Open orders</h2>
-            <span class="orders-shortcut">← market · ↑ +₹0.05 · ↓ −₹0.05 · → cancel</span>
+            <span class="orders-shortcut">← market · ↑ +₹${openOrderPriceStep} · ↓ −₹${openOrderPriceStep} · → cancel</span>
             <button id="refresh-open-orders" class="refresh-orders-button" type="button" aria-label="Refresh orders" title="Refresh orders">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
                 <path d="M20 7v5h-5"></path><path d="M19 12a7 7 0 1 1-2-4.9L20 12"></path>
@@ -411,6 +412,7 @@ export function renderOptionChainPage(): string {
       </div>
     </dialog>
     <script>
+      const openOrderPriceStepTicks = ${openOrderPriceStepTicks};
       const expirySelect = document.querySelector("#expiry");
       const status = document.querySelector("#status");
       const tableWrap = document.querySelector("#table-wrap");
@@ -920,7 +922,7 @@ export function renderOptionChainPage(): string {
           if (orderNumber !== "—") {
             selector.setAttribute("aria-keyshortcuts", "ArrowLeft ArrowUp ArrowDown ArrowRight");
             selector.title =
-              "Left Arrow sends the pending order at market; Up increases price by ₹0.05; Down decreases it; Right Arrow cancels";
+              "Left Arrow sends the pending order at market; Up increases price by ₹${openOrderPriceStep}; Down decreases it; Right Arrow cancels";
           }
           selectionCell.append(selector);
           row.append(selectionCell);
@@ -1243,13 +1245,13 @@ export function renderOptionChainPage(): string {
               Math.abs(currentTriggerPrice - currentTriggerTicks / 20) > 0.000001))
         ) {
           openOrdersStatus.textContent =
-            "Order " + orderNumber + " has a price that cannot be adjusted by one ₹0.05 tick.";
+            "Order " + orderNumber + " has a price that is not aligned to the ₹0.05 market tick.";
           openOrdersStatus.dataset.kind = "error";
           return;
         }
 
-        const priceTicks = currentPriceTicks + direction;
-        const triggerTicks = currentTriggerTicks + direction;
+        const priceTicks = currentPriceTicks + direction * openOrderPriceStepTicks;
+        const triggerTicks = currentTriggerTicks + direction * openOrderPriceStepTicks;
         if (priceTicks < 1 || (isStopLimit && triggerTicks < 1)) {
           openOrdersStatus.textContent = "Price cannot be reduced below ₹0.05.";
           openOrdersStatus.dataset.kind = "error";

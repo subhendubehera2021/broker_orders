@@ -26,6 +26,7 @@ export interface AppConfig {
   host: string;
   port: number;
   webAccessPasscode: string;
+  openOrderPriceStep: number;
   kotakNeo: KotakNeoConfig;
 }
 
@@ -46,6 +47,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   if (!/^[A-Z0-9]{1,32}$/.test(webAccessPasscode)) {
     throw new Error("WEB_ACCESS_PASSCODE must be 1-32 uppercase letters or digits");
   }
+  const openOrderPriceStep = parsePriceStep(env.OPEN_ORDER_PRICE_STEP);
 
   const apiBaseUrl = requiredValue(env.KOTAK_NEO_API_BASE_URL, "KOTAK_NEO_API_BASE_URL");
   let parsedBaseUrl: URL;
@@ -102,6 +104,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     host: requiredValue(env.HOST, "HOST"),
     port,
     webAccessPasscode,
+    openOrderPriceStep,
     kotakNeo: {
       apiBaseUrl,
       consumerKey: env.KOTAK_NEO_CONSUMER_KEY || undefined,
@@ -144,6 +147,18 @@ function parseInteger(value: string | undefined, name: string): number {
     throw new Error(`${name} must be configured as an integer`);
   }
   return Number(value);
+}
+
+function parsePriceStep(value: string | undefined): number {
+  const normalized = value?.trim() || "1";
+  if (!/^\d+(?:\.\d{1,2})?$/.test(normalized)) {
+    throw new Error("OPEN_ORDER_PRICE_STEP must be a positive multiple of ₹0.05");
+  }
+  const stepPaise = Number(normalized) * 100;
+  if (!Number.isSafeInteger(stepPaise) || stepPaise <= 0 || stepPaise % 5 !== 0) {
+    throw new Error("OPEN_ORDER_PRICE_STEP must be a positive multiple of ₹0.05");
+  }
+  return stepPaise / 100;
 }
 
 function parseBoolean(value: string | undefined, name: string, fallback: boolean): boolean {

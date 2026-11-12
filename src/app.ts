@@ -237,7 +237,7 @@ export function buildApp({
     return reply
       .header("Cache-Control", "no-store")
       .type("text/html; charset=utf-8")
-      .send(renderOptionChainPage());
+      .send(renderOptionChainPage(config.openOrderPriceStep));
   });
 
   app.get("/auto-trade", async (_request, reply) => {

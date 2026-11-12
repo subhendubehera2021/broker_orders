@@ -241,6 +241,8 @@ application:
 - `KOTAK_NEO_QUOTES_PATH` — quote endpoint template; retain the
   `{neo_symbols}` and `{quote_type}` placeholders.
 - `KOTAK_NEO_REQUEST_TIMEOUT_MS` — upstream request timeout in milliseconds.
+- `OPEN_ORDER_PRICE_STEP` — rupee increment used by the Open orders Up/Down
+  shortcuts; must be a positive multiple of ₹0.05 and defaults to `1`.
 - `HOST` and `PORT` — service bind address and port.
 
 The service reads all runtime settings from the environment (loaded from `.env`

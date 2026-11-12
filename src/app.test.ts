@@ -12,6 +12,7 @@ import {
 const config: AppConfig = {
   host: "127.0.0.1",
   port: 3000,
+  openOrderPriceStep: 1,
   webAccessPasscode: "SKB9178",
   kotakNeo: {
     apiBaseUrl: "https://kotak.example/",
@@ -245,7 +246,10 @@ describe("authentication routes", () => {
     assert.match(response.body, /selector\.checked = index === 0/);
     assert.match(response.body, /input\[type="radio"\]:checked::before/);
     assert.match(response.body, /input\[type="radio"\]:focus-visible/);
-    assert.match(response.body, /← market · ↑ \+₹0\.05 · ↓ −₹0\.05 · → cancel/);
+    assert.match(response.body, /← market · ↑ \+₹1 · ↓ −₹1 · → cancel/);
+    assert.match(response.body, /const openOrderPriceStepTicks = 20;/);
+    assert.match(response.body, /currentPriceTicks \+ direction \* openOrderPriceStepTicks/);
+    assert.match(response.body, /currentTriggerTicks \+ direction \* openOrderPriceStepTicks/);
     assert.match(response.body, /window\.addEventListener\("keydown"/);
     assert.match(response.body, /event\.key === "ArrowLeft"/);
     assert.match(response.body, /event\.key === "ArrowUp"/);

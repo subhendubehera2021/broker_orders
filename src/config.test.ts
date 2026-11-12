@@ -5,6 +5,7 @@ import { loadConfig } from "./config.js";
 const validEnvironment: NodeJS.ProcessEnv = {
   HOST: "127.0.0.1",
   PORT: "3000",
+  OPEN_ORDER_PRICE_STEP: "1",
   WEB_ACCESS_PASSCODE: "SKB9178",
   KOTAK_NEO_API_BASE_URL: "https://broker.example/",
   KOTAK_NEO_CONSUMER_KEY: "consumer-key",
@@ -33,6 +34,7 @@ describe("loadConfig", () => {
     assert.deepEqual(loadConfig(validEnvironment), {
       host: "127.0.0.1",
       port: 3000,
+      openOrderPriceStep: 1,
       webAccessPasscode: "SKB9178",
       kotakNeo: {
         apiBaseUrl: "https://broker.example/",
@@ -58,6 +60,20 @@ describe("loadConfig", () => {
         requestTimeoutMs: 10000,
       },
     });
+  });
+
+  it("defaults the open-order price step to one rupee and validates custom steps", () => {
+    const { OPEN_ORDER_PRICE_STEP: _priceStep, ...environmentWithoutPriceStep } = validEnvironment;
+
+    assert.equal(loadConfig(environmentWithoutPriceStep).openOrderPriceStep, 1);
+    assert.equal(
+      loadConfig({ ...validEnvironment, OPEN_ORDER_PRICE_STEP: "0.5" }).openOrderPriceStep,
+      0.5,
+    );
+    assert.throws(
+      () => loadConfig({ ...validEnvironment, OPEN_ORDER_PRICE_STEP: "1.01" }),
+      /OPEN_ORDER_PRICE_STEP must be a positive multiple of ₹0\.05/,
+    );
   });
 
   it("requires environment-specific API settings", () => {
