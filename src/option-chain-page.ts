@@ -57,12 +57,16 @@ export function renderOptionChainPage(): string {
       .orders-heading h2 { margin: 0; font-size: 17px; }
       .orders-status { min-height: 18px; margin: 14px 0 12px; color: #a0adba; font-size: 11px; }
       .orders-status[data-kind="error"] { color: #f0a3a3; }
-      .open-orders-table { min-width: 900px; }
+      .open-orders-table { min-width: 840px; }
       .open-orders-table th { position: static; height: auto; padding: 11px 14px; background: #171f27; text-align: left; }
       .open-orders-table td { padding: 11px 14px; }
-      .open-orders-table th:last-child, .open-orders-table td:last-child { width: 190px; }
+      .open-orders-table th:last-child, .open-orders-table td:last-child { width: 130px; }
       .open-order-actions { display: flex; align-items: center; gap: 8px; }
       .open-order-actions button { flex: 0 0 auto; }
+      .open-order-actions .order-action-button { display: grid; width: 36px; height: 36px; place-items: center; padding: 0; }
+      .order-action-button svg { width: 17px; height: 17px; }
+      .order-action-button[data-action="cancel"] { border-color: #67434a; color: #f0a3a3; }
+      .order-action-button[data-action="cancel"]:hover:not(:disabled) { border-color: #e36d78; color: #ffb0b0; }
       .table-wrap { max-height: 72vh; overflow: auto; border: 1px solid #293541; border-radius: 10px; background: #0d131a; }
       table { width: 100%; min-width: 760px; table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: 13px; white-space: nowrap; }
       th, td { overflow: hidden; padding: 13px 16px; border-right: 1px solid #242e38; border-bottom: 1px solid #222d38; text-overflow: ellipsis; }
@@ -455,6 +459,35 @@ export function renderOptionChainPage(): string {
         return fallback;
       }
 
+      function createOpenOrderAction(label, action) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "order-action-button";
+        button.dataset.action = action;
+        button.setAttribute("aria-label", label);
+        button.title = label;
+
+        const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        icon.setAttribute("viewBox", "0 0 24 24");
+        icon.setAttribute("fill", "none");
+        icon.setAttribute("stroke", "currentColor");
+        icon.setAttribute("stroke-width", "1.8");
+        icon.setAttribute("stroke-linecap", "round");
+        icon.setAttribute("stroke-linejoin", "round");
+        icon.setAttribute("aria-hidden", "true");
+        icon.setAttribute("focusable", "false");
+        const paths = action === "modify"
+          ? ["M12 20h9", "M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"]
+          : ["M18 6 6 18", "M6 6l12 12"];
+        for (const pathData of paths) {
+          const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+          path.setAttribute("d", pathData);
+          icon.append(path);
+        }
+        button.append(icon);
+        return button;
+      }
+
       function extractOrders(payload) {
         if (Array.isArray(payload)) return payload.filter((item) => item && typeof item === "object");
         if (!payload || typeof payload !== "object") return [];
@@ -718,19 +751,13 @@ export function renderOptionChainPage(): string {
             const tradingSymbol = orderValue(order, ["trdSym", "tradingSymbol", "trading_symbol", "ts"]);
             const product = orderValue(order, ["prod", "product", "pc"]).toUpperCase();
             if (/^NIFTY.*(CE|PE)$/i.test(tradingSymbol) && ["MIS", "NRML"].includes(product)) {
-              const modifyButton = document.createElement("button");
-              modifyButton.type = "button";
-              modifyButton.textContent = "Modify";
-              modifyButton.setAttribute("aria-label", "Modify order " + orderNumber);
+              const modifyButton = createOpenOrderAction("Modify order " + orderNumber, "modify");
               modifyButton.addEventListener("click", () => {
                 void openModifyOrder(order);
               });
               actionButtons.append(modifyButton);
             }
-            const cancelButton = document.createElement("button");
-            cancelButton.type = "button";
-            cancelButton.textContent = "Cancel";
-            cancelButton.setAttribute("aria-label", "Cancel order " + orderNumber);
+            const cancelButton = createOpenOrderAction("Cancel order " + orderNumber, "cancel");
             cancelButton.addEventListener("click", () => {
               void cancelOpenOrder(orderNumber);
             });

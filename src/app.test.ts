@@ -213,6 +213,9 @@ describe("authentication routes", () => {
     assert.match(response.body, /fetch\("\/api\/orders"/);
     assert.match(response.body, /openOrderRows\.append\(row\)/);
     assert.match(response.body, /open-order-actions/);
+    assert.match(response.body, /function createOpenOrderAction\(label, action\)/);
+    assert.match(response.body, /createElementNS\("http:\/\/www\.w3\.org\/2000\/svg", "svg"\)/);
+    assert.match(response.body, /button\.title = label/);
     assert.match(response.body, /actionButtons\.append\(modifyButton\)/);
     assert.match(response.body, /actionButtons\.append\(cancelButton\)/);
     assert.match(response.body, /Modify order/);
