@@ -53,6 +53,8 @@ export function renderOptionChainPage(): string {
       .activity-table td { color: #d7e0e9; font-variant-numeric: tabular-nums; }
       .activity-table tbody tr:last-child td { border-bottom: 0; }
       .activity-empty { padding: 24px 12px !important; color: #8d9aaa !important; text-align: center !important; }
+      .activity-table td[data-kind="profit"] { color: #9ce0cb; }
+      .activity-table td[data-kind="loss"] { color: #f0a3a3; }
       .orders-panel { padding: 14px; }
       .orders-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 2px; }
       .orders-heading h2 { margin: 0; font-size: 15px; }
@@ -200,6 +202,17 @@ export function renderOptionChainPage(): string {
                 <th scope="col">Action</th>
               </tr></thead>
               <tbody id="open-order-rows"><tr><td colspan="10">Loading…</td></tr></tbody>
+            </table>
+          </div>
+        </section>
+        <section class="panel activity-panel" aria-label="Active position P/L" style="margin-bottom: 20px">
+          <h2>Live position P/L</h2>
+          <p class="activity-status" id="active-position-pnl-status" role="status" aria-live="polite">Loading active positions…</p>
+          <p class="activity-status">Active positions only. Live P/L uses remaining net quantity and average entry price; charges are excluded.</p>
+          <div class="activity-table-wrap">
+            <table class="activity-table">
+              <thead><tr><th>Trading symbol</th><th>Product</th><th>Net qty</th><th>Buy qty</th><th>Sell qty</th><th>LTP</th><th>Average entry</th><th>Live P/L</th></tr></thead>
+              <tbody id="active-position-pnl-rows"><tr><td class="activity-empty" colspan="8">Loading active positions…</td></tr></tbody>
             </table>
           </div>
         </section>
@@ -410,6 +423,8 @@ export function renderOptionChainPage(): string {
       const openOrdersStatus = document.querySelector("#open-orders-status");
       const openOrderRows = document.querySelector("#open-order-rows");
       const refreshOpenOrdersButton = document.querySelector("#refresh-open-orders");
+      const activePositionPnlStatus = document.querySelector("#active-position-pnl-status");
+      const activePositionPnlBody = document.querySelector("#active-position-pnl-rows");
       const closedOrdersStatus = document.querySelector("#closed-orders-status");
       const closedOrderRows = document.querySelector("#closed-order-rows");
       const orderTitle = document.querySelector("#order-title");
@@ -549,21 +564,44 @@ export function renderOptionChainPage(): string {
         return item === undefined || item === null || item === "" ? fallback : String(item);
       }
 
-      function activityPnl(position) {
-        const buyAmount = Number(position.buyAmt);
-        const sellAmount = Number(position.sellAmt);
-        if (
-          position.buyAmt === undefined ||
-          position.buyAmt === null ||
-          position.buyAmt === "" ||
-          position.sellAmt === undefined ||
-          position.sellAmt === null ||
-          position.sellAmt === "" ||
-          !Number.isFinite(buyAmount) ||
-          !Number.isFinite(sellAmount)
-        ) {
-          return "—";
+      function activityNumber(record, keys) {
+        for (const key of keys) {
+          const value = record[key];
+          if (value !== undefined && value !== null && value !== "") {
+            const number = Number(value);
+            return Number.isFinite(number) ? number : undefined;
+          }
         }
+        return undefined;
+      }
+
+      function activityPositionSymbol(position) {
+        return activityValue(
+          position,
+          "trdSym",
+          activityValue(position, "tradingSymbol", activityValue(position, "trading_symbol", activityValue(position, "sym", ""))),
+        );
+      }
+
+      function activityPositionNetQuantity(position) {
+        const buyQuantity = activityNumber(position, ["flBuyQty", "buyQty", "buy_qty"]);
+        const sellQuantity = activityNumber(position, ["flSellQty", "sellQty", "sell_qty"]);
+        if (buyQuantity !== undefined || sellQuantity !== undefined) {
+          return (buyQuantity ?? 0) - (sellQuantity ?? 0);
+        }
+        return activityNumber(position, ["qty", "netQty", "net_qty"]) ?? 0;
+      }
+
+      function activeActivityPositions() {
+        return activityPositionUpdates.filter(
+          (position) => activityPositionNetQuantity(position) !== 0,
+        );
+      }
+
+      function activityPnl(position) {
+        const buyAmount = activityNumber(position, ["buyAmt", "buyAmount", "buy_amount"]);
+        const sellAmount = activityNumber(position, ["sellAmt", "sellAmount", "sell_amount"]);
+        if (buyAmount === undefined || sellAmount === undefined) return "—";
         return new Intl.NumberFormat("en-IN", {
           style: "currency",
           currency: "INR",
@@ -619,7 +657,7 @@ export function renderOptionChainPage(): string {
       }
 
       function activityPositionKey(data) {
-        const symbol = activityValue(data, "trdSym", activityValue(data, "sym", ""));
+        const symbol = activityPositionSymbol(data);
         const identity = [
           activityValue(data, "actId", ""),
           symbol,
@@ -638,6 +676,69 @@ export function renderOptionChainPage(): string {
         );
       }
 
+      function renderActivePositionPnl() {
+        activePositionPnlBody.replaceChildren();
+        const activePositions = activeActivityPositions();
+        if (!activePositions.length) {
+          const row = document.createElement("tr");
+          const cell = document.createElement("td");
+          cell.className = "activity-empty";
+          cell.colSpan = 8;
+          cell.textContent = "No active positions.";
+          row.append(cell);
+          activePositionPnlBody.append(row);
+          activePositionPnlStatus.textContent = "0 active positions.";
+          return;
+        }
+        for (const position of activePositions) {
+          const symbol = activityPositionSymbol(position);
+          const netQuantity = activityPositionNetQuantity(position);
+          const buyQuantity = activityNumber(position, ["flBuyQty", "buyQty", "buy_qty"]);
+          const sellQuantity = activityNumber(position, ["flSellQty", "sellQty", "sell_qty"]);
+          const ltp = optionPrices.get(symbol);
+          const buyAmount = activityNumber(position, ["buyAmt", "buyAmount", "buy_amount"]);
+          const sellAmount = activityNumber(position, ["sellAmt", "sellAmount", "sell_amount"]);
+          const entryQuantity = netQuantity > 0
+            ? (buyQuantity !== undefined && buyQuantity > 0 ? buyQuantity : netQuantity)
+            : (sellQuantity !== undefined && sellQuantity > 0 ? sellQuantity : Math.abs(netQuantity));
+          const entryAmount = netQuantity > 0 ? buyAmount : sellAmount;
+          const averageEntryPrice =
+            entryQuantity > 0 && entryAmount !== undefined ? entryAmount / entryQuantity : undefined;
+          const livePnl =
+            averageEntryPrice !== undefined &&
+            ltp !== undefined
+              ? (ltp - averageEntryPrice) * netQuantity
+              : undefined;
+          const values = [
+            symbol || "—",
+            activityValue(position, "prod"),
+            activityValue(position, "qty", numberFormat.format(activityPositionNetQuantity(position))),
+            activityValue(position, "flBuyQty", activityValue(position, "buyQty", activityValue(position, "buy_qty"))),
+            activityValue(position, "flSellQty", activityValue(position, "sellQty", activityValue(position, "sell_qty"))),
+            ltp !== undefined ? "₹" + numberFormat.format(ltp) : "—",
+            averageEntryPrice !== undefined ? "₹" + numberFormat.format(averageEntryPrice) : "—",
+            livePnl !== undefined
+              ? (livePnl > 0 ? "+" : livePnl < 0 ? "−" : "") +
+                "₹" + numberFormat.format(Math.abs(livePnl))
+              : "—",
+          ];
+          const row = document.createElement("tr");
+          row.dataset.symbol = symbol;
+          for (const [index, value] of values.entries()) {
+            const cell = document.createElement("td");
+            cell.textContent = value;
+            if (index === 7 && livePnl !== undefined) {
+              cell.dataset.kind = livePnl > 0 ? "profit" : livePnl < 0 ? "loss" : "";
+            }
+            row.append(cell);
+          }
+          activePositionPnlBody.append(row);
+        }
+        activePositionPnlStatus.textContent =
+          activePositions.length + " active position" +
+          (activePositions.length === 1 ? "" : "s") + " · live P/L updates from LTP.";
+      }
+
       function handleActivityPosition(data) {
         const key = activityPositionKey(data);
         const index = key
@@ -646,6 +747,8 @@ export function renderOptionChainPage(): string {
         if (index >= 0) activityPositionUpdates[index] = { ...activityPositionUpdates[index], ...data };
         else activityPositionUpdates.push(data);
         renderActivityPositions();
+        renderActivePositionPnl();
+        syncOpenOrderPriceFeed();
         activityPositionStatus.textContent =
           activityPositionUpdates.length + " position" +
           (activityPositionUpdates.length === 1 ? "" : "s") + " · live update received";
@@ -677,6 +780,8 @@ export function renderOptionChainPage(): string {
             activityStatusLabel.dataset.state = "error";
             activityPositionStatus.textContent = "Sign in to load current positions.";
             activityPositionStatus.dataset.state = "error";
+            activePositionPnlStatus.textContent = "Sign in to load active positions.";
+            activePositionPnlStatus.dataset.state = "error";
             return;
           }
 
@@ -690,6 +795,8 @@ export function renderOptionChainPage(): string {
             }
             activityPositionUpdates = extractActivityPositions(positionsPayload);
             renderActivityPositions();
+            renderActivePositionPnl();
+            syncOpenOrderPriceFeed();
             activityPositionStatus.textContent =
               activityPositionUpdates.length + " current position" +
               (activityPositionUpdates.length === 1 ? "" : "s") +
@@ -699,6 +806,8 @@ export function renderOptionChainPage(): string {
             activityPositionStatus.textContent =
               error instanceof Error ? error.message : "Could not load current positions.";
             activityPositionStatus.dataset.state = "error";
+            activePositionPnlStatus.textContent = activityPositionStatus.textContent;
+            activePositionPnlStatus.dataset.state = "error";
           }
 
           activityEventSource = new EventSource("/api/orders/stream");
@@ -1863,12 +1972,22 @@ export function renderOptionChainPage(): string {
         row.append(cell);
       }
 
-      function getOpenOrderPriceSymbols() {
-        return [...openOrderPriceSymbols].sort();
+      function getTrackedPriceSymbols() {
+        const symbols = new Set(openOrderPriceSymbols);
+        for (const position of activityPositionUpdates) {
+          const symbol = activityPositionSymbol(position);
+          if (
+            activityPositionNetQuantity(position) !== 0 &&
+            /^NIFTY.*(CE|PE)$/i.test(symbol)
+          ) {
+            symbols.add(symbol);
+          }
+        }
+        return [...symbols].sort();
       }
 
       function syncOpenOrderPriceFeed() {
-        const symbolsKey = getOpenOrderPriceSymbols().join(",");
+        const symbolsKey = getTrackedPriceSymbols().join(",");
         if (activeMarketExpiry && symbolsKey !== activeOrderPriceSymbolsKey) {
           connectNiftyPriceStream(activeMarketExpiry);
         }
@@ -1877,7 +1996,7 @@ export function renderOptionChainPage(): string {
       function connectNiftyPriceStream(expiry) {
         marketFeed?.close();
         activeMarketExpiry = expiry;
-        const orderSymbols = getOpenOrderPriceSymbols();
+        const orderSymbols = getTrackedPriceSymbols();
         activeOrderPriceSymbolsKey = orderSymbols.join(",");
         setFeedStatus("connecting", "Connecting");
         const params = new URLSearchParams({ expiry });
@@ -1925,6 +2044,13 @@ export function renderOptionChainPage(): string {
               if (ltp.dataset.symbol === tick.tradingSymbol) {
                 ltp.textContent = "₹" + numberFormat.format(tick.price);
               }
+            }
+            if (
+              activityPositionUpdates.some(
+                (position) => activityPositionSymbol(position) === tick.tradingSymbol,
+              )
+            ) {
+              renderActivePositionPnl();
             }
             for (const price of document.querySelectorAll(".option-price")) {
               if (price.dataset.symbol === tick.tradingSymbol) {
@@ -1992,7 +2118,7 @@ export function renderOptionChainPage(): string {
             strikes.get(strike).CE.tradingSymbol,
             strikes.get(strike).PE.tradingSymbol,
           ]),
-          ...getOpenOrderPriceSymbols(),
+          ...getTrackedPriceSymbols(),
         ]);
         for (const symbol of optionPrices.keys()) {
           if (!selectedSymbols.has(symbol)) optionPrices.delete(symbol);
@@ -2064,6 +2190,7 @@ export function renderOptionChainPage(): string {
         displayedStrikesKey = "";
         loadedContracts = [];
         optionPrices.clear();
+        renderActivePositionPnl();
         for (const ltp of document.querySelectorAll(".open-order-ltp")) {
           ltp.textContent = "—";
         }

@@ -219,10 +219,24 @@ describe("authentication routes", () => {
     assert.match(response.body, /renderClosedOrders\(orders\)/);
     assert.match(response.body, /closedOrders\.sort\(\(left, right\)/);
     assert.match(response.body, /function orderTimestamp\(order\)/);
+    assert.match(response.body, /<th>Sell qty<\/th><th>LTP<\/th><th>Average entry<\/th><th>Live P\/L<\/th>/);
+    assert.match(response.body, /function activeActivityPositions\(\)/);
+    assert.match(response.body, /activityPositionNetQuantity\(position\) !== 0/);
+    assert.match(response.body, /\(ltp - averageEntryPrice\) \* netQuantity/);
+    assert.match(response.body, /getTrackedPriceSymbols\(\)/);
+    assert.ok(
+      response.body.indexOf('aria-label="Active position P/L"') >
+        response.body.indexOf('aria-label="Open orders"'),
+    );
+    assert.ok(
+      response.body.indexOf('aria-label="NIFTY option chain"') >
+        response.body.indexOf('aria-label="Active position P/L"'),
+    );
     assert.ok(
       response.body.indexOf('aria-label="Closed orders"') >
         response.body.indexOf('aria-label="Live position updates"'),
     );
+    assert.doesNotMatch(response.body, /aria-label="Filled trade P\/L"/);
     assert.match(response.body, /class="panel orders-panel"/);
     assert.match(response.body, /open-orders-table \{ min-width: 780px; font-size: 12px; \}/);
     assert.match(response.body, /<th scope="col">Select<\/th>/);
