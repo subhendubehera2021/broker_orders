@@ -253,6 +253,8 @@ describe("authentication routes", () => {
     assert.match(response.body, /actionButtons\.append\(cancelButton\)/);
     assert.match(response.body, /Modify order/);
     assert.match(response.body, /\/api\/orders\/" \+ encodeURIComponent\(modifyingOrderNumber\) \+ "\/modify/);
+    assert.match(response.body, /instrumentToken: modifyingOrderContext\.instrumentToken/);
+    assert.match(response.body, /instrumentToken: orderValue\(order, \["tk", "tok", "instrumentToken", "instrument_token"\], ""\)/);
     assert.match(response.body, /Review & modify live order/);
     assert.match(response.body, /async function cancelOpenOrder\(orderNumber\)/);
     assert.doesNotMatch(response.body, /confirm\("Cancel open order/);
@@ -517,42 +519,29 @@ describe("authentication routes", () => {
     assert.deepEqual(response.json(), { stat: "Ok", nOrdNo: "123" });
   });
 
-  it("modifies only a current open NIFTY option using Scrip Master details", async () => {
-    const expiryEpoch = String(Date.UTC(2030, 0, 30) / 1000 - 315_511_200);
-    const csv = [
-      "pSymbol,pInstType,pSymbolName,pTrdSymbol,pOptionType,pExpiryDate,dStrikePrice;,lLotSize",
-      `123,OPTIDX,NIFTY,NIFTY30JAN2030CE,CE,${expiryEpoch},2500000,25`,
-    ].join("\n");
+  it("passes order modification details to Kotak without local order or contract checks", async () => {
     let modifyInput: unknown;
-    let orderStatus = "open";
-    let filledQuantity = "25";
+    let orderBookCalls = 0;
+    let scripMasterFileCalls = 0;
     let modifyCalls = 0;
     const app = buildApp({
       config: {
         ...config,
         kotakNeo: {
           ...config.kotakNeo,
-          orderBookPath: "quick/user/orders",
+          orderBookPath: "",
           modifyOrderPath: "quick/order/vr/modify",
         },
       },
       authClient: {
         async login() { return authenticatedSession; },
-        async getScripMaster() { return { data: { filesPaths: [] } }; },
+        async getScripMaster() {
+          throw new Error("Scrip Master API must not be called");
+        },
         async getOrderBook(session) {
+          orderBookCalls += 1;
           assert.deepEqual(session, authenticatedSession);
-          return {
-            stat: "Ok",
-            data: [{
-              nOrdNo: "123",
-              ordSt: orderStatus,
-              trdSym: "NIFTY30JAN2030CE",
-              trnsTp: "B",
-              prod: "MIS",
-              qty: "50",
-              fldQty: filledQuantity,
-            }],
-          };
+          throw new Error("Order-book preflight must not be called");
         },
         async modifyOrder(session, input) {
           assert.deepEqual(session, authenticatedSession);
@@ -561,7 +550,10 @@ describe("authentication routes", () => {
           return { stat: "Ok", nOrdNo: "123" };
         },
       },
-      optionChainCsvLoader: async () => csv,
+      optionChainCsvLoader: async () => {
+        scripMasterFileCalls += 1;
+        throw new Error("Scrip Master file must not be loaded");
+      },
     });
     apps.push(app);
 
@@ -570,66 +562,42 @@ describe("authentication routes", () => {
       method: "POST",
       url: "/api/orders/123/modify",
       payload: {
-        quantity: "75",
-        product: "NRML",
-        orderType: "SL",
-        price: "110",
-        triggerPrice: "109",
-        validity: "DAY",
+        instrumentToken: "unmapped-token",
+        tradingSymbol: "UNKNOWN-EQ",
+        transactionType: "BUY",
+        quantity: "not-validated",
+        filledQuantity: "not-validated",
+        product: "CUSTOM-PRODUCT",
+        orderType: "CUSTOM-TYPE",
+        price: "not-validated",
+        triggerPrice: "not-validated",
+        validity: "CUSTOM-VALIDITY",
+        amo: "NO",
+        disclosedQuantity: "not-validated",
+        marketProtection: "not-validated",
       },
     });
 
     assert.equal(response.statusCode, 200, response.body);
     assert.deepEqual(modifyInput, {
       orderNumber: "123",
-      instrumentToken: "123",
-      tradingSymbol: "NIFTY30JAN2030CE",
-      transactionType: "B",
-      quantity: "75",
-      filledQuantity: "25",
-      product: "NRML",
-      orderType: "SL",
-      price: "110",
-      validity: "DAY",
+      instrumentToken: "unmapped-token",
+      tradingSymbol: "UNKNOWN-EQ",
+      transactionType: "BUY",
+      quantity: "not-validated",
+      filledQuantity: "not-validated",
+      product: "CUSTOM-PRODUCT",
+      orderType: "CUSTOM-TYPE",
+      price: "not-validated",
+      validity: "CUSTOM-VALIDITY",
       amo: "NO",
-      disclosedQuantity: "0",
-      marketProtection: "0",
-      triggerPrice: "109",
+      disclosedQuantity: "not-validated",
+      marketProtection: "not-validated",
+      triggerPrice: "not-validated",
     });
     assert.deepEqual(response.json(), { stat: "Ok", nOrdNo: "123" });
-
-    orderStatus = "complete";
-    const completedOrder = await app.inject({
-      method: "POST",
-      url: "/api/orders/123/modify",
-      payload: {
-        quantity: "75",
-        product: "NRML",
-        orderType: "SL",
-        price: "110",
-        triggerPrice: "109",
-        validity: "DAY",
-      },
-    });
-    assert.equal(completedOrder.statusCode, 400);
-    assert.match(completedOrder.json().error, /Only open orders can be modified/);
-
-    orderStatus = "open";
-    filledQuantity = "50";
-    const quantityBelowFills = await app.inject({
-      method: "POST",
-      url: "/api/orders/123/modify",
-      payload: {
-        quantity: "25",
-        product: "NRML",
-        orderType: "SL",
-        price: "110",
-        triggerPrice: "109",
-        validity: "DAY",
-      },
-    });
-    assert.equal(quantityBelowFills.statusCode, 400);
-    assert.match(quantityBelowFills.json().error, /cannot be less than the quantity already filled/);
+    assert.equal(orderBookCalls, 0);
+    assert.equal(scripMasterFileCalls, 0);
     assert.equal(modifyCalls, 1);
   });
 

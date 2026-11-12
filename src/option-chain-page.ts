@@ -462,6 +462,7 @@ export function renderOptionChainPage(): string {
       let displayedStrikesKey = "";
       let selectedOrderContract;
       let modifyingOrderNumber;
+      let modifyingOrderContext;
       let orderSubmissionUncertain = false;
       let selectedSwingContract;
       let swingRequestId = 0;
@@ -489,6 +490,14 @@ export function renderOptionChainPage(): string {
           if (value !== undefined && value !== null && value !== "") return String(value);
         }
         return fallback;
+      }
+
+      function orderAmoValue(order) {
+        return orderValue(order, ["ordGenTp", "orderGenerationType", "amo", "am"]).toUpperCase() ===
+            "AMO" ||
+          orderValue(order, ["amo", "am"]).toUpperCase() === "YES"
+          ? "YES"
+          : "NO";
       }
 
       function createOpenOrderAction(label, action) {
@@ -885,9 +894,7 @@ export function renderOptionChainPage(): string {
         const orderNumber = orderValue(order, ["nOrdNo", "orderId", "order_id"]);
         const tradingSymbol = orderValue(order, ["trdSym", "tradingSymbol", "trading_symbol", "ts"]);
         const product = orderValue(order, ["prod", "product", "pc"]).toUpperCase();
-        const contract = loadedContracts.find(
-          (item) => item.tradingSymbol.toUpperCase() === tradingSymbol.toUpperCase(),
-        );
+        modifyingOrderContext = undefined;
         try {
           const response = await fetch("/api/auth/session", { headers: { Accept: "application/json" } });
           if (!response.ok) throw new Error("Could not check the Kotak Neo session.");
@@ -897,7 +904,19 @@ export function renderOptionChainPage(): string {
           modifyingOrderNumber = orderNumber;
           selectedOrderContract = {
             tradingSymbol,
-            lotSize: contract?.lotSize ?? "1",
+            lotSize: "1",
+          };
+          modifyingOrderContext = {
+            instrumentToken: orderValue(order, ["tk", "tok", "instrumentToken", "instrument_token"], ""),
+            tradingSymbol,
+            transactionType: orderValue(order, [
+              "trnsTp",
+              "transactionType",
+              "transaction_type",
+              "tt",
+            ]).toUpperCase(),
+            filledQuantity: orderValue(order, ["fldQty", "filledQuantity", "filled_qty", "fq"], "0"),
+            amo: orderAmoValue(order),
           };
           orderTitle.textContent = "Modify order " + orderNumber;
           orderContractLabel.textContent = tradingSymbol;
@@ -907,11 +926,7 @@ export function renderOptionChainPage(): string {
           orderProductSelect.value = product;
           orderTypeSelect.value = orderValue(order, ["prcTp", "orderType", "order_type", "pt"]);
           orderValiditySelect.value = orderValue(order, ["validity", "vd", "rt"], "DAY");
-          orderAmoSelect.value =
-            orderValue(order, ["ordGenTp", "orderGenerationType", "amo", "am"]).toUpperCase() === "AMO" ||
-            orderValue(order, ["amo", "am"]).toUpperCase() === "YES"
-              ? "YES"
-              : "NO";
+          orderAmoSelect.value = orderAmoValue(order);
           orderTriggerInput.value = orderValue(order, ["trgPrc", "triggerPrice", "tp"], "");
           orderPriceInput.value = orderValue(order, ["prc", "price", "pr"], "0");
           orderDisclosedQuantityInput.value = orderValue(order, ["dscQty", "disclosedQuantity", "dq"], "0");
@@ -1014,11 +1029,21 @@ export function renderOptionChainPage(): string {
 
         const validity = orderValue(order, ["validity", "vd", "rt"], "DAY").toUpperCase();
         const payload = {
+          instrumentToken: orderValue(order, ["tk", "tok", "instrumentToken", "instrument_token"], ""),
+          tradingSymbol,
+          transactionType: orderValue(order, [
+            "trnsTp",
+            "transactionType",
+            "transaction_type",
+            "tt",
+          ]).toUpperCase(),
           quantity: orderValue(order, ["qty", "quantity", "qt"]),
+          filledQuantity: orderValue(order, ["fldQty", "filledQuantity", "filled_qty", "fq"], "0"),
           product,
           orderType,
           price: (priceTicks / 20).toFixed(2),
           validity,
+          amo: orderAmoValue(order),
           triggerPrice: isStopLimit ? (triggerTicks / 20).toFixed(2) : "0",
           disclosedQuantity: orderValue(order, ["dscQty", "disclosedQuantity", "dq"], "0"),
           marketProtection: orderValue(order, ["mktPro", "marketProtection", "mp"], "0"),
@@ -1054,12 +1079,10 @@ export function renderOptionChainPage(): string {
         try {
           const result = await response.json();
           if (!response.ok) throw new Error(result.error || "Could not modify this order.");
-          await loadOpenOrders();
-          if (openOrdersStatus.dataset.kind !== "error") {
-            const adjustedPrice = (priceTicks / 20).toFixed(2);
-            openOrdersStatus.textContent =
-              "Price change requested for order " + orderNumber + " · ₹" + adjustedPrice + ".";
-          }
+          const adjustedPrice = (priceTicks / 20).toFixed(2);
+          openOrdersStatus.textContent =
+            "Price change requested for order " + orderNumber + " · ₹" + adjustedPrice + ".";
+          await loadOpenOrders(true);
         } catch (error) {
           if (error instanceof SyntaxError) {
             uncertainPriceModifications.add(orderNumber);
@@ -1113,10 +1136,12 @@ export function renderOptionChainPage(): string {
         }
       }, true);
 
-      async function loadOpenOrders() {
+      async function loadOpenOrders(preserveStatus = false) {
         refreshOpenOrdersButton.disabled = true;
-        openOrdersStatus.textContent = "Loading open orders…";
-        openOrdersStatus.dataset.kind = "";
+        if (!preserveStatus) {
+          openOrdersStatus.textContent = "Loading open orders…";
+          openOrdersStatus.dataset.kind = "";
+        }
         try {
           const response = await fetch("/api/orders", { headers: { Accept: "application/json" } });
           const payload = await response.json();
@@ -1125,8 +1150,10 @@ export function renderOptionChainPage(): string {
           const orders = extractOrders(payload);
           const count = renderOpenOrders(orders);
           renderClosedOrders(orders);
-          openOrdersStatus.textContent =
-            count + " open order" + (count === 1 ? "" : "s") + ".";
+          if (!preserveStatus) {
+            openOrdersStatus.textContent =
+              count + " open order" + (count === 1 ? "" : "s") + ".";
+          }
         } catch (error) {
           openOrderRows.replaceChildren();
           const row = document.createElement("tr");
@@ -1135,8 +1162,12 @@ export function renderOptionChainPage(): string {
           cell.textContent = "Open orders could not be loaded.";
           row.append(cell);
           openOrderRows.append(row);
-          openOrdersStatus.textContent =
-            error instanceof Error ? error.message : "Could not load open orders.";
+          openOrdersStatus.textContent = preserveStatus
+            ? "Price change was submitted, but orders could not be refreshed. " +
+              (error instanceof Error ? error.message : "")
+            : error instanceof Error
+              ? error.message
+              : "Could not load open orders.";
           openOrdersStatus.dataset.kind = "error";
           closedOrderRows.replaceChildren();
           const closedRow = document.createElement("tr");
@@ -1479,6 +1510,7 @@ export function renderOptionChainPage(): string {
       async function openOrderTicket(contract) {
         orderError.textContent = "";
         modifyingOrderNumber = undefined;
+        modifyingOrderContext = undefined;
         try {
           const response = await fetch("/api/auth/session", {
             headers: { Accept: "application/json" },
@@ -1635,11 +1667,16 @@ export function renderOptionChainPage(): string {
         const orderTag = orderTagInput.value.trim();
         const orderPayload = modifyingOrderNumber
           ? {
+              instrumentToken: modifyingOrderContext.instrumentToken,
+              tradingSymbol: modifyingOrderContext.tradingSymbol,
+              transactionType: modifyingOrderContext.transactionType,
               quantity: String(quantity),
+              filledQuantity: modifyingOrderContext.filledQuantity,
               product,
               orderType,
               price: String(price),
               validity: orderValiditySelect.value,
+              amo: modifyingOrderContext.amo,
               triggerPrice: triggerRequired ? String(triggerPrice) : "0",
               disclosedQuantity: orderDisclosedQuantityInput.value,
               marketProtection: orderMarketProtectionInput.value,
@@ -1710,6 +1747,7 @@ export function renderOptionChainPage(): string {
 
           orderDialog.close();
           modifyingOrderNumber = undefined;
+          modifyingOrderContext = undefined;
           orderTitle.textContent = "Place BUY order";
           const orderNumber = result.nOrdNo || result.orderId;
           setStatus(
@@ -1741,6 +1779,7 @@ export function renderOptionChainPage(): string {
       document.querySelector("#order-cancel").addEventListener("click", () => {
         orderDialog.close();
         modifyingOrderNumber = undefined;
+        modifyingOrderContext = undefined;
         orderTitle.textContent = "Place BUY order";
         orderSubmitButton.textContent = "Review & place live BUY";
       });

@@ -69,9 +69,9 @@ stays server-side; only the current TOTP is submitted by the browser.
   `/realtime` endpoint returned via the authenticated session base URL.
 - `POST /api/orders/{orderNumber}/cancel` — cancel an order only if it is still
   open in the current order book.
-- `POST /api/orders/{orderNumber}/modify` — modify an open NIFTY option order
-  after verifying its current status and contract from the order book and local
-  Scrip Master.
+- `POST /api/orders/{orderNumber}/modify` — forward the supplied order details
+  to Kotak Neo without local order-book, Scrip Master, or trading-rule checks.
+  Kotak Neo determines whether the modification is accepted or rejected.
 - `POST /api/auth/login` — submit the current TOTP. The service uses the
   server-side mobile number, UCC, and MPIN to complete authentication.
 - `GET /api/auth/session` — check whether this process has an authenticated
