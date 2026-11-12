@@ -857,7 +857,7 @@ export function renderOptionChainPage(): string {
         }
       }
 
-      async function cancelOpenOrder(orderNumber, showResult = false) {
+      async function cancelOpenOrder(orderNumber) {
         const cancelButton = [...openOrderRows.querySelectorAll("button")].find((button) =>
           button.getAttribute("aria-label") === "Cancel order " + orderNumber,
         );
@@ -874,20 +874,11 @@ export function renderOptionChainPage(): string {
           await loadOpenOrders();
           openOrdersStatus.textContent =
             "Cancellation requested for order " + orderNumber + "; open orders refreshed.";
-          if (showResult) {
-            window.alert(
-              "Kotak accepted the cancellation request for order " + orderNumber +
-                ". The order may remain visible until its status updates.",
-            );
-          }
         } catch (error) {
           openOrdersStatus.textContent =
             error instanceof Error ? error.message : "Could not cancel this order.";
           openOrdersStatus.dataset.kind = "error";
           if (cancelButton) cancelButton.disabled = false;
-          if (showResult) {
-            window.alert("Cancellation failed for order " + orderNumber + ": " + openOrdersStatus.textContent);
-          }
         }
       }
 
@@ -903,7 +894,7 @@ export function renderOptionChainPage(): string {
         ) {
           event.preventDefault();
           event.stopPropagation();
-          void cancelOpenOrder(selectedRadio.value, true);
+          void cancelOpenOrder(selectedRadio.value);
           return;
         }
       }, true);

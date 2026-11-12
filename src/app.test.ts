@@ -224,10 +224,9 @@ describe("authentication routes", () => {
     assert.match(response.body, /event\.key !== "ArrowRight"/);
     assert.match(response.body, /event\.keyCode !== 39/);
     assert.match(response.body, /input\[name="selected-open-order"\]:checked/);
-    assert.match(response.body, /void cancelOpenOrder\(selectedRadio\.value, true\)/);
+    assert.match(response.body, /void cancelOpenOrder\(selectedRadio\.value\)/);
     assert.doesNotMatch(response.body, /focusedRadio === selectedRadio/);
-    assert.match(response.body, /Kotak accepted the cancellation request for order/);
-    assert.match(response.body, /Cancellation failed for order/);
+    assert.doesNotMatch(response.body, /window\.alert/);
     assert.match(response.body, /fetch\("\/api\/orders"/);
     assert.match(response.body, /openOrderRows\.append\(row\)/);
     assert.match(response.body, /open-order-actions/);
@@ -239,7 +238,7 @@ describe("authentication routes", () => {
     assert.match(response.body, /Modify order/);
     assert.match(response.body, /\/api\/orders\/" \+ encodeURIComponent\(modifyingOrderNumber\) \+ "\/modify/);
     assert.match(response.body, /Review & modify live order/);
-    assert.match(response.body, /async function cancelOpenOrder\(orderNumber, showResult = false\)/);
+    assert.match(response.body, /async function cancelOpenOrder\(orderNumber\)/);
     assert.doesNotMatch(response.body, /confirm\("Cancel open order/);
     assert.match(response.body, /\/api\/orders\/" \+ encodeURIComponent\(orderNumber\) \+ "\/cancel/);
     assert.ok(
