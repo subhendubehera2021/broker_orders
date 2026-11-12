@@ -176,7 +176,7 @@ export function renderOptionChainPage(): string {
         <section class="panel orders-panel" aria-label="Open orders" style="margin-bottom: 20px">
           <div class="orders-heading">
             <h2>Open orders</h2>
-            <span class="orders-shortcut">Focus selected row · Right Arrow cancels</span>
+            <span class="orders-shortcut">↑ +₹0.05 · ↓ −₹0.05 · → cancel</span>
             <button id="refresh-open-orders" class="refresh-orders-button" type="button" aria-label="Refresh orders" title="Refresh orders">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
                 <path d="M20 7v5h-5"></path><path d="M19 12a7 7 0 1 1-2-4.9L20 12"></path>
@@ -460,6 +460,9 @@ export function renderOptionChainPage(): string {
       let activityEventSource;
       const swingOrderAttempts = new Set();
       const optionPrices = new Map();
+      const openOrdersByNumber = new Map();
+      const pendingPriceModifications = new Set();
+      const uncertainPriceModifications = new Set();
       const volumeFormat = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 });
       const swingMaxDays = { "1min": 30, "3min": 30, "5min": 30, "10min": 60, "15min": 60, "30min": 90, "60min": 90, D: 180, W: 180 };
 
@@ -733,6 +736,7 @@ export function renderOptionChainPage(): string {
 
       function renderOpenOrders(orders) {
         const openOrders = orders.filter(isOpenOrder);
+        openOrdersByNumber.clear();
         openOrderRows.replaceChildren();
         if (!openOrders.length) {
           const row = document.createElement("tr");
@@ -748,6 +752,7 @@ export function renderOptionChainPage(): string {
           const row = document.createElement("tr");
           const selectionCell = document.createElement("td");
           const orderNumber = orderValue(order, ["nOrdNo", "orderId", "order_id"]);
+          if (orderNumber !== "—") openOrdersByNumber.set(orderNumber, order);
           const selector = document.createElement("input");
           selector.type = "radio";
           selector.name = "selected-open-order";
@@ -758,8 +763,8 @@ export function renderOptionChainPage(): string {
             orderNumber === "—" ? "Select open order row " + (index + 1) : "Select order " + orderNumber,
           );
           if (orderNumber !== "—") {
-            selector.setAttribute("aria-keyshortcuts", "ArrowRight");
-            selector.title = "Focus this selected row and press Right Arrow to cancel immediately";
+            selector.setAttribute("aria-keyshortcuts", "ArrowUp ArrowDown ArrowRight");
+            selector.title = "Up increases price by ₹0.05; Down decreases it; Right Arrow cancels";
           }
           selectionCell.append(selector);
           row.append(selectionCell);
@@ -882,20 +887,158 @@ export function renderOptionChainPage(): string {
         }
       }
 
+      async function adjustOpenOrderPrice(order, direction) {
+        const orderNumber = orderValue(order, ["nOrdNo", "orderId", "order_id"]);
+        const tradingSymbol = orderValue(order, ["trdSym", "tradingSymbol", "trading_symbol", "ts"]);
+        const product = orderValue(order, ["prod", "product", "pc"]).toUpperCase();
+        const orderType = orderValue(order, ["prcTp", "orderType", "order_type", "pt"]).toUpperCase();
+        if (
+          !/^NIFTY.*(CE|PE)$/i.test(tradingSymbol) ||
+          !["MIS", "NRML"].includes(product) ||
+          !["L", "SL"].includes(orderType)
+        ) {
+          openOrdersStatus.textContent =
+            "Price shortcut supports open NIFTY option MIS/NRML limit and stop-limit orders only.";
+          openOrdersStatus.dataset.kind = "error";
+          return;
+        }
+        if (uncertainPriceModifications.has(orderNumber)) {
+          openOrdersStatus.textContent =
+            "Price change outcome is uncertain for order " + orderNumber +
+            "; refresh open orders before trying again.";
+          openOrdersStatus.dataset.kind = "error";
+          return;
+        }
+        if (pendingPriceModifications.has(orderNumber)) return;
+
+        const currentPrice = Number(orderValue(order, ["prc", "price", "pr"]));
+        const currentPriceTicks = Math.round(currentPrice * 20);
+        const isStopLimit = orderType === "SL";
+        const currentTriggerPrice = isStopLimit
+          ? Number(orderValue(order, ["trgPrc", "triggerPrice", "tp"]))
+          : 0;
+        const currentTriggerTicks = Math.round(currentTriggerPrice * 20);
+        if (
+          !Number.isFinite(currentPrice) ||
+          currentPrice <= 0 ||
+          Math.abs(currentPrice - currentPriceTicks / 20) > 0.000001 ||
+          (isStopLimit &&
+            (!Number.isFinite(currentTriggerPrice) ||
+              currentTriggerPrice <= 0 ||
+              Math.abs(currentTriggerPrice - currentTriggerTicks / 20) > 0.000001))
+        ) {
+          openOrdersStatus.textContent =
+            "Order " + orderNumber + " has a price that cannot be adjusted by one ₹0.05 tick.";
+          openOrdersStatus.dataset.kind = "error";
+          return;
+        }
+
+        const priceTicks = currentPriceTicks + direction;
+        const triggerTicks = currentTriggerTicks + direction;
+        if (priceTicks < 1 || (isStopLimit && triggerTicks < 1)) {
+          openOrdersStatus.textContent = "Price cannot be reduced below ₹0.05.";
+          openOrdersStatus.dataset.kind = "error";
+          return;
+        }
+
+        const validity = orderValue(order, ["validity", "vd", "rt"], "DAY").toUpperCase();
+        const payload = {
+          quantity: orderValue(order, ["qty", "quantity", "qt"]),
+          product,
+          orderType,
+          price: (priceTicks / 20).toFixed(2),
+          validity,
+          triggerPrice: isStopLimit ? (triggerTicks / 20).toFixed(2) : "0",
+          disclosedQuantity: orderValue(order, ["dscQty", "disclosedQuantity", "dq"], "0"),
+          marketProtection: orderValue(order, ["mktPro", "marketProtection", "mp"], "0"),
+        };
+        pendingPriceModifications.add(orderNumber);
+        openOrdersStatus.textContent =
+          "Submitting price change for order " + orderNumber + "…";
+        openOrdersStatus.dataset.kind = "";
+        let response;
+        try {
+          response = await fetch(
+            "/api/orders/" + encodeURIComponent(orderNumber) + "/modify",
+            {
+              method: "POST",
+              headers: {
+                Accept: "application/json",
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify(payload),
+            },
+          );
+        } catch (error) {
+          uncertainPriceModifications.add(orderNumber);
+          openOrdersStatus.textContent =
+            "Price change outcome is uncertain for order " + orderNumber +
+            "; refresh open orders before retrying. " +
+            (error instanceof Error ? error.message : "");
+          openOrdersStatus.dataset.kind = "error";
+          pendingPriceModifications.delete(orderNumber);
+          return;
+        }
+
+        try {
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.error || "Could not modify this order.");
+          await loadOpenOrders();
+          if (openOrdersStatus.dataset.kind !== "error") {
+            const adjustedPrice = (priceTicks / 20).toFixed(2);
+            openOrdersStatus.textContent =
+              "Price change requested for order " + orderNumber + " · ₹" + adjustedPrice + ".";
+          }
+        } catch (error) {
+          if (error instanceof SyntaxError) {
+            uncertainPriceModifications.add(orderNumber);
+            openOrdersStatus.textContent =
+              "Price change outcome is uncertain for order " + orderNumber +
+              "; refresh open orders before trying again.";
+          } else {
+            openOrdersStatus.textContent =
+              error instanceof Error ? error.message : "Could not modify this order.";
+          }
+          openOrdersStatus.dataset.kind = "error";
+        } finally {
+          pendingPriceModifications.delete(orderNumber);
+        }
+      }
+
       window.addEventListener("keydown", (event) => {
-        if (event.key !== "ArrowRight" && event.keyCode !== 39) return;
         const selectedRadio = document.querySelector(
           'input[name="selected-open-order"]:checked',
         );
-        if (
-          selectedRadio instanceof HTMLInputElement &&
-          selectedRadio.value !== "" &&
-          !selectedRadio.value.startsWith("row-")
-        ) {
+        if (!(selectedRadio instanceof HTMLInputElement) || !selectedRadio.value || selectedRadio.value.startsWith("row-")) {
+          return;
+        }
+        if (event.key === "ArrowRight" || event.keyCode === 39) {
           event.preventDefault();
           event.stopPropagation();
           void cancelOpenOrder(selectedRadio.value);
-          return;
+        } else if (
+          event.key === "ArrowUp" ||
+          event.keyCode === 38 ||
+          event.key === "ArrowDown" ||
+          event.keyCode === 40
+        ) {
+          const target = event.target;
+          if (
+            target instanceof HTMLElement &&
+            target.closest(
+              'input:not([type="radio"]), textarea, select, button, [contenteditable="true"], [role="textbox"]',
+            )
+          ) {
+            return;
+          }
+          const order = openOrdersByNumber.get(selectedRadio.value);
+          if (!order) return;
+          event.preventDefault();
+          event.stopPropagation();
+          void adjustOpenOrderPrice(
+            order,
+            event.key === "ArrowUp" || event.keyCode === 38 ? 1 : -1,
+          );
         }
       }, true);
 
@@ -907,6 +1050,7 @@ export function renderOptionChainPage(): string {
           const response = await fetch("/api/orders", { headers: { Accept: "application/json" } });
           const payload = await response.json();
           if (!response.ok) throw new Error(payload.error || "Could not load open orders.");
+          uncertainPriceModifications.clear();
           const count = renderOpenOrders(extractOrders(payload));
           openOrdersStatus.textContent =
             count + " open order" + (count === 1 ? "" : "s") + ".";
