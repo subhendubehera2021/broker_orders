@@ -27,6 +27,7 @@ export interface AppConfig {
   port: number;
   webAccessPasscode: string;
   openOrderPriceStep: number;
+  autoSellStopLossRupees: number;
   kotakNeo: KotakNeoConfig;
 }
 
@@ -48,6 +49,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     throw new Error("WEB_ACCESS_PASSCODE must be 1-32 uppercase letters or digits");
   }
   const openOrderPriceStep = parsePriceStep(env.OPEN_ORDER_PRICE_STEP);
+  const autoSellStopLossRupees = parsePositiveRupees(
+    env.AUTO_SELL_STOP_LOSS_RUPEES,
+    "AUTO_SELL_STOP_LOSS_RUPEES",
+    5,
+  );
 
   const apiBaseUrl = requiredValue(env.KOTAK_NEO_API_BASE_URL, "KOTAK_NEO_API_BASE_URL");
   let parsedBaseUrl: URL;
@@ -105,6 +111,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     port,
     webAccessPasscode,
     openOrderPriceStep,
+    autoSellStopLossRupees,
     kotakNeo: {
       apiBaseUrl,
       consumerKey: env.KOTAK_NEO_CONSUMER_KEY || undefined,
@@ -159,6 +166,18 @@ function parsePriceStep(value: string | undefined): number {
     throw new Error("OPEN_ORDER_PRICE_STEP must be a positive multiple of ₹0.05");
   }
   return stepPaise / 100;
+}
+
+function parsePositiveRupees(value: string | undefined, name: string, fallback: number): number {
+  const normalized = value?.trim() || String(fallback);
+  if (!/^\d+(?:\.\d{1,2})?$/.test(normalized)) {
+    throw new Error(`${name} must be a positive rupee amount with up to two decimal places`);
+  }
+  const paise = Number(normalized) * 100;
+  if (!Number.isSafeInteger(paise) || paise <= 0) {
+    throw new Error(`${name} must be a positive rupee amount with up to two decimal places`);
+  }
+  return paise / 100;
 }
 
 function parseBoolean(value: string | undefined, name: string, fallback: boolean): boolean {

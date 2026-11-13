@@ -13,6 +13,7 @@ const config: AppConfig = {
   host: "127.0.0.1",
   port: 3000,
   openOrderPriceStep: 1,
+  autoSellStopLossRupees: 5,
   webAccessPasscode: "SKB9178",
   kotakNeo: {
     apiBaseUrl: "https://kotak.example/",
@@ -206,7 +207,7 @@ describe("authentication routes", () => {
     assert.match(response.body, /id="activity-position-updates"/);
     assert.match(response.body, /new EventSource\("\/api\/orders\/stream"\)/);
     assert.match(response.body, /addEventListener\("auto-sell"/);
-    assert.match(response.body, /Auto-sell: after full fill, place an SL-limit SELL 5 points below the average fill price/);
+    assert.match(response.body, /Auto-sell: after full fill, place an SL-limit SELL ₹5 below the average fill price/);
     assert.match(response.body, /fetch\("\/api\/positions"/);
     assert.match(response.body, /void connectActivityStream\(\)/);
     assert.match(response.body, /href="#live-activity">Live activity<\/a>/);
@@ -1427,6 +1428,7 @@ describe("authentication routes", () => {
     const app = buildApp({
       config: {
         ...config,
+        autoSellStopLossRupees: 3,
         kotakNeo: {
           ...config.kotakNeo,
           placeOrderPath: "quick/order/place",
@@ -1512,12 +1514,12 @@ describe("authentication routes", () => {
       quantity: "50",
       product: "MIS",
       orderType: "SL",
-      price: "97.50",
+      price: "99.50",
       validity: "DAY",
       amo: "NO",
       disclosedQuantity: "0",
       marketProtection: "0",
-      triggerPrice: "97.50",
+      triggerPrice: "99.50",
       tag: orderInputs[1]?.tag,
     });
     assert.match(String(orderInputs[1]?.tag), /^AT5-[0-9a-f]{16}$/);

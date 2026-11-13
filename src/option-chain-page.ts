@@ -1,4 +1,4 @@
-export function renderOptionChainPage(openOrderPriceStep = 1): string {
+export function renderOptionChainPage(openOrderPriceStep = 1, autoSellStopLossRupees = 5): string {
   const openOrderPriceStepTicks = Math.round(openOrderPriceStep * 20);
   return `<!doctype html>
 <html lang="en">
@@ -1881,7 +1881,7 @@ export function renderOptionChainPage(openOrderPriceStep = 1): string {
           side !== "B"
             ? ""
             : product === "MIS" || product === "NRML"
-              ? "\\nAuto-sell: after full fill, place an SL-limit SELL 5 points below the average fill price."
+              ? "\\nAuto-sell: after full fill, place an SL-limit SELL ₹${autoSellStopLossRupees} below the average fill price."
               : "\\nAuto-sell is not enabled for " + product + " BUY orders.";
         const confirmation =
           (modifyingOrderNumber

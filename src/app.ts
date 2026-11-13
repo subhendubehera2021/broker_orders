@@ -237,7 +237,12 @@ export function buildApp({
     return reply
       .header("Cache-Control", "no-store")
       .type("text/html; charset=utf-8")
-      .send(renderOptionChainPage(config.openOrderPriceStep));
+      .send(
+        renderOptionChainPage(
+          config.openOrderPriceStep,
+          config.autoSellStopLossRupees,
+        ),
+      );
   });
 
   app.get("/auto-trade", async (_request, reply) => {
@@ -343,7 +348,8 @@ export function buildApp({
       autoSellCandidates.delete(candidate.orderNumber);
 
       const averagePrice = Number(orderRecordValue(order, ["avgPrc", "averagePrice", "avg_price"]));
-      const targetPrice = Math.round((averagePrice - 5) * 20) / 20;
+      const targetPrice =
+        Math.round((averagePrice - config.autoSellStopLossRupees) * 20) / 20;
       const lotSize = Number(candidate.contract.lotSize);
       if (
         !Number.isFinite(averagePrice) ||

@@ -6,6 +6,7 @@ const validEnvironment: NodeJS.ProcessEnv = {
   HOST: "127.0.0.1",
   PORT: "3000",
   OPEN_ORDER_PRICE_STEP: "1",
+  AUTO_SELL_STOP_LOSS_RUPEES: "5",
   WEB_ACCESS_PASSCODE: "SKB9178",
   KOTAK_NEO_API_BASE_URL: "https://broker.example/",
   KOTAK_NEO_CONSUMER_KEY: "consumer-key",
@@ -35,6 +36,7 @@ describe("loadConfig", () => {
       host: "127.0.0.1",
       port: 3000,
       openOrderPriceStep: 1,
+      autoSellStopLossRupees: 5,
       webAccessPasscode: "SKB9178",
       kotakNeo: {
         apiBaseUrl: "https://broker.example/",
@@ -73,6 +75,28 @@ describe("loadConfig", () => {
     assert.throws(
       () => loadConfig({ ...validEnvironment, OPEN_ORDER_PRICE_STEP: "1.01" }),
       /OPEN_ORDER_PRICE_STEP must be a positive multiple of ₹0\.05/,
+    );
+  });
+
+  it("defaults and validates the auto-sell stop-loss amount", () => {
+    const {
+      AUTO_SELL_STOP_LOSS_RUPEES: _stopLoss,
+      ...environmentWithoutStopLoss
+    } = validEnvironment;
+
+    assert.equal(loadConfig(environmentWithoutStopLoss).autoSellStopLossRupees, 5);
+    assert.equal(
+      loadConfig({ ...validEnvironment, AUTO_SELL_STOP_LOSS_RUPEES: "7.25" })
+        .autoSellStopLossRupees,
+      7.25,
+    );
+    assert.throws(
+      () => loadConfig({ ...validEnvironment, AUTO_SELL_STOP_LOSS_RUPEES: "0" }),
+      /AUTO_SELL_STOP_LOSS_RUPEES must be a positive rupee amount/,
+    );
+    assert.throws(
+      () => loadConfig({ ...validEnvironment, AUTO_SELL_STOP_LOSS_RUPEES: "1.001" }),
+      /AUTO_SELL_STOP_LOSS_RUPEES must be a positive rupee amount/,
     );
   });
 
