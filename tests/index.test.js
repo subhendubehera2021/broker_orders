@@ -31,8 +31,8 @@ test("scheduled handler only logs the cron demo timestamp", async () => {
     globalThis.setTimeout = originalSetTimeout;
   }
 
-  assert.equal(delay, 2_000);
+  assert.equal(delay, 58_000);
   assert.deepEqual(messages, [
-    "[nifty-cron] cron=* * * * * scheduledForIST=16/11/2026, 12:28:03 IST startedAtIST=16/11/2026, 12:28:03 IST",
+    "[nifty-cron] cron=* * * * * scheduledForIST=16/11/2026, 12:28:59 IST startedAtIST=16/11/2026, 12:28:59 IST",
   ]);
 });
