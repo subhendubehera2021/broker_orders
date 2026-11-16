@@ -1,8 +1,5 @@
 import { fetchHighestVolumeNiftyOptions } from "./nifty-option-chain.js";
-import {
-  fetchLiquiditySwings,
-  recentIndiaDateRange,
-} from "./liquidity-swing/index.js";
+import { fetchLiquiditySwingsFromApi } from "./liquidity-swing/api-client.js";
 
 const istDateTime = new Intl.DateTimeFormat("en-IN", {
   timeZone: "Asia/Kolkata",
@@ -14,9 +11,59 @@ const istDateTime = new Intl.DateTimeFormat("en-IN", {
   second: "2-digit",
   hourCycle: "h23",
 });
+const numberFormat = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 });
 
 function formatIST(timestamp) {
   return `${istDateTime.format(new Date(timestamp))} IST`;
+}
+
+function formatSwingTable(analyses) {
+  const headers = [
+    "SIDE",
+    "SYMBOL",
+    "TOKEN",
+    "OPTION VOL",
+    "INTERVAL",
+    "LOOKBACK",
+    "SWING HIGH",
+    "ZONE BOTTOM..TOP",
+    "PIVOT TIME (IST)",
+    "CONFIRMED AT (IST)",
+    "TOUCHES",
+    "TOUCH VOL",
+    "STATUS",
+  ];
+  const rows = analyses.map(({ optionSide, instrument, swing, interval, pivotLookback }) => [
+    optionSide,
+    instrument.symbol,
+    instrument.token,
+    numberFormat.format(instrument.volume),
+    interval,
+    String(pivotLookback),
+    swing ? numberFormat.format(swing.level) : "-",
+    swing
+      ? `${numberFormat.format(swing.zoneBottom)}..${numberFormat.format(swing.zoneTop)}`
+      : "-",
+    swing ? formatIST(Date.parse(swing.pivotTime)) : "-",
+    swing ? formatIST(Date.parse(swing.confirmedAt)) : "-",
+    swing ? String(swing.intersectionCount) : "0",
+    swing ? numberFormat.format(swing.intersectionVolume) : "0",
+    swing?.status ?? "not-found",
+  ]);
+  const widths = headers.map((header, index) =>
+    Math.max(header.length, ...rows.map((row) => row[index].length)),
+  );
+  const separator = `+${widths.map((width) => "-".repeat(width + 2)).join("+")}+`;
+  const formatRow = (cells) =>
+    `| ${cells.map((cell, index) => cell.padEnd(widths[index])).join(" | ")} |`;
+
+  return [
+    separator,
+    formatRow(headers),
+    separator,
+    ...rows.map(formatRow),
+    separator,
+  ].join("\n");
 }
 
 export default {
@@ -27,57 +74,20 @@ export default {
         ` scheduledForIST=${formatIST(scheduledMinute)}` +
         ` startedAtIST=${formatIST(Date.now())}`,
     );
-    const [apiToken, baseUrl] = await Promise.all([
-      env.AUTO_TRADE_SETTINGS.get("kotak-neo-api-token"),
-      env.AUTO_TRADE_SETTINGS.get("kotak-neo-base-url"),
-    ]);
+    const {
+      KOTAK_NEO_API_TOKEN: apiToken,
+      KOTAK_NEO_BASE_URL: baseUrl,
+      SWING_API_URL: swingApiUrl,
+      SWING_API_SECRET: swingApiSecret,
+    } = env;
     const instruments = await fetchHighestVolumeNiftyOptions({ apiToken, baseUrl });
-    const dateRange = recentIndiaDateRange();
-    for (const [optionSide, instrument] of [
-      ["CALL", instruments.call],
-      ["PUT", instruments.put],
-    ]) {
-      console.log(
-        `[nifty-cron] highest-volume-${optionSide.toLowerCase()}` +
-          ` symbol=${instrument.symbol} token=${instrument.token} volume=${instrument.volume}`,
-      );
-    }
-
-    const analyses = await Promise.all(
+    const analyses = await fetchLiquiditySwingsFromApi(
       [
-        ["CALL", instruments.call],
-        ["PUT", instruments.put],
-      ].map(async ([optionSide, instrument]) => ({
-        optionSide,
-        instrument,
-        ...await fetchLiquiditySwings(
-          instrument,
-          { apiToken, baseUrl, ...dateRange },
-        ),
-      })),
+        { optionSide: "CALL", instrument: instruments.call, token: instruments.call.token },
+        { optionSide: "PUT", instrument: instruments.put, token: instruments.put.token },
+      ],
+      { apiUrl: swingApiUrl, apiSecret: swingApiSecret },
     );
-    for (const { optionSide, instrument, bars, swings, interval, pivotLookback } of analyses) {
-      for (const swingSide of ["high", "low"]) {
-        const swing = swings[swingSide];
-        if (!swing) {
-          console.log(
-            `[nifty-cron] liquidity-swing optionSide=${optionSide}` +
-              ` symbol=${instrument.symbol} swingSide=${swingSide.toUpperCase()}` +
-              ` status=not-found candles=${bars.length}`,
-          );
-          continue;
-        }
-        console.log(
-          `[nifty-cron] liquidity-swing optionSide=${optionSide}` +
-            ` symbol=${instrument.symbol} swingSide=${swingSide.toUpperCase()}` +
-            ` interval=${interval} pivotLookback=${pivotLookback}` +
-            ` pivotTime=${swing.pivotTime} confirmedAt=${swing.confirmedAt}` +
-            ` level=${swing.level} zoneBottom=${swing.zoneBottom}` +
-            ` zoneTop=${swing.zoneTop} intersections=${swing.intersectionCount}` +
-            ` intersectionVolume=${swing.intersectionVolume} status=${swing.status}` +
-            (swing.brokenAt ? ` brokenAt=${swing.brokenAt}` : ""),
-        );
-      }
-    }
+    console.log(`[nifty-cron] liquidity-swings\n${formatSwingTable(analyses)}`);
   },
 };

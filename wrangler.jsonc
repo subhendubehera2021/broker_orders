@@ -3,12 +3,6 @@
 	"name": "nifty-cron",
 	"main": "src/index.js",
 	"compatibility_date": "2026-11-16",
-	"kv_namespaces": [
-		{
-			"binding": "AUTO_TRADE_SETTINGS",
-			"id": "44d0a6f10bc74c838d158e3a44324b86"
-		}
-	],
 	"observability": {
 		"logs": {
 			"enabled": true,

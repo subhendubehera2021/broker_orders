@@ -68,10 +68,10 @@ export async function fetchHighestVolumeNiftyOptions(
   fetchImpl = fetch,
 ) {
   if (typeof apiToken !== "string" || apiToken.trim() === "") {
-    throw new Error("Missing required KV key: kotak-neo-api-token");
+    throw new Error("Missing required environment variable: KOTAK_NEO_API_TOKEN");
   }
   if (typeof baseUrl !== "string" || baseUrl.trim() === "") {
-    throw new Error("Missing required KV key: kotak-neo-base-url");
+    throw new Error("Missing required environment variable: KOTAK_NEO_BASE_URL");
   }
 
   const endpoint = createKotakApiUrl(

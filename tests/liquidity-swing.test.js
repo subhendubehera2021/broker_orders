@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   fetchLiquiditySwings,
-  findLatestLiquiditySwings,
+  findLatestLiquiditySwingHigh,
   recentIndiaDateRange,
 } from "../src/liquidity-swing/index.js";
 
@@ -21,23 +21,20 @@ function makeBars(highs, lows) {
   });
 }
 
-test("finds the latest confirmed liquidity high and low with their zones", () => {
+test("finds the latest confirmed liquidity high with its zone", () => {
   const bars = makeBars(
     [2, 3, 7, 5, 4, 3, 2, 3, 4],
     [0, -1, 1, 2, -2, 0, 1, -1, 0],
   );
 
-  const result = findLatestLiquiditySwings(bars, { pivotLookback: 2 });
+  const result = findLatestLiquiditySwingHigh(bars, { pivotLookback: 2 });
 
-  assert.equal(result.high.pivotTime, bars[2].timestamp);
-  assert.equal(result.high.confirmedAt, bars[4].timestamp);
-  assert.equal(result.high.level, 7);
-  assert.equal(result.high.zoneBottom, 4);
-  assert.equal(result.low.pivotTime, bars[4].timestamp);
-  assert.equal(result.low.confirmedAt, bars[6].timestamp);
-  assert.equal(result.low.level, -2);
-  assert.equal(result.low.intersectionCount, 2);
-  assert.equal(result.low.status, "qualified");
+  assert.equal(result.pivotTime, bars[2].timestamp);
+  assert.equal(result.confirmedAt, bars[4].timestamp);
+  assert.equal(result.level, 7);
+  assert.equal(result.zoneBottom, 4);
+  assert.equal(result.intersectionCount, 0);
+  assert.equal(result.status, "tracking");
 });
 
 test("requests and parses historical candles for an option token", async () => {
@@ -79,8 +76,7 @@ test("requests and parses historical candles for an option token", async () => {
     "https://cis.kotaksecurities.com/market-data/1.0/historical/details?neosymbol=nse_fo%7C123&fromdate=2026-11-13&todate=2026-11-16&interval=1min",
   );
   assert.equal(result.bars.length, bars.length);
-  assert.equal(result.swings.high.level, 7);
-  assert.equal(result.swings.low.level, -2);
+  assert.equal(result.swing.level, 7);
   assert.equal(result.interval, "1min");
   assert.equal(result.pivotLookback, 2);
 });
@@ -89,5 +85,25 @@ test("builds a recent date range using the India calendar date", () => {
   assert.deepEqual(
     recentIndiaDateRange(new Date("2026-11-16T18:45:00.000Z"), 3),
     { fromDate: "2026-11-14", toDate: "2026-11-17" },
+  );
+});
+
+test("includes Kotak's retry-after hint when historical data is rate limited", async () => {
+  await assert.rejects(
+    fetchLiquiditySwings(
+      { token: "nse_fo|123", symbol: "NIFTY-OPTION" },
+      {
+        apiToken: "dashboard-token",
+        baseUrl: "https://cis.kotaksecurities.com",
+        fromDate: "2026-11-13",
+        toDate: "2026-11-16",
+      },
+      async () =>
+        new Response(null, {
+          status: 429,
+          headers: { "Retry-After": "3" },
+        }),
+    ),
+    /HTTP 429 \(retry after 3s\)/,
   );
 });

@@ -37,16 +37,12 @@ function parseCandle(row, index) {
   return { timestamp, open, high, low, close, volume };
 }
 
-function isPivot(bars, index, lookback, side) {
+function isPivotHigh(bars, index, lookback) {
   const pivot = bars[index];
   for (let distance = 1; distance <= lookback; distance += 1) {
     const older = bars[index - distance];
     const newer = bars[index + distance];
-    if (
-      side === "high"
-        ? pivot.high < older.high || pivot.high <= newer.high
-        : pivot.low > older.low || pivot.low >= newer.low
-    ) {
+    if (pivot.high < older.high || pivot.high <= newer.high) {
       return false;
     }
   }
@@ -57,10 +53,10 @@ function intersects(bar, top, bottom) {
   return bar.low < top && bar.high > bottom;
 }
 
-function makeSwing(bars, pivotIndex, lookback, side) {
+function makeSwingHigh(bars, pivotIndex, lookback) {
   const pivot = bars[pivotIndex];
-  const zoneTop = side === "high" ? pivot.high : Math.min(pivot.open, pivot.close);
-  const zoneBottom = side === "high" ? Math.max(pivot.open, pivot.close) : pivot.low;
+  const zoneTop = pivot.high;
+  const zoneBottom = Math.max(pivot.open, pivot.close);
   const confirmedAt = pivotIndex + lookback;
   let intersectionCount = 0;
   let intersectionVolume = 0;
@@ -72,19 +68,16 @@ function makeSwing(bars, pivotIndex, lookback, side) {
       intersectionCount += 1;
       intersectionVolume += bar.volume;
     }
-    if (
-      brokenAt === undefined &&
-      (side === "high" ? bar.close > zoneTop : bar.close < zoneBottom)
-    ) {
+    if (brokenAt === undefined && bar.close > zoneTop) {
       brokenAt = bar.timestamp;
     }
   }
 
   return {
-    side,
+    side: "high",
     pivotTime: pivot.timestamp,
     confirmedAt: bars[confirmedAt].timestamp,
-    level: side === "high" ? pivot.high : pivot.low,
+    level: pivot.high,
     zoneTop,
     zoneBottom,
     intersectionCount,
@@ -94,7 +87,7 @@ function makeSwing(bars, pivotIndex, lookback, side) {
   };
 }
 
-export function findLatestLiquiditySwings(inputBars, options = {}) {
+export function findLatestLiquiditySwingHigh(inputBars, options = {}) {
   const { pivotLookback } = { ...DEFAULT_OPTIONS, ...options };
   if (!Number.isInteger(pivotLookback) || pivotLookback < 1) {
     throw new RangeError("pivotLookback must be a positive integer");
@@ -105,17 +98,15 @@ export function findLatestLiquiditySwings(inputBars, options = {}) {
   const bars = [...inputBars].sort(
     (left, right) => Date.parse(left.timestamp) - Date.parse(right.timestamp),
   );
-  const latest = { high: undefined, low: undefined };
+  let latest;
 
   for (
     let pivotIndex = pivotLookback;
     pivotIndex + pivotLookback < bars.length;
     pivotIndex += 1
   ) {
-    for (const side of ["high", "low"]) {
-      if (isPivot(bars, pivotIndex, pivotLookback, side)) {
-        latest[side] = makeSwing(bars, pivotIndex, pivotLookback, side);
-      }
+    if (isPivotHigh(bars, pivotIndex, pivotLookback)) {
+      latest = makeSwingHigh(bars, pivotIndex, pivotLookback);
     }
   }
 
@@ -138,7 +129,7 @@ export async function fetchLiquiditySwings(
     throw new Error("A valid NIFTY option Neo symbol is required for swing analysis");
   }
   if (typeof apiToken !== "string" || apiToken.trim() === "") {
-    throw new Error("Missing required KV key: kotak-neo-api-token");
+    throw new Error("Missing required environment variable: KOTAK_NEO_API_TOKEN");
   }
   if (
     !isValidDateOnly(fromDate) ||
@@ -173,7 +164,14 @@ export async function fetchLiquiditySwings(
     },
   });
   if (!response.ok) {
-    throw new Error(`Kotak historical-candle request failed with HTTP ${response.status}`);
+    const retryAfter = response.headers.get("retry-after");
+    const retryHint =
+      response.status === 429 && retryAfter && /^\d+$/.test(retryAfter)
+        ? ` (retry after ${retryAfter}s)`
+        : "";
+    throw new Error(
+      `Kotak historical-candle request failed with HTTP ${response.status}${retryHint}`,
+    );
   }
 
   const payload = await response.json();
@@ -189,7 +187,7 @@ export async function fetchLiquiditySwings(
   const bars = payload.data.candles.map(parseCandle);
   return {
     bars,
-    swings: findLatestLiquiditySwings(bars, { pivotLookback }),
+    swing: findLatestLiquiditySwingHigh(bars, { pivotLookback }),
     interval,
     pivotLookback,
   };

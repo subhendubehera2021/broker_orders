@@ -1,0 +1,233 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "NIFTY Liquidity Swing API",
+    "description": "Authenticated endpoint used by the Cloudflare Cron Worker to analyze the selected NIFTY call and put.",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/liquidity-swing": {
+      "post": {
+        "summary": "Analyze swing highs for a NIFTY call and put",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SwingRequest"
+              },
+              "example": {
+                "instruments": [
+                  {
+                    "optionSide": "CALL",
+                    "token": "nse_fo|45402"
+                  },
+                  {
+                    "optionSide": "PUT",
+                    "token": "nse_fo|45395"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Swing-high analysis for both instruments.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SwingResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request must contain one CALL token and one PUT token."
+          },
+          "401": {
+            "description": "Missing or invalid bearer token."
+          },
+          "405": {
+            "description": "Only POST is supported."
+          },
+          "500": {
+            "description": "The API environment is not configured."
+          },
+          "502": {
+            "description": "The historical candle request or swing analysis failed."
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    },
+    "schemas": {
+      "SwingRequest": {
+        "type": "object",
+        "required": [
+          "instruments"
+        ],
+        "properties": {
+          "instruments": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "description": "Must contain exactly one CALL and one PUT.",
+            "items": {
+              "$ref": "#/components/schemas/Instrument"
+            }
+          }
+        }
+      },
+      "Instrument": {
+        "type": "object",
+        "required": [
+          "optionSide",
+          "token"
+        ],
+        "properties": {
+          "optionSide": {
+            "type": "string",
+            "enum": [
+              "CALL",
+              "PUT"
+            ]
+          },
+          "token": {
+            "type": "string",
+            "pattern": "^nse_fo\\|[A-Za-z0-9._-]+$",
+            "example": "nse_fo|45402"
+          }
+        }
+      },
+      "SwingResponse": {
+        "type": "object",
+        "required": [
+          "analyses"
+        ],
+        "properties": {
+          "analyses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SwingAnalysis"
+            }
+          }
+        }
+      },
+      "SwingAnalysis": {
+        "type": "object",
+        "required": [
+          "optionSide",
+          "token",
+          "interval",
+          "pivotLookback",
+          "bars",
+          "swing"
+        ],
+        "properties": {
+          "optionSide": {
+            "type": "string",
+            "enum": [
+              "CALL",
+              "PUT"
+            ]
+          },
+          "token": {
+            "type": "string"
+          },
+          "interval": {
+            "type": "string",
+            "example": "1min"
+          },
+          "pivotLookback": {
+            "type": "integer",
+            "example": 5
+          },
+          "bars": {
+            "type": "integer",
+            "description": "Number of historical candles analyzed."
+          },
+          "swing": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SwingHigh"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "SwingHigh": {
+        "type": "object",
+        "required": [
+          "side",
+          "pivotTime",
+          "confirmedAt",
+          "level",
+          "zoneTop",
+          "zoneBottom",
+          "intersectionCount",
+          "intersectionVolume",
+          "status"
+        ],
+        "properties": {
+          "side": {
+            "type": "string",
+            "enum": [
+              "high"
+            ]
+          },
+          "pivotTime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "confirmedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "level": {
+            "type": "number"
+          },
+          "zoneTop": {
+            "type": "number"
+          },
+          "zoneBottom": {
+            "type": "number"
+          },
+          "intersectionCount": {
+            "type": "integer"
+          },
+          "intersectionVolume": {
+            "type": "number"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "tracking",
+              "qualified",
+              "broken"
+            ]
+          },
+          "brokenAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      }
+    }
+  }
+}
