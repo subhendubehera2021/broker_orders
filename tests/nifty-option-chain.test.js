@@ -90,3 +90,24 @@ test("rejects a non-Kotak base URL before sending credentials", async () => {
   );
   assert.equal(fetchCalled, false);
 });
+
+test("does not follow redirects from Kotak API requests", async () => {
+  let redirectMode;
+  await assert.rejects(
+    fetchHighestVolumeNiftyOptions(
+      {
+        apiToken: "secret-api-token",
+        baseUrl: "https://cis.kotaksecurities.com",
+      },
+      async (_url, options) => {
+        redirectMode = options.redirect;
+        return new Response(null, {
+          status: 302,
+          headers: { Location: "https://example.com/collect" },
+        });
+      },
+    ),
+    /HTTP 302/,
+  );
+  assert.equal(redirectMode, "manual");
+});

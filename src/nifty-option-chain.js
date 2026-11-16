@@ -87,7 +87,7 @@ export async function fetchHighestVolumeNiftyOptions(
 
   const response = await fetchImpl(endpoint, {
     method: "GET",
-    redirect: "error",
+    redirect: "manual",
     headers: {
       Authorization: apiToken,
       "Content-Type": "application/json",
