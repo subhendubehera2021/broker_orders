@@ -1,9 +1,11 @@
 import { timingSafeEqual } from "node:crypto";
-import { fetchLiquiditySwings, recentIndiaDateRange } from "../src/liquidity-swing/index.js";
+import Fastify from "fastify";
+import { readFile } from "node:fs/promises";
+import { fetchLiquiditySwings, recentIndiaDateRange } from "./liquidity-swing/index.js";
 
-function waitForRequestSlot() {
-  return new Promise((resolve) => setTimeout(resolve, 1_000));
-}
+const swaggerHtml = await readFile(new URL("../public/swagger.html", import.meta.url), "utf8");
+const openApiJson = await readFile(new URL("../public/openapi.json", import.meta.url), "utf8");
+const app = Fastify({ bodyLimit: 1_024 });
 
 function isAuthorized(authorization, expectedSecret) {
   if (typeof authorization !== "string" || !authorization.startsWith("Bearer ")) {
@@ -15,40 +17,56 @@ function isAuthorized(authorization, expectedSecret) {
   return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 
-export default async function handler(request, response) {
-  response.setHeader("Cache-Control", "no-store");
+function isValidInstrument(instrument) {
+  return (
+    typeof instrument === "object" &&
+    instrument !== null &&
+    !Array.isArray(instrument) &&
+    ["CALL", "PUT"].includes(instrument.optionSide) &&
+    typeof instrument.token === "string" &&
+    instrument.token.length <= 80 &&
+    /^nse_fo\|[A-Za-z0-9._-]+$/.test(instrument.token)
+  );
+}
 
+function waitForRequestSlot() {
+  return new Promise((resolve) => setTimeout(resolve, 1_000));
+}
+
+app.addHook("onRequest", async (_request, reply) => {
+  reply.header("Cache-Control", "no-store");
+});
+
+app.get("/swagger.html", async (_request, reply) => {
+  return reply.type("text/html; charset=utf-8").send(swaggerHtml);
+});
+
+app.get("/openapi.json", async (_request, reply) => {
+  return reply.type("application/json").send(openApiJson);
+});
+
+app.all("/api/liquidity-swing", async (request, reply) => {
   if (request.method !== "POST") {
-    response.setHeader("Allow", "POST");
-    return response.status(405).json({ error: "Method not allowed" });
+    return reply.header("Allow", "POST").code(405).send({ error: "Method not allowed" });
   }
 
   const expectedSecret = process.env.SWING_API_SECRET;
   if (typeof expectedSecret !== "string" || expectedSecret.length === 0) {
     console.error("[liquidity-swing-api] SWING_API_SECRET is not configured");
-    return response.status(500).json({ error: "Swing API is not configured" });
+    return reply.code(500).send({ error: "Swing API is not configured" });
   }
   if (!isAuthorized(request.headers.authorization, expectedSecret)) {
-    return response.status(401).json({ error: "Unauthorized" });
+    return reply.code(401).send({ error: "Unauthorized" });
   }
 
   const instruments = request.body?.instruments;
   if (
     !Array.isArray(instruments) ||
     instruments.length !== 2 ||
-    instruments.some(
-      (instrument) =>
-        typeof instrument !== "object" ||
-        instrument === null ||
-        Array.isArray(instrument) ||
-        !["CALL", "PUT"].includes(instrument.optionSide) ||
-        typeof instrument.token !== "string" ||
-        instrument.token.length > 80 ||
-        !/^nse_fo\|[A-Za-z0-9._-]+$/.test(instrument.token),
-    ) ||
+    instruments.some((instrument) => !isValidInstrument(instrument)) ||
     new Set(instruments.map(({ optionSide }) => optionSide)).size !== 2
   ) {
-    return response.status(400).json({ error: "A NIFTY call and put token are required" });
+    return reply.code(400).send({ error: "A NIFTY call and put token are required" });
   }
 
   const apiToken = process.env.KOTAK_NEO_API_TOKEN;
@@ -60,7 +78,7 @@ export default async function handler(request, response) {
     baseUrl.trim() === ""
   ) {
     console.error("[liquidity-swing-api] Kotak credentials are not configured");
-    return response.status(500).json({ error: "Swing API is not configured" });
+    return reply.code(500).send({ error: "Swing API is not configured" });
   }
 
   try {
@@ -81,9 +99,11 @@ export default async function handler(request, response) {
         swing: analysis.swing ?? null,
       });
     }
-    return response.status(200).json({ analyses });
+    return reply.code(200).send({ analyses });
   } catch (error) {
     console.error("[liquidity-swing-api] Historical swing analysis failed", error);
-    return response.status(502).json({ error: "Unable to fetch swing analysis" });
+    return reply.code(502).send({ error: "Unable to fetch swing analysis" });
   }
-}
+});
+
+export default app;
