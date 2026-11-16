@@ -16,7 +16,7 @@ function formatIST(timestamp) {
 export default {
   async scheduled(controller) {
     const scheduledMinute = Math.floor(controller.scheduledTime / 60_000) * 60_000;
-    const scheduledFor = scheduledMinute + 45_000;
+    const scheduledFor = scheduledMinute + 3_000;
     const delay = scheduledFor - Date.now();
     if (delay > 0) {
       await new Promise((resolve) => setTimeout(resolve, delay));

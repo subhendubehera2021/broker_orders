@@ -7,7 +7,7 @@ test("scheduled handler only logs the cron demo timestamp", async () => {
   const originalLog = console.log;
   const originalNow = Date.now;
   const originalSetTimeout = globalThis.setTimeout;
-  let now = Date.UTC(2026, 10, 16, 6, 58, 17);
+  let now = Date.UTC(2026, 10, 16, 6, 58, 1);
   let delay;
   console.log = (message) => messages.push(message);
   Date.now = () => now;
@@ -22,7 +22,7 @@ test("scheduled handler only logs the cron demo timestamp", async () => {
     await worker.scheduled(
       {
         cron: "* * * * *",
-        scheduledTime: Date.UTC(2026, 10, 16, 6, 58, 15),
+        scheduledTime: Date.UTC(2026, 10, 16, 6, 58, 0),
       },
     );
   } finally {
@@ -31,8 +31,8 @@ test("scheduled handler only logs the cron demo timestamp", async () => {
     globalThis.setTimeout = originalSetTimeout;
   }
 
-  assert.equal(delay, 28_000);
+  assert.equal(delay, 2_000);
   assert.deepEqual(messages, [
-    "[nifty-cron] cron=* * * * * scheduledForIST=16/11/2026, 12:28:45 IST startedAtIST=16/11/2026, 12:28:45 IST",
+    "[nifty-cron] cron=* * * * * scheduledForIST=16/11/2026, 12:28:03 IST startedAtIST=16/11/2026, 12:28:03 IST",
   ]);
 });
