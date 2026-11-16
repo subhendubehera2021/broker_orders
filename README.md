@@ -66,3 +66,4 @@ npm run tail
 ```
 
 The cron expression is configured in `wrangler.jsonc` as `* * * * *`.
+
