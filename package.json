@@ -9,7 +9,7 @@
     "dev": "wrangler dev --test-scheduled",
     "deploy": "wrangler deploy",
     "tail": "wrangler tail",
-    "test": "node --test"
+    "test": "node --test tests/*.test.js"
   },
   "devDependencies": {
     "wrangler": "^4.162.0"

@@ -1,3 +1,5 @@
+import { fetchHighestVolumeNiftyOptions } from "./nifty-option-chain.js";
+
 const istDateTime = new Intl.DateTimeFormat("en-IN", {
   timeZone: "Asia/Kolkata",
   year: "numeric",
@@ -21,7 +23,18 @@ export default {
         ` scheduledForIST=${formatIST(scheduledMinute)}` +
         ` startedAtIST=${formatIST(Date.now())}`,
     );
-    const settings = await env.AUTO_TRADE_SETTINGS.get("auto-trade-settings");
-    console.log(`[nifty-cron] auto-trade-settings found=${settings !== null}`);
+    const [apiToken, baseUrl] = await Promise.all([
+      env.AUTO_TRADE_SETTINGS.get("kotak-neo-api-token"),
+      env.AUTO_TRADE_SETTINGS.get("kotak-neo-base-url"),
+    ]);
+    const instruments = await fetchHighestVolumeNiftyOptions({ apiToken, baseUrl });
+    console.log(
+      `[nifty-cron] highest-volume-call symbol=${instruments.call.symbol}` +
+        ` token=${instruments.call.token} volume=${instruments.call.volume}`,
+    );
+    console.log(
+      `[nifty-cron] highest-volume-put symbol=${instruments.put.symbol}` +
+        ` token=${instruments.put.token} volume=${instruments.put.volume}`,
+    );
   },
 };

@@ -21,17 +21,16 @@ curl "http://localhost:8787/__scheduled?cron=*+*+*+*+*"
 
 The local Wrangler console displays the dummy cron log.
 
-## Auto-trade settings KV
+## Kotak option-chain credentials
 
-The Worker reads the `auto-trade-settings` key from the `AUTO_TRADE_SETTINGS` KV namespace on every scheduled run. It logs only whether the key exists, never its contents. The namespace is configured in `wrangler.jsonc`; Wrangler can provision it during deployment. KV reads are eventually consistent, so this scaffold is for settings, not trade locks or strict deduplication.
+On every scheduled run, the Worker fetches the NIFTY option chain and logs the highest-volume call and put. It reads these keys from the `AUTO_TRADE_SETTINGS` KV namespace:
 
-After deploying, store a JSON value in the remote namespace:
+- `kotak-neo-api-token`: the plain API access token from the NEO API Dashboard (not the session JWT).
+- `kotak-neo-base-url`: the `baseUrl` returned by `tradeApiValidate`.
 
-```sh
-npx wrangler kv key put auto-trade-settings '{"enabled":false}' --binding=AUTO_TRADE_SETTINGS --remote
-```
+Add both keys in the Cloudflare dashboard under the KV namespace bound as `AUTO_TRADE_SETTINGS`. Do not put credentials in source files or logs. The endpoint uses the dashboard token in `Authorization`; a per-minute TOTP login is not required.
 
-Replace the example with the settings document once its schema is defined. For local development, use `--local` instead of `--remote`.
+KV reads are eventually consistent. This is suitable for credentials/configuration reads, not trade locks or strict deduplication.
 
 ## Deploy
 
