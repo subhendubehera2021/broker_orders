@@ -1,3 +1,5 @@
+import { callLiquiditySwingApi } from "./liquidity-swing-api.js";
+
 const istDateTime = new Intl.DateTimeFormat("en-IN", {
   timeZone: "Asia/Kolkata",
   year: "numeric",
@@ -14,7 +16,7 @@ function formatIST(timestamp) {
 }
 
 export default {
-  async scheduled(controller) {
+  async scheduled(controller, env) {
     const scheduledMinute = Math.floor(controller.scheduledTime / 60_000) * 60_000;
     const scheduledFor = scheduledMinute + 59_000;
     const delay = scheduledFor - Date.now();
@@ -27,5 +29,8 @@ export default {
         ` scheduledForIST=${formatIST(scheduledFor)}` +
         ` startedAtIST=${formatIST(Date.now())}`,
     );
+
+    const status = await callLiquiditySwingApi(env.LIQUIDITY_SWING_API_TOKEN);
+    console.log(`[nifty-cron] liquidity-swing-api status=${status}`);
   },
 };

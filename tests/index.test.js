@@ -2,11 +2,13 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import worker from "../src/index.js";
 
-test("scheduled handler only logs the cron demo timestamp", async () => {
+test("scheduled handler waits until the target time and calls the API once", async () => {
   const messages = [];
+  const requests = [];
   const originalLog = console.log;
   const originalNow = Date.now;
   const originalSetTimeout = globalThis.setTimeout;
+  const originalFetch = globalThis.fetch;
   let now = Date.UTC(2026, 10, 16, 6, 58, 1);
   let delay;
   console.log = (message) => messages.push(message);
@@ -17,6 +19,10 @@ test("scheduled handler only logs the cron demo timestamp", async () => {
     callback();
     return 0;
   };
+  globalThis.fetch = async (url, options) => {
+    requests.push({ url, options });
+    return new Response(null, { status: 200 });
+  };
 
   try {
     await worker.scheduled(
@@ -24,15 +30,26 @@ test("scheduled handler only logs the cron demo timestamp", async () => {
         cron: "* * * * *",
         scheduledTime: Date.UTC(2026, 10, 16, 6, 58, 0),
       },
+      { LIQUIDITY_SWING_API_TOKEN: "test-api-token" },
     );
   } finally {
     console.log = originalLog;
     Date.now = originalNow;
     globalThis.setTimeout = originalSetTimeout;
+    globalThis.fetch = originalFetch;
   }
 
   assert.equal(delay, 58_000);
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].url, "https://broker-orders.vercel.app/api/liquidity-swing");
+  assert.equal(requests[0].options.method, "GET");
+  assert.deepEqual(requests[0].options.headers, {
+    Accept: "*/*",
+    Authorization: "Bearer test-api-token",
+  });
+  assert.equal(requests[0].options.redirect, "error");
   assert.deepEqual(messages, [
     "[nifty-cron] cron=* * * * * scheduledForIST=16/11/2026, 12:28:59 IST startedAtIST=16/11/2026, 12:28:59 IST",
+    "[nifty-cron] liquidity-swing-api status=200",
   ]);
 });

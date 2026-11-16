@@ -1,6 +1,6 @@
 # Cron Demo Worker
 
-A minimal Cloudflare Worker with a Cron Trigger that runs every minute and waits until 59 seconds past the scheduled minute before logging the cron expression and timestamps in India Standard Time. It does not call external APIs. If Cloudflare starts an invocation after the 59-second target, the log will be late.
+A Cloudflare Worker with a Cron Trigger that runs every minute, waits until 59 seconds past the scheduled minute, and then calls the liquidity-swing API. It logs the cron timing and API response status. If Cloudflare starts an invocation after the 59-second target, the API call will be late.
 
 Wrangler requires Node.js 22.12 or newer.
 
@@ -19,7 +19,17 @@ In another terminal, trigger a local scheduled event:
 curl "http://localhost:8787/__scheduled?cron=*+*+*+*+*"
 ```
 
-The local Wrangler console displays the dummy cron log.
+For local development, create a `.dev.vars` file with the `LIQUIDITY_SWING_API_TOKEN` value. This file is git-ignored; do not commit the token.
+
+## API token
+
+Set the token as a Cloudflare secret before deploying:
+
+```sh
+npx wrangler secret put LIQUIDITY_SWING_API_TOKEN
+```
+
+Paste the token when Wrangler prompts for it. Do not include the `Bearer ` prefix.
 
 ## Deploy
 
