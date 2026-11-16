@@ -53,3 +53,110 @@ test("scheduled handler waits until the target time and calls the API once", asy
     "[nifty-cron] liquidity-swing-api status=200",
   ]);
 });
+
+test("separate scheduled trigger starts the WebSocket without invoking the existing cron API", async () => {
+  const calls = [];
+  const messages = [];
+  const originalLog = console.log;
+  console.log = (message) => messages.push(message);
+  const env = {
+    ORDER_STREAM: {
+      idFromName(name) {
+        calls.push({ name });
+        return "stable-order-stream-id";
+      },
+      get(id) {
+        calls.push({ id });
+        return {
+          async fetch(url, options) {
+            calls.push({ url, options });
+            return Response.json({ state: "connecting" });
+          },
+        };
+      },
+    },
+  };
+
+  try {
+    await worker.scheduled({ cron: "*/5 * * * *" }, env);
+  } finally {
+    console.log = originalLog;
+  }
+
+  assert.deepEqual(calls, [
+    { name: "kotak-order-stream" },
+    { id: "stable-order-stream-id" },
+    {
+      url: "https://order-stream.internal/start",
+      options: { method: "POST" },
+    },
+  ]);
+  assert.deepEqual(messages, ["[order-websocket] supervisor state=connecting"]);
+});
+
+test("authenticated start endpoint starts the single Durable Object stream", async () => {
+  const calls = [];
+  const stub = {
+    async fetch(url, options) {
+      calls.push({ url, options });
+      return Response.json({ state: "connecting" });
+    },
+  };
+  const env = {
+    ORDER_STREAM_CONTROL_TOKEN: "control-secret",
+    ORDER_STREAM: {
+      idFromName(name) {
+        calls.push({ name });
+        return "stable-order-stream-id";
+      },
+      get(id) {
+        calls.push({ id });
+        return stub;
+      },
+    },
+  };
+
+  const response = await worker.fetch(
+    new Request("https://worker.example/internal/order-stream/start", {
+      method: "POST",
+      headers: { Authorization: "Bearer control-secret" },
+    }),
+    env,
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { state: "connecting" });
+  assert.deepEqual(calls, [
+    { name: "kotak-order-stream" },
+    { id: "stable-order-stream-id" },
+    {
+      url: "https://order-stream.internal/start",
+      options: { method: "POST" },
+    },
+  ]);
+});
+
+test("start endpoint rejects unauthorized and non-POST requests", async () => {
+  const env = {
+    ORDER_STREAM_CONTROL_TOKEN: "control-secret",
+    ORDER_STREAM: {
+      idFromName() {
+        assert.fail("Unauthorized requests must not access the Durable Object");
+      },
+    },
+  };
+  const unauthorized = await worker.fetch(
+    new Request("https://worker.example/internal/order-stream/start", { method: "POST" }),
+    env,
+  );
+  const wrongMethod = await worker.fetch(
+    new Request("https://worker.example/internal/order-stream/start", {
+      method: "GET",
+      headers: { Authorization: "Bearer control-secret" },
+    }),
+    env,
+  );
+
+  assert.equal(unauthorized.status, 401);
+  assert.equal(wrongMethod.status, 404);
+});

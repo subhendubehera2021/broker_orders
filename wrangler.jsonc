@@ -3,6 +3,20 @@
 	"name": "nifty-cron",
 	"main": "src/index.js",
 	"compatibility_date": "2026-11-16",
+	"durable_objects": {
+		"bindings": [
+			{
+				"name": "ORDER_STREAM",
+				"class_name": "KotakOrderStream"
+			}
+		]
+	},
+	"migrations": [
+		{
+			"tag": "v1",
+			"new_sqlite_classes": ["KotakOrderStream"]
+		}
+	],
 	"observability": {
 		"logs": {
 			"enabled": true,
@@ -21,7 +35,8 @@
 	},
 	"triggers": {
 		"crons": [
-			"* * * * *"
+			"* * * * *",
+			"*/5 * * * *"
 		]
 	}
 }
