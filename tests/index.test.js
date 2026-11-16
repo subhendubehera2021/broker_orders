@@ -194,7 +194,7 @@ test("serves the dashboard and protects the status endpoint", async () => {
 
   assert.equal(dashboard.status, 200);
   assert.match(dashboard.headers.get("content-type"), /text\/html/);
-  assert.match(await dashboard.text(), /Kotak order WebSocket/);
+  assert.match(await dashboard.text(), /Order stream/);
   assert.equal(unauthorized.status, 401);
   assert.equal(status.status, 200);
   assert.deepEqual(await status.json(), {
