@@ -22,12 +22,14 @@ export function getTursoClient() {
 export async function persistSwingAnalyses(analyses, dbClient) {
   const scanId = randomUUID();
   const statements = analyses.map(
-    ({ optionSide, token, interval, pivotLookback, bars, swing }) => ({
+    ({ optionSide, symbol, token, optionVolume, interval, pivotLookback, bars, swing }) => ({
       sql: `
         INSERT INTO liquidity_swing_results (
           scan_id,
           option_side,
+          symbol,
           token,
+          option_volume,
           interval,
           pivot_lookback,
           bars,
@@ -41,12 +43,14 @@ export async function persistSwingAnalyses(analyses, dbClient) {
           touch_volume,
           swing_status,
           broken_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       args: [
         scanId,
         optionSide,
+        symbol ?? null,
         token,
+        optionVolume ?? null,
         interval,
         pivotLookback,
         bars,

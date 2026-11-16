@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { fetchLiquiditySwings, recentIndiaDateRange } from "./liquidity-swing/index.js";
+import { fetchHighestVolumeNiftyOptions } from "./nifty-option-chain.js";
 import { getTursoClient, persistSwingAnalyses } from "./turso-storage.js";
 
 const swaggerHtml = await readFile(new URL("../public/swagger.html", import.meta.url), "utf8");
@@ -14,18 +15,6 @@ function isAuthorized(authorization, expectedSecret) {
   const actual = Buffer.from(authorization.slice(7));
   const expected = Buffer.from(expectedSecret);
   return actual.length === expected.length && timingSafeEqual(actual, expected);
-}
-
-function isValidInstrument(instrument) {
-  return (
-    typeof instrument === "object" &&
-    instrument !== null &&
-    !Array.isArray(instrument) &&
-    ["CALL", "PUT"].includes(instrument.optionSide) &&
-    typeof instrument.token === "string" &&
-    instrument.token.length <= 80 &&
-    /^nse_fo\|[A-Za-z0-9._-]+$/.test(instrument.token)
-  );
 }
 
 function waitForRequestSlot() {
@@ -49,8 +38,8 @@ export function registerSwingApiRoutes(
   });
 
   app.all("/api/liquidity-swing", async (request, reply) => {
-    if (request.method !== "POST") {
-      return reply.header("Allow", "POST").code(405).send({ error: "Method not allowed" });
+    if (request.method !== "GET") {
+      return reply.header("Allow", "GET").code(405).send({ error: "Method not allowed" });
     }
 
     const expectedSecret = process.env.SWING_API_SECRET;
@@ -60,16 +49,6 @@ export function registerSwingApiRoutes(
     }
     if (!isAuthorized(request.headers.authorization, expectedSecret)) {
       return reply.code(401).send({ error: "Unauthorized" });
-    }
-
-    const instruments = request.body?.instruments;
-    if (
-      !Array.isArray(instruments) ||
-      instruments.length !== 2 ||
-      instruments.some((instrument) => !isValidInstrument(instrument)) ||
-      new Set(instruments.map(({ optionSide }) => optionSide)).size !== 2
-    ) {
-      return reply.code(400).send({ error: "A NIFTY call and put token are required" });
     }
 
     const apiToken = process.env.KOTAK_NEO_API_TOKEN;
@@ -93,18 +72,25 @@ export function registerSwingApiRoutes(
     }
 
     let analyses;
+    let instruments;
     try {
+      instruments = await fetchHighestVolumeNiftyOptions({ apiToken, baseUrl });
       const dateRange = recentIndiaDateRange();
       analyses = [];
-      for (const [index, { token, optionSide }] of instruments.entries()) {
+      for (const [index, [optionSide, instrument]] of [
+        ["CALL", instruments.call],
+        ["PUT", instruments.put],
+      ].entries()) {
         if (index > 0) await waitForRequestSlot();
         const analysis = await fetchLiquiditySwings(
-          { token },
+          { token: instrument.token },
           { apiToken, baseUrl, ...dateRange },
         );
         analyses.push({
           optionSide,
-          token,
+          symbol: instrument.symbol,
+          token: instrument.token,
+          optionVolume: instrument.volume,
           interval: analysis.interval,
           pivotLookback: analysis.pivotLookback,
           bars: analysis.bars.length,
@@ -112,7 +98,7 @@ export function registerSwingApiRoutes(
         });
       }
     } catch (error) {
-      console.error("[liquidity-swing-api] Historical swing analysis failed", error);
+      console.error("[liquidity-swing-api] Option-chain or swing analysis failed", error);
       return reply.code(502).send({ error: "Unable to fetch swing analysis" });
     }
 
@@ -123,6 +109,10 @@ export function registerSwingApiRoutes(
       console.error("[liquidity-swing-api] Turso write failed", error);
       return reply.code(503).send({ error: "Unable to store swing analysis" });
     }
-    return reply.code(200).send({ scanId, analyses });
+    return reply.code(200).send({
+      scanId,
+      selected: instruments,
+      analyses,
+    });
   });
 }

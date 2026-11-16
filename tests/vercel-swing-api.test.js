@@ -17,7 +17,7 @@ after(async () => {
   await app.close();
 });
 
-test("Fastify swing API requires its shared secret before reading Kotak data", async () => {
+test("GET swing API requires its shared secret before requesting Kotak data", async () => {
   const previousSecret = process.env.SWING_API_SECRET;
   const originalFetch = globalThis.fetch;
   process.env.SWING_API_SECRET = "shared-secret";
@@ -28,10 +28,9 @@ test("Fastify swing API requires its shared secret before reading Kotak data", a
   let response;
   try {
     response = await app.inject({
-      method: "POST",
+      method: "GET",
       url: "/api/liquidity-swing",
       headers: { authorization: "Bearer wrong-secret" },
-      payload: { instruments: [] },
     });
   } finally {
     globalThis.fetch = originalFetch;
@@ -44,7 +43,7 @@ test("Fastify swing API requires its shared secret before reading Kotak data", a
   assert.equal(response.headers["cache-control"], "no-store");
 });
 
-test("Fastify swing API analyzes the call and put using server-side Kotak credentials", async () => {
+test("GET swing API selects highest-volume options, analyzes, then persists both sides", async () => {
   const previousEnv = {
     SWING_API_SECRET: process.env.SWING_API_SECRET,
     KOTAK_NEO_API_TOKEN: process.env.KOTAK_NEO_API_TOKEN,
@@ -58,23 +57,52 @@ test("Fastify swing API analyzes the call and put using server-side Kotak creden
     KOTAK_NEO_BASE_URL: "https://cis.kotaksecurities.com",
   });
   globalThis.fetch = async (url, options) => {
-    requestedTokens.push(url.searchParams.get("neosymbol"));
     assert.equal(options.headers.Authorization, "dashboard-token");
+    if (url.pathname.endsWith("/option-chain")) {
+      return Response.json({
+        data: {
+          call: [
+            {
+              instrument: {
+                neoSymbol: "nse_fo|1",
+                symbol: "NIFTY-CE-LOW",
+                optionType: "CE",
+              },
+              quote: { volume: 100 },
+            },
+            {
+              instrument: {
+                neoSymbol: "nse_fo|2",
+                symbol: "NIFTY-CE-HIGH",
+                optionType: "CE",
+              },
+              quote: { volume: "900" },
+            },
+          ],
+          put: [
+            {
+              inst: {
+                neoSymbol: "nse_fo|3",
+                symbol: "NIFTY-PE-HIGH",
+                optType: "PE",
+              },
+              quote: { vol: "1200" },
+            },
+          ],
+        },
+      });
+    }
+
+    requestedTokens.push(url.searchParams.get("neosymbol"));
     return Response.json({ status: "success", data: { candles: [] } });
   };
 
   let response;
   try {
     response = await app.inject({
-      method: "POST",
+      method: "GET",
       url: "/api/liquidity-swing",
       headers: { authorization: "Bearer shared-secret" },
-      payload: {
-        instruments: [
-          { optionSide: "CALL", token: "nse_fo|1" },
-          { optionSide: "PUT", token: "nse_fo|2" },
-        ],
-      },
     });
   } finally {
     globalThis.fetch = originalFetch;
@@ -84,13 +112,30 @@ test("Fastify swing API analyzes the call and put using server-side Kotak creden
     }
   }
 
+  const result = response.json();
   assert.equal(response.statusCode, 200);
-  assert.equal(response.json().scanId, "test-scan-id");
-  assert.deepEqual(requestedTokens, ["nse_fo|1", "nse_fo|2"]);
-  assert.deepEqual(response.json().analyses, [
+  assert.equal(result.scanId, "test-scan-id");
+  assert.deepEqual(result.selected, {
+    call: {
+      optionType: "CE",
+      symbol: "NIFTY-CE-HIGH",
+      token: "nse_fo|2",
+      volume: 900,
+    },
+    put: {
+      optionType: "PE",
+      symbol: "NIFTY-PE-HIGH",
+      token: "nse_fo|3",
+      volume: 1200,
+    },
+  });
+  assert.deepEqual(requestedTokens, ["nse_fo|2", "nse_fo|3"]);
+  assert.deepEqual(result.analyses, [
     {
       optionSide: "CALL",
-      token: "nse_fo|1",
+      symbol: "NIFTY-CE-HIGH",
+      token: "nse_fo|2",
+      optionVolume: 900,
       interval: "1min",
       pivotLookback: 5,
       bars: 0,
@@ -98,17 +143,29 @@ test("Fastify swing API analyzes the call and put using server-side Kotak creden
     },
     {
       optionSide: "PUT",
-      token: "nse_fo|2",
+      symbol: "NIFTY-PE-HIGH",
+      token: "nse_fo|3",
+      optionVolume: 1200,
       interval: "1min",
       pivotLookback: 5,
       bars: 0,
       swing: null,
     },
   ]);
-  assert.deepEqual(persistedAnalyses, response.json().analyses);
+  assert.deepEqual(persistedAnalyses, result.analyses);
 });
 
-test("Fastify serves Swagger and OpenAPI documentation", async () => {
+test("GET swing API rejects other methods", async () => {
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/liquidity-swing",
+  });
+
+  assert.equal(response.statusCode, 405);
+  assert.equal(response.headers.allow, "GET");
+});
+
+test("Fastify serves Swagger and OpenAPI documentation for the GET endpoint", async () => {
   const [swagger, openApi] = await Promise.all([
     app.inject({ method: "GET", url: "/swagger.html" }),
     app.inject({ method: "GET", url: "/openapi.json" }),
@@ -118,7 +175,5 @@ test("Fastify serves Swagger and OpenAPI documentation", async () => {
   assert.match(swagger.headers["content-type"], /text\/html/);
   assert.match(swagger.body, /SwaggerUIBundle/);
   assert.equal(openApi.statusCode, 200);
-  assert.equal(openApi.json().paths["/api/liquidity-swing"].post.summary,
-    "Analyze swing highs for a NIFTY call and put",
-  );
+  assert.ok(openApi.json().paths["/api/liquidity-swing"].get);
 });

@@ -12,7 +12,9 @@ test("persists both option results in one Turso write batch", async () => {
   const analyses = [
     {
       optionSide: "CALL",
+      symbol: "NIFTY-CE",
       token: "nse_fo|1",
+      optionVolume: 500,
       interval: "1min",
       pivotLookback: 5,
       bars: 0,
@@ -20,7 +22,9 @@ test("persists both option results in one Turso write batch", async () => {
     },
     {
       optionSide: "PUT",
+      symbol: "NIFTY-PE",
       token: "nse_fo|2",
+      optionVolume: 600,
       interval: "1min",
       pivotLookback: 5,
       bars: 10,
@@ -47,7 +51,9 @@ test("persists both option results in one Turso write batch", async () => {
     [
       scanId,
       "CALL",
+      "NIFTY-CE",
       "nse_fo|1",
+      500,
       "1min",
       5,
       0,
@@ -65,7 +71,9 @@ test("persists both option results in one Turso write batch", async () => {
     [
       scanId,
       "PUT",
+      "NIFTY-PE",
       "nse_fo|2",
+      600,
       "1min",
       5,
       10,

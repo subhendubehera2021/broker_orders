@@ -2,43 +2,21 @@
   "openapi": "3.1.0",
   "info": {
     "title": "NIFTY Liquidity Swing API",
-    "description": "Authenticated endpoint used by the Cloudflare Cron Worker to analyze the selected NIFTY call and put.",
+    "description": "Authenticated endpoint that selects the highest-volume NIFTY call and put, analyzes their swing highs, and stores the results in Turso.",
     "version": "1.0.0"
   },
   "paths": {
     "/api/liquidity-swing": {
-      "post": {
-        "summary": "Analyze swing highs for a NIFTY call and put",
+      "get": {
+        "summary": "Select and analyze the highest-volume NIFTY call and put",
         "security": [
           {
             "bearerAuth": []
           }
         ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SwingRequest"
-              },
-              "example": {
-                "instruments": [
-                  {
-                    "optionSide": "CALL",
-                    "token": "nse_fo|45402"
-                  },
-                  {
-                    "optionSide": "PUT",
-                    "token": "nse_fo|45395"
-                  }
-                ]
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
-            "description": "Swing-high analysis for both instruments.",
+            "description": "Selected instruments and swing-high analysis, persisted to Turso.",
             "content": {
               "application/json": {
                 "schema": {
@@ -47,20 +25,17 @@
               }
             }
           },
-          "400": {
-            "description": "The request must contain one CALL token and one PUT token."
-          },
           "401": {
             "description": "Missing or invalid bearer token."
           },
           "405": {
-            "description": "Only POST is supported."
+            "description": "Only GET is supported."
           },
           "500": {
             "description": "The API environment is not configured."
           },
           "502": {
-            "description": "The historical candle request or swing analysis failed."
+            "description": "The option-chain request or historical-candle analysis failed."
           },
           "503": {
             "description": "Swing analysis succeeded, but storing it in Turso failed."
@@ -77,41 +52,29 @@
       }
     },
     "schemas": {
-      "SwingRequest": {
+      "SelectedInstrument": {
         "type": "object",
         "required": [
-          "instruments"
+          "optionType",
+          "symbol",
+          "token",
+          "volume"
         ],
         "properties": {
-          "instruments": {
-            "type": "array",
-            "minItems": 2,
-            "maxItems": 2,
-            "description": "Must contain exactly one CALL and one PUT.",
-            "items": {
-              "$ref": "#/components/schemas/Instrument"
-            }
-          }
-        }
-      },
-      "Instrument": {
-        "type": "object",
-        "required": [
-          "optionSide",
-          "token"
-        ],
-        "properties": {
-          "optionSide": {
+          "optionType": {
             "type": "string",
-            "enum": [
-              "CALL",
-              "PUT"
-            ]
+            "enum": ["CE", "PE"]
+          },
+          "symbol": {
+            "type": "string"
           },
           "token": {
             "type": "string",
             "pattern": "^nse_fo\\|[A-Za-z0-9._-]+$",
             "example": "nse_fo|45402"
+          },
+          "volume": {
+            "type": "number"
           }
         }
       },
@@ -119,6 +82,7 @@
         "type": "object",
         "required": [
           "scanId",
+          "selected",
           "analyses"
         ],
         "properties": {
@@ -126,6 +90,21 @@
             "type": "string",
             "format": "uuid",
             "description": "Identifier shared by both stored option results."
+          },
+          "selected": {
+            "type": "object",
+            "required": [
+              "call",
+              "put"
+            ],
+            "properties": {
+              "call": {
+                "$ref": "#/components/schemas/SelectedInstrument"
+              },
+              "put": {
+                "$ref": "#/components/schemas/SelectedInstrument"
+              }
+            }
           },
           "analyses": {
             "type": "array",
@@ -139,7 +118,9 @@
         "type": "object",
         "required": [
           "optionSide",
+          "symbol",
           "token",
+          "optionVolume",
           "interval",
           "pivotLookback",
           "bars",
@@ -155,6 +136,12 @@
           },
           "token": {
             "type": "string"
+          },
+          "symbol": {
+            "type": "string"
+          },
+          "optionVolume": {
+            "type": "number"
           },
           "interval": {
             "type": "string",
