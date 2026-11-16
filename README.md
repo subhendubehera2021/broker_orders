@@ -1,6 +1,6 @@
 # Cron Demo Worker
 
-A minimal Cloudflare Worker with a Cron Trigger that runs every minute and logs the cron expression, scheduled time, and start time in India Standard Time. It does not call external APIs. Cloudflare may start an invocation slightly after its scheduled boundary.
+A minimal Cloudflare Worker with a Cron Trigger that runs every minute and waits until 45 seconds past the scheduled minute before logging the cron expression and timestamps in India Standard Time. It does not call external APIs. If Cloudflare starts an invocation after the 45-second target, the log will be late.
 
 Wrangler requires Node.js 22.12 or newer.
 
