@@ -82,6 +82,7 @@
         "type": "object",
         "required": [
           "scanId",
+          "insertedRows",
           "selected",
           "analyses"
         ],
@@ -90,6 +91,12 @@
             "type": "string",
             "format": "uuid",
             "description": "Identifier shared by both stored option results."
+          },
+          "insertedRows": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2,
+            "description": "Number of new rows inserted; duplicate pivot identities are skipped."
           },
           "selected": {
             "type": "object",

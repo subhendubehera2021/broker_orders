@@ -106,15 +106,15 @@ export function registerSwingApiRoutes(
       return reply.code(502).send({ error: "Unable to fetch swing analysis" });
     }
 
-    let scanId;
+    let persistence;
     try {
-      scanId = await persistAnalyses(analyses, dbClient);
+      persistence = await persistAnalyses(analyses, dbClient);
     } catch (error) {
       console.error("[liquidity-swing-api] Turso write failed", error);
       return reply.code(503).send({ error: "Unable to store swing analysis" });
     }
     return reply.code(200).send({
-      scanId,
+      ...persistence,
       selected: instruments,
       analyses,
     });

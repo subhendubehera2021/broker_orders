@@ -68,6 +68,13 @@ export async function persistSwingAnalyses(analyses, dbClient) {
     }),
   );
 
-  await dbClient.batch(statements, "write");
-  return scanId;
+  const results = await dbClient.batch(
+    statements.map((statement) => ({
+      ...statement,
+      sql: `${statement.sql.trimEnd()} ON CONFLICT DO NOTHING`,
+    })),
+    "write",
+  );
+  const insertedRows = results.reduce((count, result) => count + result.rowsAffected, 0);
+  return { scanId, insertedRows };
 }

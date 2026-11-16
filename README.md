@@ -28,12 +28,16 @@ Configure these variables for the Vercel environment:
 - `TURSO_DATABASE_URL`: the database URL from Turso.
 - `TURSO_AUTH_TOKEN`: the database authentication token from Turso.
 
-Create the `liquidity_swing_results` table. Each successful API request writes CALL and PUT rows together under one `scan_id`. If you created the earlier table before option-chain data was added, run these migrations once:
+Create the `liquidity_swing_results` table using [`db.sql`](./db.sql). A unique index prevents duplicate rows for the same `symbol`, `token`, `pivot_lookback`, `interval`, and `pivot_time`. If those five values match, the insert is skipped—even if other metrics changed; existing rows are not updated. A different key creates a new row. `insertedRows` in the response tells you how many rows were added.
+
+If you created the earlier table before option-chain data was added, first add the missing columns once:
 
 ```sql
 ALTER TABLE liquidity_swing_results ADD COLUMN symbol TEXT;
 ALTER TABLE liquidity_swing_results ADD COLUMN option_volume REAL;
 ```
+
+Then create the unique index from `db.sql`. If duplicate key rows already exist, remove or merge them before creating that index.
 
 Do not put credentials in source files or expose them in logs. The endpoint uses the dashboard token in `Authorization`; a per-minute TOTP login is not required.
 

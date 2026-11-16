@@ -7,6 +7,7 @@ test("persists both option results in one Turso write batch", async () => {
   const client = {
     async batch(statements, mode) {
       batches.push({ statements, mode });
+      return statements.map(() => ({ rowsAffected: 1 }));
     },
   };
   const analyses = [
@@ -41,12 +42,14 @@ test("persists both option results in one Turso write batch", async () => {
     },
   ];
 
-  const scanId = await persistSwingAnalyses(analyses, client);
+  const { scanId, insertedRows } = await persistSwingAnalyses(analyses, client);
 
   assert.match(scanId, /^[0-9a-f-]{36}$/);
+  assert.equal(insertedRows, 2);
   assert.equal(batches.length, 1);
   assert.equal(batches[0].mode, "write");
   assert.equal(batches[0].statements.length, 2);
+  assert.ok(batches[0].statements.every(({ sql }) => sql.includes("ON CONFLICT DO NOTHING")));
   assert.deepEqual(batches[0].statements.map(({ args }) => args), [
     [
       scanId,

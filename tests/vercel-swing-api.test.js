@@ -9,7 +9,7 @@ registerSwingApiRoutes(app, {
   createDbClient: () => ({}),
   persistAnalyses: async (analyses) => {
     persistedAnalyses = analyses;
-    return "test-scan-id";
+    return { scanId: "test-scan-id", insertedRows: 2 };
   },
 });
 
@@ -118,6 +118,7 @@ test("GET swing API selects highest-volume options, analyzes, then persists both
   const result = response.json();
   assert.equal(response.statusCode, 200);
   assert.equal(result.scanId, "test-scan-id");
+  assert.equal(result.insertedRows, 2);
   assert.deepEqual(result.selected, {
     call: {
       optionType: "CE",

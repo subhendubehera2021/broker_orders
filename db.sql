@@ -20,9 +20,17 @@ CREATE TABLE IF NOT EXISTS liquidity_swing_results (
   swing_status TEXT NOT NULL CHECK (
     swing_status IN ('not-found', 'tracking', 'qualified', 'broken')
   ),
-  broken_at TEXT,
-  UNIQUE (scan_id, option_side)
+  broken_at TEXT
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_liquidity_swing_identity
+  ON liquidity_swing_results (
+    COALESCE(symbol, ''),
+    token,
+    pivot_lookback,
+    interval,
+    COALESCE(pivot_time, '')
+  );
 
 CREATE INDEX IF NOT EXISTS idx_liquidity_swing_fetched_at
   ON liquidity_swing_results (fetched_at);
@@ -34,3 +42,4 @@ CREATE INDEX IF NOT EXISTS idx_liquidity_swing_token_fetched_at
 -- run these once only if those columns are missing:
 -- ALTER TABLE liquidity_swing_results ADD COLUMN symbol TEXT;
 -- ALTER TABLE liquidity_swing_results ADD COLUMN option_volume REAL;
+-- Then run the CREATE UNIQUE INDEX above. Remove existing duplicates first if needed.
