@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "NIFTY Liquidity Swing API",
-    "description": "Authenticated endpoint that selects the highest-volume NIFTY call and put, analyzes their swing highs, and stores the results in Turso.",
+    "description": "Authenticated endpoints for selecting the highest-volume NIFTY call and put, updating their latest CE/PE rows in Turso, and storing liquidity-swing analysis.",
     "version": "1.0.0"
   },
   "paths": {
@@ -16,7 +16,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Highest-volume instruments selected from the current NIFTY option chain.",
+            "description": "Highest-volume instruments selected from the current NIFTY option chain and saved as the latest CE and PE rows in Turso.",
             "content": {
               "application/json": {
                 "schema": {
@@ -36,6 +36,9 @@
           },
           "502": {
             "description": "The Kotak option-chain request failed."
+          },
+          "503": {
+            "description": "The option-chain request succeeded, but storing it in Turso failed."
           }
         }
       }

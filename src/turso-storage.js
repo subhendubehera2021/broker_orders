@@ -19,6 +19,37 @@ export function getTursoClient() {
   return client;
 }
 
+export async function persistNiftyOptionChain({ call, put }, dbClient) {
+  const statements = [
+    {
+      sql: `
+        INSERT INTO nifty_option_chain_ce (id, symbol, token, volume)
+        VALUES (1, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          symbol = excluded.symbol,
+          token = excluded.token,
+          volume = excluded.volume,
+          updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+      `,
+      args: [call.symbol, call.token, call.volume],
+    },
+    {
+      sql: `
+        INSERT INTO nifty_option_chain_pe (id, symbol, token, volume)
+        VALUES (1, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          symbol = excluded.symbol,
+          token = excluded.token,
+          volume = excluded.volume,
+          updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+      `,
+      args: [put.symbol, put.token, put.volume],
+    },
+  ];
+
+  await dbClient.batch(statements, "write");
+}
+
 export async function persistSwingAnalyses(analyses, dbClient) {
   const scanId = randomUUID();
   const statements = analyses.map(

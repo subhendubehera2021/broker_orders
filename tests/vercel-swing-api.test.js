@@ -5,6 +5,7 @@ import { registerSwingApiRoutes } from "../src/swing-api-app.js";
 
 const app = Fastify({ bodyLimit: 1_024 });
 let persistedAnalyses;
+let persistedOptionChain;
 let dbClientCalls = 0;
 registerSwingApiRoutes(app, {
   createDbClient: () => {
@@ -14,6 +15,9 @@ registerSwingApiRoutes(app, {
   persistAnalyses: async (analyses) => {
     persistedAnalyses = analyses;
     return { scanId: "test-scan-id", insertedRows: 2 };
+  },
+  persistOptionChain: async (instruments) => {
+    persistedOptionChain = instruments;
   },
 });
 
@@ -163,7 +167,7 @@ test("GET swing API selects highest-volume options, analyzes, then persists both
   assert.deepEqual(persistedAnalyses, result.analyses);
 });
 
-test("GET option-chain API returns selected options without writing to Turso", async () => {
+test("GET option-chain API updates the latest CE and PE records", async () => {
   const previousEnv = {
     SWING_API_SECRET: process.env.SWING_API_SECRET,
     KOTAK_NEO_API_TOKEN: process.env.KOTAK_NEO_API_TOKEN,
@@ -172,6 +176,7 @@ test("GET option-chain API returns selected options without writing to Turso", a
   };
   const originalFetch = globalThis.fetch;
   const originalPersistedAnalyses = persistedAnalyses;
+  const originalPersistedOptionChain = persistedOptionChain;
   const dbClientCallsBefore = dbClientCalls;
   let requests = 0;
   Object.assign(process.env, {
@@ -237,8 +242,10 @@ test("GET option-chain API returns selected options without writing to Turso", a
     },
   });
   assert.equal(requests, 1);
-  assert.equal(dbClientCalls, dbClientCallsBefore);
+  assert.equal(dbClientCalls, dbClientCallsBefore + 1);
   assert.equal(persistedAnalyses, originalPersistedAnalyses);
+  assert.deepEqual(persistedOptionChain, response.json());
+  persistedOptionChain = originalPersistedOptionChain;
 });
 
 test("GET swing API rejects other methods", async () => {

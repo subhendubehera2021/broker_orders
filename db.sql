@@ -38,6 +38,22 @@ CREATE INDEX IF NOT EXISTS idx_liquidity_swing_fetched_at
 CREATE INDEX IF NOT EXISTS idx_liquidity_swing_token_fetched_at
   ON liquidity_swing_results (token, fetched_at);
 
+CREATE TABLE IF NOT EXISTS nifty_option_chain_ce (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  symbol TEXT NOT NULL,
+  token TEXT NOT NULL,
+  volume REAL NOT NULL CHECK (volume >= 0),
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+CREATE TABLE IF NOT EXISTS nifty_option_chain_pe (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  symbol TEXT NOT NULL,
+  token TEXT NOT NULL,
+  volume REAL NOT NULL CHECK (volume >= 0),
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
 -- For an existing table created before symbol and option_volume were added,
 -- run these once only if those columns are missing:
 -- ALTER TABLE liquidity_swing_results ADD COLUMN symbol TEXT;

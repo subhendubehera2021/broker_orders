@@ -2,7 +2,11 @@ import { timingSafeEqual } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { fetchLiquiditySwings, recentIndiaDateRange } from "./liquidity-swing/index.js";
 import { fetchHighestVolumeNiftyOptions } from "./nifty-option-chain.js";
-import { getTursoClient, persistSwingAnalyses } from "./turso-storage.js";
+import {
+  getTursoClient,
+  persistNiftyOptionChain,
+  persistSwingAnalyses,
+} from "./turso-storage.js";
 
 const swaggerHtml = await readFile(new URL("../public/swagger.html", import.meta.url), "utf8");
 const openApiJson = await readFile(new URL("../public/openapi.json", import.meta.url), "utf8");
@@ -53,7 +57,11 @@ function waitForRequestSlot() {
 
 export function registerSwingApiRoutes(
   app,
-  { createDbClient = getTursoClient, persistAnalyses = persistSwingAnalyses } = {},
+  {
+    createDbClient = getTursoClient,
+    persistAnalyses = persistSwingAnalyses,
+    persistOptionChain = persistNiftyOptionChain,
+  } = {},
 ) {
   app.addHook("onRequest", async (_request, reply) => {
     reply.header("Cache-Control", "no-store");
@@ -76,16 +84,32 @@ export function registerSwingApiRoutes(
     const credentials = getKotakCredentials(reply);
     if (!credentials) return;
 
+    let dbClient;
     try {
-      const selected = await fetchHighestVolumeNiftyOptions({
+      dbClient = createDbClient();
+    } catch (error) {
+      console.error("[nifty-api] Turso is not configured", error);
+      return reply.code(500).send({ error: "Option-chain API database is not configured" });
+    }
+
+    let selected;
+    try {
+      selected = await fetchHighestVolumeNiftyOptions({
         ...credentials,
         count: process.env.NIFTY_OPTION_CHAIN_COUNT,
       });
-      return reply.code(200).send(selected);
     } catch (error) {
       console.error("[nifty-api] Option-chain request failed", error);
       return reply.code(502).send({ error: "Unable to fetch NIFTY option chain" });
     }
+
+    try {
+      await persistOptionChain(selected, dbClient);
+    } catch (error) {
+      console.error("[nifty-api] Turso option-chain write failed", error);
+      return reply.code(503).send({ error: "Unable to store NIFTY option chain" });
+    }
+    return reply.code(200).send(selected);
   });
 
   app.all("/api/liquidity-swing", async (request, reply) => {

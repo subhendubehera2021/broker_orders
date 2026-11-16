@@ -1,6 +1,44 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { persistSwingAnalyses } from "../src/turso-storage.js";
+import { persistNiftyOptionChain, persistSwingAnalyses } from "../src/turso-storage.js";
+
+test("upserts the latest call and put into their single-row Turso tables", async () => {
+  const batches = [];
+  const client = {
+    async batch(statements, mode) {
+      batches.push({ statements, mode });
+      return statements.map(() => ({ rowsAffected: 1 }));
+    },
+  };
+  const instruments = {
+    call: {
+      optionType: "CE",
+      symbol: "NIFTY-CE",
+      token: "nse_fo|1",
+      volume: 500,
+    },
+    put: {
+      optionType: "PE",
+      symbol: "NIFTY-PE",
+      token: "nse_fo|2",
+      volume: 600,
+    },
+  };
+
+  await persistNiftyOptionChain(instruments, client);
+
+  assert.equal(batches.length, 1);
+  assert.equal(batches[0].mode, "write");
+  assert.equal(batches[0].statements.length, 2);
+  assert.match(batches[0].statements[0].sql, /INSERT INTO nifty_option_chain_ce/);
+  assert.match(batches[0].statements[1].sql, /INSERT INTO nifty_option_chain_pe/);
+  assert.ok(batches[0].statements.every(({ sql }) => /VALUES \(1, \?, \?, \?\)/.test(sql)));
+  assert.ok(batches[0].statements.every(({ sql }) => /ON CONFLICT\(id\) DO UPDATE SET/.test(sql)));
+  assert.deepEqual(batches[0].statements.map(({ args }) => args), [
+    ["NIFTY-CE", "nse_fo|1", 500],
+    ["NIFTY-PE", "nse_fo|2", 600],
+  ]);
+});
 
 test("persists both option results in one Turso write batch", async () => {
   const batches = [];

@@ -1,6 +1,6 @@
 # NIFTY Liquidity Swing API
 
-A Fastify API deployed on Vercel. Each authenticated GET fetches the NIFTY option chain, selects the highest-volume CALL and PUT, fetches one-minute candles for both, calculates their latest confirmed liquidity swing highs, and stores the results in Turso. It runs on demand; no cron is configured in this branch.
+A Fastify API deployed on Vercel. The authenticated option-chain endpoint fetches the NIFTY option chain, selects the highest-volume CALL and PUT, and keeps one latest row per side in Turso. The liquidity-swing endpoint also fetches one-minute candles for both, calculates their latest confirmed swing highs, and stores the results. It runs on demand; no cron is configured in this branch.
 
 ## Local development
 
@@ -28,7 +28,7 @@ Configure these variables for the Vercel environment:
 - `TURSO_DATABASE_URL`: the database URL from Turso.
 - `TURSO_AUTH_TOKEN`: the database authentication token from Turso.
 
-Create the `liquidity_swing_results` table using [`db.sql`](./db.sql). A unique index prevents duplicate rows for the same `symbol`, `token`, `pivot_lookback`, `interval`, and `pivot_time`. If those five values match, the insert is skipped—even if other metrics changed; existing rows are not updated. A different key creates a new row. `insertedRows` in the response tells you how many rows were added.
+Run [`db.sql`](./db.sql) to create the required tables. `nifty_option_chain_ce` and `nifty_option_chain_pe` each hold one row; every option-chain request updates that side's existing row rather than adding history. The `liquidity_swing_results` table keeps its separate append-only analysis behavior: a unique index prevents duplicate rows for the same `symbol`, `token`, `pivot_lookback`, `interval`, and `pivot_time`. If those five values match, the insert is skipped—even if other metrics changed; existing rows are not updated. A different key creates a new row. `insertedRows` in the response tells you how many analysis rows were added.
 
 If you created the earlier table before option-chain data was added, first add the missing columns once:
 
@@ -43,7 +43,7 @@ Do not put credentials in source files or expose them in logs. The endpoint uses
 
 ## API and Swagger
 
-- `GET /api/nifty-option-chain`: return the highest-volume CALL and PUT from the current NIFTY option chain; does not analyze swings or write to Turso.
+- `GET /api/nifty-option-chain`: return the highest-volume CALL and PUT from the current NIFTY option chain and update the latest CE/PE rows in Turso; does not analyze swings.
 - `GET /api/liquidity-swing`: fetch the chain, analyze the highest-volume CALL and PUT, and save both results.
 - `/swagger.html`: interactive Swagger UI.
 - `/openapi.json`: OpenAPI 3.1 definition.
