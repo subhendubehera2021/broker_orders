@@ -1,6 +1,6 @@
 # NIFTY Cron and Kotak Order WebSocket Worker
 
-A Cloudflare Worker with an existing per-minute Cron Trigger that continues to call the liquidity-swing API at 59 seconds past each scheduled minute. A separate five-minute Cron Trigger automatically starts/checks the Durable Object, which maintains one outbound Kotak order/position WebSocket connection. Order and position events are logged as they arrive; order numbers, account IDs, prices, and quantities are not logged. The Durable Object refreshes its connection every 12 minutes and reconnects after disconnects.
+A Cloudflare Worker with an existing per-minute Cron Trigger that continues to call the liquidity-swing API at 59 seconds past each scheduled minute. A separate once-per-minute Cron Trigger automatically starts/checks the Durable Object, which maintains one outbound Kotak order/position WebSocket connection. Order and position events are logged as they arrive; order numbers, account IDs, prices, and quantities are not logged. The Durable Object refreshes its connection every 12 minutes and reconnects after disconnects.
 
 Wrangler requires Node.js 22.12 or newer.
 
@@ -65,4 +65,4 @@ View deployed Worker logs with:
 npm run tail
 ```
 
-The Durable Object binding and first SQLite migration are configured in `wrangler.jsonc`. The existing cron expression remains `* * * * *` and retains its Vercel API call. A separate `*/5 * * * *` trigger starts/checks the order stream automatically (within five minutes); send an authenticated `POST` to `/internal/order-stream/start` to start it immediately. Its Durable Object handles refresh and reconnect alarms independently.
+The Durable Object binding and first SQLite migration are configured in `wrangler.jsonc`. The existing cron expression remains `* * * * *` and retains its Vercel API call. A separate `*/1 * * * *` trigger starts/checks the order stream automatically (within one minute); send an authenticated `POST` to `/internal/order-stream/start` to start it immediately. Its Durable Object handles refresh and reconnect alarms independently.

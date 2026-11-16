@@ -78,7 +78,7 @@ test("separate scheduled trigger starts the WebSocket without invoking the exist
   };
 
   try {
-    await worker.scheduled({ cron: "*/5 * * * *" }, env);
+    await worker.scheduled({ cron: "*/1 * * * *" }, env);
   } finally {
     console.log = originalLog;
   }

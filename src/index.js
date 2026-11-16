@@ -2,7 +2,7 @@ import { callLiquiditySwingApi } from "./liquidity-swing-api.js";
 import { KotakOrderStream } from "./order-websocket.js";
 
 const orderStreamPath = "/internal/order-stream/start";
-const orderStreamCron = "*/5 * * * *";
+const orderStreamCron = "*/1 * * * *";
 
 function isAuthorized(request, secret) {
   const authorization = request.headers.get("Authorization");
