@@ -14,12 +14,14 @@ function formatIST(timestamp) {
 }
 
 export default {
-  scheduled(controller) {
+  async scheduled(controller, env) {
     const scheduledMinute = Math.floor(controller.scheduledTime / 60_000) * 60_000;
     console.log(
       `[nifty-cron] cron=${controller.cron}` +
         ` scheduledForIST=${formatIST(scheduledMinute)}` +
         ` startedAtIST=${formatIST(Date.now())}`,
     );
+    const settings = await env.AUTO_TRADE_SETTINGS.get("auto-trade-settings");
+    console.log(`[nifty-cron] auto-trade-settings found=${settings !== null}`);
   },
 };
