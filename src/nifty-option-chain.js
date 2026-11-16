@@ -1,3 +1,5 @@
+import { createKotakApiUrl } from "./kotak-api.js";
+
 function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -72,30 +74,20 @@ export async function fetchHighestVolumeNiftyOptions(
     throw new Error("Missing required KV key: kotak-neo-base-url");
   }
 
-  let endpoint;
-  try {
-    const origin = new URL(baseUrl);
-    if (
-      origin.protocol !== "https:" ||
-      (origin.hostname !== "kotaksecurities.com" &&
-        !origin.hostname.endsWith(".kotaksecurities.com"))
-    ) {
-      throw new Error();
-    }
-    origin.pathname = `${origin.pathname.replace(/\/+$/, "")}/market-data/1.0/watchlist/option-chain`;
-    origin.search = new URLSearchParams({
+  const endpoint = createKotakApiUrl(
+    baseUrl,
+    "market-data/1.0/watchlist/option-chain",
+    {
       exchange: "nse_fo",
       underlying: "NIFTY",
       instrument_type: "option",
       count: "40",
-    }).toString();
-    endpoint = origin;
-  } catch {
-    throw new Error("Kotak base URL must be an HTTPS Kotak Securities URL");
-  }
+    },
+  );
 
   const response = await fetchImpl(endpoint, {
     method: "GET",
+    redirect: "error",
     headers: {
       Authorization: apiToken,
       "Content-Type": "application/json",

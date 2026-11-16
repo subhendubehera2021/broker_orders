@@ -1,6 +1,6 @@
 # NIFTY Cron Worker
 
-A minimal Cloudflare Worker with a Cron Trigger that runs every minute and logs the scheduled minute boundary and actual start time in India time. Cloudflare may start an invocation slightly after its scheduled boundary.
+A Cloudflare Worker with a Cron Trigger that runs every minute. Each run fetches NIFTY option-chain data, selects the highest-volume call and put, fetches one-minute candles for both instruments, and logs their latest confirmed liquidity swing highs and lows. Swings use a five-candle pivot lookback. The Worker logs but does not place trades. Cloudflare may start an invocation slightly after its scheduled boundary.
 
 Wrangler requires Node.js 22.12 or newer.
 
