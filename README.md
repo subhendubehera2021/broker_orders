@@ -1,6 +1,6 @@
-# NIFTY Cron Worker
+# Cron Demo Worker
 
-A Cloudflare Worker with a Cron Trigger that runs every minute. Each run fetches NIFTY option-chain data, selects the highest-volume call and put, fetches one-minute candles for both instruments, and logs their latest confirmed liquidity swing highs and lows. Swings use a five-candle pivot lookback. The Worker logs but does not place trades. Cloudflare may start an invocation slightly after its scheduled boundary.
+A minimal Cloudflare Worker with a Cron Trigger that runs every minute and logs the cron expression, scheduled time, and start time in India Standard Time. It does not call external APIs. Cloudflare may start an invocation slightly after its scheduled boundary.
 
 Wrangler requires Node.js 22.12 or newer.
 
@@ -20,17 +20,6 @@ curl "http://localhost:8787/__scheduled?cron=*+*+*+*+*"
 ```
 
 The local Wrangler console displays the dummy cron log.
-
-## Kotak option-chain credentials
-
-On every scheduled run, the Worker fetches the NIFTY option chain and logs the highest-volume call and put. It reads these keys from the `AUTO_TRADE_SETTINGS` KV namespace:
-
-- `kotak-neo-api-token`: the plain API access token from the NEO API Dashboard (not the session JWT).
-- `kotak-neo-base-url`: the `baseUrl` returned by `tradeApiValidate`.
-
-Add both keys in the Cloudflare dashboard under the KV namespace bound as `AUTO_TRADE_SETTINGS`. Do not put credentials in source files or logs. The endpoint uses the dashboard token in `Authorization`; a per-minute TOTP login is not required.
-
-KV reads are eventually consistent. This is suitable for credentials/configuration reads, not trade locks or strict deduplication.
 
 ## Deploy
 
