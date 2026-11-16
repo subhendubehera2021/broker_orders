@@ -17,6 +17,36 @@ function isAuthorized(authorization, expectedSecret) {
   return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 
+function authorizeRequest(request, reply) {
+  const expectedSecret = process.env.SWING_API_SECRET;
+  if (typeof expectedSecret !== "string" || expectedSecret.length === 0) {
+    console.error("[nifty-api] SWING_API_SECRET is not configured");
+    reply.code(500).send({ error: "API is not configured" });
+    return false;
+  }
+  if (!isAuthorized(request.headers.authorization, expectedSecret)) {
+    reply.code(401).send({ error: "Unauthorized" });
+    return false;
+  }
+  return true;
+}
+
+function getKotakCredentials(reply) {
+  const apiToken = process.env.KOTAK_NEO_API_TOKEN;
+  const baseUrl = process.env.KOTAK_NEO_BASE_URL;
+  if (
+    typeof apiToken !== "string" ||
+    apiToken.trim() === "" ||
+    typeof baseUrl !== "string" ||
+    baseUrl.trim() === ""
+  ) {
+    console.error("[nifty-api] Kotak credentials are not configured");
+    reply.code(500).send({ error: "API is not configured" });
+    return null;
+  }
+  return { apiToken, baseUrl };
+}
+
 function waitForRequestSlot() {
   return new Promise((resolve) => setTimeout(resolve, 1_000));
 }
@@ -37,31 +67,36 @@ export function registerSwingApiRoutes(
     return reply.type("application/json").send(openApiJson);
   });
 
+  app.all("/api/nifty-option-chain", async (request, reply) => {
+    if (request.method !== "GET") {
+      return reply.header("Allow", "GET").code(405).send({ error: "Method not allowed" });
+    }
+    if (!authorizeRequest(request, reply)) return;
+
+    const credentials = getKotakCredentials(reply);
+    if (!credentials) return;
+
+    try {
+      const selected = await fetchHighestVolumeNiftyOptions({
+        ...credentials,
+        count: process.env.NIFTY_OPTION_CHAIN_COUNT,
+      });
+      return reply.code(200).send(selected);
+    } catch (error) {
+      console.error("[nifty-api] Option-chain request failed", error);
+      return reply.code(502).send({ error: "Unable to fetch NIFTY option chain" });
+    }
+  });
+
   app.all("/api/liquidity-swing", async (request, reply) => {
     if (request.method !== "GET") {
       return reply.header("Allow", "GET").code(405).send({ error: "Method not allowed" });
     }
 
-    const expectedSecret = process.env.SWING_API_SECRET;
-    if (typeof expectedSecret !== "string" || expectedSecret.length === 0) {
-      console.error("[liquidity-swing-api] SWING_API_SECRET is not configured");
-      return reply.code(500).send({ error: "Swing API is not configured" });
-    }
-    if (!isAuthorized(request.headers.authorization, expectedSecret)) {
-      return reply.code(401).send({ error: "Unauthorized" });
-    }
-
-    const apiToken = process.env.KOTAK_NEO_API_TOKEN;
-    const baseUrl = process.env.KOTAK_NEO_BASE_URL;
-    if (
-      typeof apiToken !== "string" ||
-      apiToken.trim() === "" ||
-      typeof baseUrl !== "string" ||
-      baseUrl.trim() === ""
-    ) {
-      console.error("[liquidity-swing-api] Kotak credentials are not configured");
-      return reply.code(500).send({ error: "Swing API is not configured" });
-    }
+    if (!authorizeRequest(request, reply)) return;
+    const credentials = getKotakCredentials(reply);
+    if (!credentials) return;
+    const { apiToken, baseUrl } = credentials;
 
     let dbClient;
     try {

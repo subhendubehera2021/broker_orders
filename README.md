@@ -43,6 +43,7 @@ Do not put credentials in source files or expose them in logs. The endpoint uses
 
 ## API and Swagger
 
+- `GET /api/nifty-option-chain`: return the highest-volume CALL and PUT from the current NIFTY option chain; does not analyze swings or write to Turso.
 - `GET /api/liquidity-swing`: fetch the chain, analyze the highest-volume CALL and PUT, and save both results.
 - `/swagger.html`: interactive Swagger UI.
 - `/openapi.json`: OpenAPI 3.1 definition.

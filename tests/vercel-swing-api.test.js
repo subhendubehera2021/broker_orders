@@ -5,8 +5,12 @@ import { registerSwingApiRoutes } from "../src/swing-api-app.js";
 
 const app = Fastify({ bodyLimit: 1_024 });
 let persistedAnalyses;
+let dbClientCalls = 0;
 registerSwingApiRoutes(app, {
-  createDbClient: () => ({}),
+  createDbClient: () => {
+    dbClientCalls += 1;
+    return {};
+  },
   persistAnalyses: async (analyses) => {
     persistedAnalyses = analyses;
     return { scanId: "test-scan-id", insertedRows: 2 };
@@ -159,6 +163,84 @@ test("GET swing API selects highest-volume options, analyzes, then persists both
   assert.deepEqual(persistedAnalyses, result.analyses);
 });
 
+test("GET option-chain API returns selected options without writing to Turso", async () => {
+  const previousEnv = {
+    SWING_API_SECRET: process.env.SWING_API_SECRET,
+    KOTAK_NEO_API_TOKEN: process.env.KOTAK_NEO_API_TOKEN,
+    KOTAK_NEO_BASE_URL: process.env.KOTAK_NEO_BASE_URL,
+    NIFTY_OPTION_CHAIN_COUNT: process.env.NIFTY_OPTION_CHAIN_COUNT,
+  };
+  const originalFetch = globalThis.fetch;
+  const originalPersistedAnalyses = persistedAnalyses;
+  const dbClientCallsBefore = dbClientCalls;
+  let requests = 0;
+  Object.assign(process.env, {
+    SWING_API_SECRET: "shared-secret",
+    KOTAK_NEO_API_TOKEN: "dashboard-token",
+    KOTAK_NEO_BASE_URL: "https://cis.kotaksecurities.com",
+    NIFTY_OPTION_CHAIN_COUNT: "10",
+  });
+  globalThis.fetch = async (url, options) => {
+    requests += 1;
+    assert.equal(url.pathname, "/market-data/1.0/watchlist/option-chain");
+    assert.equal(url.searchParams.get("count"), "10");
+    assert.equal(options.headers.Authorization, "dashboard-token");
+    assert.equal(options.redirect, "manual");
+    return Response.json({
+      call: [
+        {
+          instrument: { neoSymbol: "nse_fo|1", symbol: "NIFTY-CE-LOW" },
+          quote: { volume: 100 },
+        },
+        {
+          instrument: { neoSymbol: "nse_fo|2", symbol: "NIFTY-CE-HIGH" },
+          quote: { volume: 900 },
+        },
+      ],
+      put: [
+        {
+          instrument: { neoSymbol: "nse_fo|3", symbol: "NIFTY-PE-HIGH" },
+          quote: { volume: 1200 },
+        },
+      ],
+    });
+  };
+
+  let response;
+  try {
+    response = await app.inject({
+      method: "GET",
+      url: "/api/nifty-option-chain",
+      headers: { authorization: "Bearer shared-secret" },
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(previousEnv)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.json(), {
+    call: {
+      optionType: "CE",
+      symbol: "NIFTY-CE-HIGH",
+      token: "nse_fo|2",
+      volume: 900,
+    },
+    put: {
+      optionType: "PE",
+      symbol: "NIFTY-PE-HIGH",
+      token: "nse_fo|3",
+      volume: 1200,
+    },
+  });
+  assert.equal(requests, 1);
+  assert.equal(dbClientCalls, dbClientCallsBefore);
+  assert.equal(persistedAnalyses, originalPersistedAnalyses);
+});
+
 test("GET swing API rejects other methods", async () => {
   const response = await app.inject({
     method: "POST",
@@ -180,4 +262,5 @@ test("Fastify serves Swagger and OpenAPI documentation for the GET endpoint", as
   assert.match(swagger.body, /SwaggerUIBundle/);
   assert.equal(openApi.statusCode, 200);
   assert.ok(openApi.json().paths["/api/liquidity-swing"].get);
+  assert.ok(openApi.json().paths["/api/nifty-option-chain"].get);
 });

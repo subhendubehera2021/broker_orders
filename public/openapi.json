@@ -6,6 +6,40 @@
     "version": "1.0.0"
   },
   "paths": {
+    "/api/nifty-option-chain": {
+      "get": {
+        "summary": "Get the highest-volume NIFTY CALL and PUT",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Highest-volume instruments selected from the current NIFTY option chain.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NiftyOptionChainResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token."
+          },
+          "405": {
+            "description": "Only GET is supported."
+          },
+          "500": {
+            "description": "The API environment is not configured."
+          },
+          "502": {
+            "description": "The Kotak option-chain request failed."
+          }
+        }
+      }
+    },
     "/api/liquidity-swing": {
       "get": {
         "summary": "Select and analyze the highest-volume NIFTY call and put",
@@ -75,6 +109,21 @@
           },
           "volume": {
             "type": "number"
+          }
+        }
+      },
+      "NiftyOptionChainResponse": {
+        "type": "object",
+        "required": [
+          "call",
+          "put"
+        ],
+        "properties": {
+          "call": {
+            "$ref": "#/components/schemas/SelectedInstrument"
+          },
+          "put": {
+            "$ref": "#/components/schemas/SelectedInstrument"
           }
         }
       },
