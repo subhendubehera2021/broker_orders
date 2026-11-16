@@ -14,6 +14,7 @@ import {
   type NiftyIndexTick,
   type NiftyOptionMarketInstrument,
   type NiftyOptionPriceTick,
+  type OptionChainRequest,
   type OrderPositionConnectionState,
   type OrderPositionUpdate,
   type ModifyOrderInput,
@@ -35,6 +36,7 @@ import {
 import { renderOptionChainPage } from "./option-chain-page.js";
 import { renderAutoTradePage } from "./auto_trade/page.js";
 import { analyzeLiquiditySwings } from "./auto_trade/index.js";
+import { selectHighestVolumeCallAndPut } from "./option-chain-selection.js";
 
 interface LoginBody {
   totp: string;
@@ -119,6 +121,7 @@ interface AuthClient {
     onError: (error: Error) => void,
   ): () => void;
   getNseFoScripMaster?(): Promise<string>;
+  getOptionChain?(input: OptionChainRequest, baseUrl?: string): Promise<unknown>;
   getHistoricalCandles?(
     session: AuthenticatedSession,
     input: {
@@ -1752,6 +1755,96 @@ export function buildApp({
           );
           return reply.code(statusCode).send({
             error: error instanceof KotakNeoError ? error.message : "NIFTY option chain could not be loaded",
+          });
+        }
+      },
+    );
+
+    api.get<{
+      Querystring: {
+        underlying?: string;
+        minPrice?: number;
+        maxPrice?: number;
+        expiry?: string;
+        count?: number;
+      };
+    }>(
+      "/api/options/high-volume",
+      {
+        schema: {
+          tags: ["Options"],
+          summary: "Get the Kotak option chain for an underlying",
+          description:
+            "Returns only the highest-volume call and put whose LTP is within the inclusive price range. Defaults to NIFTY and ₹130–₹180.",
+          querystring: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              underlying: {
+                type: "string",
+                default: "NIFTY",
+                minLength: 1,
+                maxLength: 32,
+                pattern: "^[A-Za-z0-9._-]+$",
+              },
+              minPrice: { type: "number", default: 130 },
+              maxPrice: { type: "number", default: 180 },
+              expiry: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+              count: { type: "integer", minimum: 10, maximum: 200, multipleOf: 10 },
+            },
+          },
+          response: {
+            200: {
+              type: "object",
+              additionalProperties: true,
+            },
+            400: errorResponseSchema,
+            401: errorResponseSchema,
+            429: errorResponseSchema,
+            502: errorResponseSchema,
+            503: errorResponseSchema,
+            504: errorResponseSchema,
+          },
+        },
+      },
+      async (request, reply) => {
+        const underlying = request.query.underlying ?? "NIFTY";
+        const minPrice = request.query.minPrice ?? 130;
+        const maxPrice = request.query.maxPrice ?? 180;
+        const { expiry, count } = request.query;
+        if (!client?.getOptionChain) {
+          return reply.code(503).send({
+            error: "Kotak Neo option-chain API is unavailable; configure KOTAK_NEO_CONSUMER_KEY",
+          });
+        }
+        try {
+          const optionChain = await client.getOptionChain(
+            {
+              underlying,
+              ...(expiry ? { expiry } : {}),
+              ...(count ? { count } : {}),
+            },
+            session?.baseUrl,
+          );
+          return selectHighestVolumeCallAndPut(optionChain, { minPrice, maxPrice });
+        } catch (error) {
+          const statusCode = brokerRequestStatus(error);
+          request.log.error(
+            {
+              statusCode,
+              underlying,
+              errorName: error instanceof Error ? error.name : "UnknownError",
+              ...(error instanceof KotakNeoError
+                ? { errorMessage: error.message, upstreamStatusCode: error.statusCode }
+                : {}),
+            },
+            "Kotak option-chain request failed",
+          );
+          return reply.code(statusCode).send({
+            error:
+              error instanceof KotakNeoError
+                ? error.message
+                : "Option-chain request could not be completed",
           });
         }
       },

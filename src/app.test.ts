@@ -692,6 +692,7 @@ describe("authentication routes", () => {
       "/api/auto-trade/liquidity-swings",
       "/api/margin",
       "/api/market/nifty/stream",
+      "/api/options/high-volume",
       "/api/options/nifty/chain",
       "/api/options/nifty/expiries",
       "/api/options/nifty/order",
@@ -1017,6 +1018,110 @@ describe("authentication routes", () => {
           lotSize: "25",
         },
       ],
+    });
+  });
+
+  it("returns the highest-volume call and put within the requested LTP range", async () => {
+    let chainRequest: unknown;
+    const optionChain = {
+      common_data: { unlSymbol: "BANKNIFTY", expiryDt: "2026-11-26" },
+      call: [
+        {
+          inst: { neoSymbol: "nse_fo|1", symbol: "BANKNIFTY-CALL-LOW", optType: "CE" },
+          quote: { ltp: "150", vol: "600" },
+        },
+        {
+          inst: { neoSymbol: "nse_fo|2", symbol: "BANKNIFTY-CALL-HIGH", optType: "CE" },
+          quote: { ltp: "140", vol: "1200" },
+        },
+        {
+          inst: { neoSymbol: "nse_fo|3", symbol: "BANKNIFTY-CALL-OUT", optType: "CE" },
+          quote: { ltp: "170", vol: "5000" },
+        },
+      ],
+      put: [
+        {
+          inst: { neoSymbol: "nse_fo|4", symbol: "BANKNIFTY-PUT-LOW", optType: "PE" },
+          quote: { ltp: "160", vol: "900" },
+        },
+        {
+          inst: { neoSymbol: "nse_fo|5", symbol: "BANKNIFTY-PUT-HIGH", optType: "PE" },
+          quote: { ltp: "155", vol: "1500" },
+        },
+      ],
+    };
+    const app = buildApp({
+      config,
+      authClient: {
+        async login() { return authenticatedSession; },
+        async getScripMaster() { return { data: { filesPaths: [] } }; },
+        async getOptionChain(input) {
+          chainRequest = input;
+          return optionChain;
+        },
+      },
+    });
+    apps.push(app);
+
+    const response = await app.inject(
+      "/api/options/high-volume?underlying=BANKNIFTY&minPrice=140&maxPrice=160&expiry=2026-11-26&count=20",
+    );
+
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(chainRequest, {
+      underlying: "BANKNIFTY",
+      expiry: "2026-11-26",
+      count: 20,
+    });
+    assert.deepEqual(response.json(), {
+      common_data: optionChain.common_data,
+      call: [optionChain.call[1]],
+      put: [optionChain.put[1]],
+    });
+  });
+
+  it("defaults to NIFTY and an LTP range of ₹130–₹180", async () => {
+    let chainRequest: unknown;
+    const optionChain = {
+      common_data: { unlSymbol: "NIFTY" },
+      call: [
+        {
+          inst: { neoSymbol: "nse_fo|6", symbol: "NIFTY-CALL-IN", optType: "CE" },
+          quote: { ltp: "140", vol: "500" },
+        },
+        {
+          inst: { neoSymbol: "nse_fo|7", symbol: "NIFTY-CALL-OUT", optType: "CE" },
+          quote: { ltp: "190", vol: "9000" },
+        },
+      ],
+      put: [
+        {
+          inst: { neoSymbol: "nse_fo|8", symbol: "NIFTY-PUT-IN", optType: "PE" },
+          quote: { ltp: "180", vol: "800" },
+        },
+      ],
+    };
+    const app = buildApp({
+      config,
+      authClient: {
+        async login() { return authenticatedSession; },
+        async getScripMaster() { return { data: { filesPaths: [] } }; },
+        async getOptionChain(input) {
+          chainRequest = input;
+          return optionChain;
+        },
+      },
+    });
+    apps.push(app);
+
+    const response = await app.inject("/api/options/high-volume");
+
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(chainRequest, { underlying: "NIFTY" });
+    assert.deepEqual(response.json(), {
+      common_data: optionChain.common_data,
+      call: [optionChain.call[0]],
+      put: [optionChain.put[0]],
     });
   });
 

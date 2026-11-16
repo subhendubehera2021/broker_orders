@@ -953,6 +953,37 @@ describe("KotakNeoClient", () => {
     assert.deepEqual(result, quoteResponse);
   });
 
+  it("requests an option chain using the configured token and modular query inputs", async () => {
+    let capturedUrl: URL | undefined;
+    let capturedInit: RequestInit | undefined;
+    const optionChain = { data: { call: [], put: [] } };
+    const client = new KotakNeoClient(prodConfig, async (input, init) => {
+      capturedUrl = new URL(input.toString());
+      capturedInit = init;
+      return Response.json(optionChain);
+    });
+
+    const result = await client.getOptionChain(
+      {
+        underlying: "BANKNIFTY",
+        expiry: "2026-11-26",
+        count: 20,
+      },
+      "https://neo-gw.kotaksecurities.com/api/",
+    );
+
+    assert.equal(
+      capturedUrl?.href,
+      "https://neo-gw.kotaksecurities.com/api/market-data/1.0/watchlist/option-chain?exchange=nse_fo&underlying=BANKNIFTY&instrument_type=option&count=20&expiry=2026-11-26",
+    );
+    assert.equal(capturedInit?.method, "GET");
+    const headers = new Headers(capturedInit?.headers);
+    assert.equal(headers.get("authorization"), "consumer-key");
+    assert.equal(headers.get("content-type"), "application/json");
+    assert.equal(headers.get("auth"), null);
+    assert.deepEqual(result, optionChain);
+  });
+
   it("includes the upstream HTTP status when Kotak rejects a quote request", async () => {
     const client = new KotakNeoClient(prodConfig, async () =>
       Response.json(

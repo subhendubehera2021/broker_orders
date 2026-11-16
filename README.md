@@ -86,6 +86,12 @@ stays server-side; only the current TOTP is submitted by the browser.
   local NSE F&O CSV.
 - `GET /api/options/nifty/chain?expiry=DDMMMYYYY` — get local contract details
   for a selected NIFTY expiry.
+- `GET /api/options/high-volume` — return Kotak Neo's option-chain response
+  with only its highest-volume call and put retained, based on LTP. Defaults to
+  `underlying=NIFTY`, `minPrice=130`, and `maxPrice=180`; these can be overridden.
+  `expiry` (ISO date) and `count` (strikes, a multiple of 10; defaults to 40)
+  are optional. Requires `KOTAK_NEO_CONSUMER_KEY`; when signed in, uses the base
+  URL returned by Kotak, otherwise it uses `KOTAK_NEO_API_BASE_URL`.
 - `GET /api/auto-trade/liquidity-swings?instrument=NIFTY26N0925100PE&interval=1min&pivotLookback=5&fromdate=2026-11-01&todate=2026-11-09`
   — fetch historical OHLCV candles for the local NIFTY option contract and
   return detected swing levels. Pivot lookback accepts 3, 5, 10, 14, or 20

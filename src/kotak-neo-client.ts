@@ -67,6 +67,12 @@ export interface QuoteInstrument {
   exchangeSegment: string;
 }
 
+export interface OptionChainRequest {
+  underlying: string;
+  expiry?: string;
+  count?: number;
+}
+
 export type HistoricalCandleInterval =
   | "1min"
   | "3min"
@@ -844,6 +850,51 @@ export class KotakNeoClient {
         "Content-Type": "application/x-www-form-urlencoded",
       },
     }, session.baseUrl);
+  }
+
+  async getOptionChain(
+    input: OptionChainRequest,
+    baseUrl = this.config.apiBaseUrl,
+  ): Promise<unknown> {
+    const query = new URLSearchParams({
+      exchange: "nse_fo",
+      underlying: input.underlying,
+      instrument_type: "option",
+      count: String(input.count ?? 40),
+    });
+    if (input.expiry) query.set("expiry", input.expiry);
+    const response = await this.requestJson(
+      `market-data/1.0/watchlist/option-chain?${query.toString()}`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: this.config.consumerKey,
+          "Content-Type": "application/json",
+        },
+      },
+      baseUrl,
+    );
+    if (
+      isRecord(response) &&
+      typeof response.stat === "string" &&
+      response.stat.toLowerCase() !== "ok"
+    ) {
+      const code =
+        typeof response.stCode === "string" || typeof response.stCode === "number"
+          ? String(response.stCode)
+          : undefined;
+      const message = findErrorMessage(response);
+      const sanitizedMessage = message ? sanitizeUpstreamMessage(message) : undefined;
+      throw new KotakNeoError(
+        `Kotak Neo rejected the option-chain request${code ? ` (stCode=${code})` : ""}${sanitizedMessage ? `: ${sanitizedMessage}` : ""}`,
+        code === "100008" ? 401 : 502,
+        code,
+        200,
+        sanitizedMessage,
+        response.stat,
+      );
+    }
+    return response;
   }
 
   async getHistoricalCandles(
