@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  expiryLabelToIsoDate,
   filterUpcomingExpiryLabels,
   selectNearbyNiftyOptionContracts,
   type NiftyOptionContract,
@@ -44,6 +45,11 @@ describe("selectNearbyNiftyOptionContracts", () => {
         ["CE", "PE"],
       );
     }
+  });
+
+  it("converts valid Scrip Master expiry labels to ISO dates", () => {
+    assert.equal(expiryLabelToIsoDate("17NOV2026"), "2026-11-17");
+    assert.equal(expiryLabelToIsoDate("31FEB2026"), undefined);
   });
 
   describe("filterUpcomingExpiryLabels", () => {

@@ -312,6 +312,16 @@ describe("authentication routes", () => {
     assert.match(response.body, /await loadContractSwings\(\)/);
     assert.match(response.body, /pivotLookback: swingLookbackSelect\.value/);
     assert.match(response.body, /api\/auto-trade\/liquidity-swings/);
+    assert.match(response.body, /LTP \/ VOLUME/);
+    assert.match(response.body, /className = "option-volume"/);
+    assert.match(response.body, /api\/options\/nifty\/volumes/);
+    assert.match(response.body, /Volume unavailable:/);
+    assert.match(response.body, /76–99%/);
+    assert.match(response.body, /Top call and put \(each 100%\)/);
+    assert.match(response.body, /maxVolumes\[side\]/);
+    assert.match(response.body, /volume\.dataset\.side = side/);
+    assert.match(response.body, /}, 60_000\);/);
+    assert.match(response.body, /auto-refreshes every 60 seconds/);
     assert.match(response.body, /<th>Action<\/th>/);
     assert.match(response.body, /buyButton\.textContent = "BUY"/);
     assert.match(response.body, /void placeSwingBuyOrder\(contract, swing, orderKey, buyButton\)/);
@@ -696,6 +706,7 @@ describe("authentication routes", () => {
       "/api/options/nifty/chain",
       "/api/options/nifty/expiries",
       "/api/options/nifty/order",
+      "/api/options/nifty/volumes",
       "/api/orders",
       "/api/orders/stream",
       "/api/orders/{orderNumber}/cancel",
@@ -1018,6 +1029,56 @@ describe("authentication routes", () => {
           lotSize: "25",
         },
       ],
+    });
+  });
+
+  it("returns per-symbol volumes from Kotak's selected-expiry option-chain snapshot", async () => {
+    let chainRequest: unknown;
+    const app = buildApp({
+      config,
+      authClient: {
+        async login() { return authenticatedSession; },
+        async getScripMaster() { return { data: { filesPaths: [] } }; },
+        async getOptionChain(input) {
+          chainRequest = input;
+          return {
+            common_data: { unlSymbol: "NIFTY", expiryDt: "2030-01-30" },
+            call: [
+              {
+                inst: { symbol: "NIFTY30JAN2030CE" },
+                quote: { vol: "12345" },
+              },
+            ],
+            put: [
+              {
+                inst: { symbol: "NIFTY30JAN2030PE" },
+                quote: { volume: 6789 },
+              },
+              {
+                inst: { symbol: "NIFTY30JAN2030PE2" },
+                quote: { vol: "invalid" },
+              },
+            ],
+          };
+        },
+      },
+    });
+    apps.push(app);
+
+    const response = await app.inject("/api/options/nifty/volumes?expiry=30JAN2030");
+
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(chainRequest, {
+      underlying: "NIFTY",
+      expiry: "2030-01-30",
+      count: 40,
+    });
+    assert.deepEqual(response.json(), {
+      expiry: "30JAN2030",
+      volumes: {
+        NIFTY30JAN2030CE: 12345,
+        NIFTY30JAN2030PE: 6789,
+      },
     });
   });
 

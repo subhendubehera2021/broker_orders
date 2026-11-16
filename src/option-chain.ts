@@ -110,6 +110,37 @@ export function sortExpiryLabels(expiries: string[]): string[] {
   return expiries.sort((left, right) => expiryTimestamp(left) - expiryTimestamp(right));
 }
 
+export function expiryLabelToIsoDate(value: string): string | undefined {
+  const match = /^(\d{2})([A-Z]{3})(\d{4})$/.exec(value);
+  if (!match) return undefined;
+  const month = [
+    "JAN",
+    "FEB",
+    "MAR",
+    "APR",
+    "MAY",
+    "JUN",
+    "JUL",
+    "AUG",
+    "SEP",
+    "OCT",
+    "NOV",
+    "DEC",
+  ].indexOf(match[2]);
+  if (month < 0) return undefined;
+  const day = Number(match[1]);
+  const year = Number(match[3]);
+  const date = new Date(Date.UTC(year, month, day));
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month ||
+    date.getUTCDate() !== day
+  ) {
+    return undefined;
+  }
+  return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
 export function filterUpcomingExpiryLabels(
   expiries: string[],
   now = new Date(),

@@ -107,7 +107,22 @@ export function renderOptionChainPage(openOrderPriceStep = 1, autoSellStopLossRu
       td.put-price { color: #e2e9ed; text-align: left; }
       .price-action-wrap { display: flex; width: 100%; min-width: 0; align-items: center; justify-content: space-between; gap: 8px; }
       td.call-price .price-action-wrap { flex-direction: row-reverse; }
+      .option-price-details { display: flex; min-width: 0; flex-direction: column; }
+      td.call-price .option-price-details { text-align: right; }
+      td.put-price .option-price-details { text-align: left; }
       .option-price { min-width: 0; }
+      .option-volume { display: flex; flex-direction: column; gap: 3px; color: #8797a6; font-size: 10px; font-weight: 500; line-height: 1.3; }
+      .option-volume-meter { display: block; width: 64px; height: 4px; overflow: hidden; border-radius: 999px; background: #293541; }
+      .option-volume-bar { display: block; width: 0; height: 100%; border-radius: inherit; transition: width .25s ease, background-color .25s ease; }
+      .option-volume[data-level="1"] .option-volume-bar, .volume-legend-swatch[data-level="1"] { background: #718096; }
+      .option-volume[data-level="2"] .option-volume-bar, .volume-legend-swatch[data-level="2"] { background: #36a3c7; }
+      .option-volume[data-level="3"] .option-volume-bar, .volume-legend-swatch[data-level="3"] { background: #45b982; }
+      .option-volume[data-level="4"] .option-volume-bar, .volume-legend-swatch[data-level="4"] { background: #f0ad4e; }
+      .option-volume[data-level="max"] .option-volume-bar, .volume-legend-swatch[data-level="max"] { background: #e85d75; }
+      td.call-price .option-volume-meter { margin-left: auto; }
+      .volume-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 7px 12px; margin: -4px 0 12px; color: #8797a6; font-size: 10px; }
+      .volume-legend-item { display: inline-flex; align-items: center; gap: 5px; }
+      .volume-legend-swatch { width: 14px; height: 4px; border-radius: 999px; background: #293541; }
       .option-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 4px; }
       .buy-button, .swing-button { position: static; height: 26px; padding: 0 7px; transform: none; border-radius: 6px; font-size: 9px; font-weight: 800; letter-spacing: .04em; opacity: 1; pointer-events: auto; transition: border-color .12s ease, color .12s ease; }
       .buy-button { border: 1px solid #416b60; background: #1b302a; color: #9ce0cb; }
@@ -224,6 +239,14 @@ export function renderOptionChainPage(openOrderPriceStep = 1, autoSellStopLossRu
             <span class="feed-status" id="price-status" data-state="idle" role="status" aria-live="polite"><span class="feed-dot" aria-hidden="true"></span><span class="feed-label">Sign in for live price</span></span>
           </div>
           <p class="status" id="status" role="status" aria-live="polite">Loading local NIFTY expiries…</p>
+          <p class="status" id="volume-status" role="status" aria-live="polite">Volume snapshot will load with the option chain.</p>
+          <div class="volume-legend" aria-label="Volume relative to the displayed contracts">
+            <span class="volume-legend-item"><i class="volume-legend-swatch" data-level="1"></i>0–25%</span>
+            <span class="volume-legend-item"><i class="volume-legend-swatch" data-level="2"></i>26–50%</span>
+            <span class="volume-legend-item"><i class="volume-legend-swatch" data-level="3"></i>51–75%</span>
+            <span class="volume-legend-item"><i class="volume-legend-swatch" data-level="4"></i>76–99%</span>
+            <span class="volume-legend-item"><i class="volume-legend-swatch" data-level="max"></i>Top call and put (each 100%)</span>
+          </div>
           <div class="table-wrap" id="table-wrap" hidden>
             <table>
               <colgroup>
@@ -234,9 +257,9 @@ export function renderOptionChainPage(openOrderPriceStep = 1, autoSellStopLossRu
                 <th class="strike-head">STRIKE</th>
                 <th class="put-head">PUTS</th>
               </tr><tr class="column-head">
-                <th class="call-subhead price-head">LTP</th>
+                <th class="call-subhead price-head">LTP / VOLUME</th>
                 <th class="strike-head">Strike</th>
-                <th class="put-subhead price-head">LTP</th>
+                <th class="put-subhead price-head">LTP / VOLUME</th>
               </tr></thead>
               <tbody id="rows"></tbody>
             </table>
@@ -415,6 +438,7 @@ export function renderOptionChainPage(openOrderPriceStep = 1, autoSellStopLossRu
       const openOrderPriceStepTicks = ${openOrderPriceStepTicks};
       const expirySelect = document.querySelector("#expiry");
       const status = document.querySelector("#status");
+      const volumeStatus = document.querySelector("#volume-status");
       const tableWrap = document.querySelector("#table-wrap");
       const tableBody = document.querySelector("#rows");
       const priceStatus = document.querySelector("#price-status");
@@ -484,6 +508,9 @@ export function renderOptionChainPage(openOrderPriceStep = 1, autoSellStopLossRu
       let orderSubmissionUncertain = false;
       let selectedSwingContract;
       let swingRequestId = 0;
+      let optionVolumeRequestId = 0;
+      let optionVolumeRefreshTimer;
+      let optionVolumeAbortController;
       let analyzedSwings = [];
       const activityOrderUpdates = new Map();
       const seenActivityOrderEvents = new Set();
@@ -491,16 +518,147 @@ export function renderOptionChainPage(openOrderPriceStep = 1, autoSellStopLossRu
       let activityEventSource;
       const swingOrderAttempts = new Set();
       const optionPrices = new Map();
+      const optionVolumes = new Map();
       const openOrdersByNumber = new Map();
       const openOrderPriceSymbols = new Set();
       const pendingOrderModifications = new Set();
       const uncertainOrderModifications = new Set();
       const volumeFormat = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 });
+      const volumeTimeFormat = new Intl.DateTimeFormat("en-IN", {
+        timeZone: "Asia/Kolkata",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: true,
+      });
       const swingMaxDays = { "1min": 30, "3min": 30, "5min": 30, "10min": 60, "15min": 60, "30min": 90, "60min": 90, D: 180, W: 180 };
 
       function setStatus(text, kind = "") {
         status.textContent = text;
         status.dataset.kind = kind;
+      }
+
+      function setVolumeStatus(text, kind = "") {
+        volumeStatus.textContent = text;
+        volumeStatus.dataset.kind = kind;
+      }
+
+      function updateVolumeLabels() {
+        const labels = [...document.querySelectorAll(".option-volume")];
+        const maxVolumes = { call: 0, put: 0 };
+        for (const label of labels) {
+          const side = label.dataset.side;
+          if (side === "call" || side === "put") {
+            maxVolumes[side] = Math.max(
+              maxVolumes[side],
+              optionVolumes.get(label.dataset.symbol) ?? 0,
+            );
+          }
+        }
+        for (const label of labels) {
+          const side = label.dataset.side;
+          const volume = optionVolumes.get(label.dataset.symbol);
+          const value = label.querySelector(".option-volume-value");
+          const meter = label.querySelector(".option-volume-meter");
+          const bar = label.querySelector(".option-volume-bar");
+          if (!value || !meter || !bar) continue;
+          if (volume === undefined) {
+            value.textContent = "Vol —";
+            label.removeAttribute("data-level");
+            label.setAttribute("aria-label", "Volume unavailable for " + label.dataset.symbol);
+            label.removeAttribute("title");
+            meter.hidden = true;
+            continue;
+          }
+          const maxVolume = side === "call" || side === "put" ? maxVolumes[side] : 0;
+          const percent = maxVolume > 0
+            ? Math.max(1, Math.round((volume / maxVolume) * 100))
+            : 0;
+          const level = percent === 100
+            ? "max"
+            : percent <= 25
+              ? "1"
+              : percent <= 50
+                ? "2"
+                : percent <= 75
+                  ? "3"
+                  : "4";
+          value.textContent = "Vol " + volumeFormat.format(volume);
+          label.dataset.level = level;
+          label.setAttribute(
+            "aria-label",
+            "Volume " + volumeFormat.format(volume) + ", " + percent +
+              "% of highest displayed " + (side === "call" ? "CALL" : "PUT") + " volume",
+          );
+          label.title = volumeFormat.format(volume) + " contracts · " + percent +
+            "% of highest displayed " + (side === "call" ? "CALL" : "PUT") + " volume";
+          meter.hidden = false;
+          bar.style.width = percent + "%";
+        }
+      }
+
+      function scheduleNextOptionVolumeRefresh(expiry) {
+        window.clearTimeout(optionVolumeRefreshTimer);
+        if (!expiry || expirySelect.value !== expiry) return;
+        optionVolumeRefreshTimer = window.setTimeout(() => {
+          optionVolumeRefreshTimer = undefined;
+          if (document.hidden) {
+            scheduleNextOptionVolumeRefresh(expiry);
+            return;
+          }
+          void loadOptionVolumes(expiry);
+        }, 60_000);
+      }
+
+      async function loadOptionVolumes(expiry) {
+        window.clearTimeout(optionVolumeRefreshTimer);
+        optionVolumeRefreshTimer = undefined;
+        optionVolumeAbortController?.abort();
+        const requestId = ++optionVolumeRequestId;
+        const abortController = new AbortController();
+        optionVolumeAbortController = abortController;
+        optionVolumes.clear();
+        updateVolumeLabels();
+        if (!expiry) {
+          setVolumeStatus("Volume unavailable: choose an expiry.", "error");
+          optionVolumeAbortController = undefined;
+          return;
+        }
+        setVolumeStatus("Loading option volume snapshot…");
+        try {
+          const response = await fetch(
+            "/api/options/nifty/volumes?expiry=" + encodeURIComponent(expiry),
+            { headers: { Accept: "application/json" }, signal: abortController.signal },
+          );
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || "Could not load option volumes.");
+          if (requestId !== optionVolumeRequestId) return;
+          for (const [symbol, volume] of Object.entries(data.volumes || {})) {
+            if (typeof volume === "number" && Number.isFinite(volume) && volume >= 0) {
+              optionVolumes.set(symbol, volume);
+            }
+          }
+          updateVolumeLabels();
+          setVolumeStatus(
+            optionVolumes.size > 0
+              ? "Snapshot updated at " + volumeTimeFormat.format(new Date()) +
+                " · auto-refreshes every 60 seconds."
+              : "Volume unavailable: no volume values were returned for " + expiry + ".",
+            optionVolumes.size > 0 ? "" : "error",
+          );
+        } catch (error) {
+          if (requestId !== optionVolumeRequestId) return;
+          setVolumeStatus(
+            "Volume unavailable: " +
+              (error instanceof Error ? error.message : "Could not load option volumes."),
+            "error",
+          );
+        } finally {
+          if (requestId === optionVolumeRequestId) {
+            optionVolumeAbortController = undefined;
+            scheduleNextOptionVolumeRefresh(expiry);
+          }
+        }
       }
 
       function orderValue(order, keys, fallback = "—") {
@@ -2030,6 +2188,23 @@ export function renderOptionChainPage(openOrderPriceStep = 1, autoSellStopLossRu
         price.textContent = optionPrices.has(contract.tradingSymbol)
           ? "₹" + numberFormat.format(optionPrices.get(contract.tradingSymbol))
           : "—";
+        const priceDetails = document.createElement("div");
+        priceDetails.className = "option-price-details";
+        const volume = document.createElement("span");
+        volume.className = "option-volume";
+        volume.dataset.symbol = contract.tradingSymbol;
+        volume.dataset.side = side;
+        volume.setAttribute("role", "img");
+        const volumeValue = document.createElement("span");
+        volumeValue.className = "option-volume-value";
+        const volumeMeter = document.createElement("span");
+        volumeMeter.className = "option-volume-meter";
+        volumeMeter.setAttribute("aria-hidden", "true");
+        const volumeBar = document.createElement("span");
+        volumeBar.className = "option-volume-bar";
+        volumeMeter.append(volumeBar);
+        volume.append(volumeValue, volumeMeter);
+        priceDetails.append(price, volume);
         const actions = document.createElement("div");
         actions.className = "option-actions";
         const swingButton = document.createElement("button");
@@ -2054,7 +2229,7 @@ export function renderOptionChainPage(openOrderPriceStep = 1, autoSellStopLossRu
           void openOrderTicket(contract);
         });
         actions.append(swingButton, buyButton);
-        content.append(price, actions);
+        content.append(priceDetails, actions);
         cell.append(content);
         row.append(cell);
       }
@@ -2264,6 +2439,7 @@ export function renderOptionChainPage(openOrderPriceStep = 1, autoSellStopLossRu
           return;
         }
         tableWrap.hidden = false;
+        updateVolumeLabels();
         setStatus(sorted.length + " strikes around NIFTY");
       }
 
@@ -2275,6 +2451,13 @@ export function renderOptionChainPage(openOrderPriceStep = 1, autoSellStopLossRu
         displayedStrikesKey = "";
         loadedContracts = [];
         optionPrices.clear();
+        optionVolumes.clear();
+        window.clearTimeout(optionVolumeRefreshTimer);
+        optionVolumeRefreshTimer = undefined;
+        optionVolumeAbortController?.abort();
+        optionVolumeAbortController = undefined;
+        optionVolumeRequestId += 1;
+        setVolumeStatus("Loading option volume snapshot…");
         renderActivePositionPnl();
         for (const ltp of document.querySelectorAll(".open-order-ltp")) {
           ltp.textContent = "—";
@@ -2291,9 +2474,11 @@ export function renderOptionChainPage(openOrderPriceStep = 1, autoSellStopLossRu
           if (!response.ok) throw new Error(data.error || "Could not load the option chain.");
           loadedContracts = data.contracts;
           renderChain();
+          void loadOptionVolumes(expiry);
           await initializeLivePrice(expiry);
         } catch (error) {
           setStatus(error instanceof Error ? error.message : "Could not load the option chain.", "error");
+          setVolumeStatus("Volume unavailable: the option chain could not be loaded.", "error");
         } finally {
           expirySelect.disabled = false;
         }
@@ -2341,11 +2526,15 @@ export function renderOptionChainPage(openOrderPriceStep = 1, autoSellStopLossRu
         void loadOpenOrders();
       });
       refreshPriceButton.addEventListener("click", () => {
+        void loadOptionVolumes(expirySelect.value);
         void initializeLivePrice(expirySelect.value);
       });
       window.addEventListener("beforeunload", () => {
         marketFeed?.close();
         activityEventSource?.close();
+        window.clearTimeout(optionVolumeRefreshTimer);
+        optionVolumeAbortController?.abort();
+        optionVolumeRequestId += 1;
       });
       initialize();
       void loadOpenOrders();

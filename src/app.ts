@@ -27,6 +27,7 @@ import { renderOrdersPage } from "./orders-page.js";
 import { renderOrderStreamPage } from "./order-stream-page.js";
 import { renderNseFoScripMasterPage } from "./scrip-master-page.js";
 import {
+  expiryLabelToIsoDate,
   filterUpcomingExpiryLabels,
   parseNiftyOptionContracts,
   selectNearbyNiftyOptionContracts,
@@ -37,6 +38,7 @@ import { renderOptionChainPage } from "./option-chain-page.js";
 import { renderAutoTradePage } from "./auto_trade/page.js";
 import { analyzeLiquiditySwings } from "./auto_trade/index.js";
 import { selectHighestVolumeCallAndPut } from "./option-chain-selection.js";
+import { extractOptionVolumes } from "./option-chain-volume.js";
 
 interface LoginBody {
   totp: string;
@@ -1845,6 +1847,76 @@ export function buildApp({
               error instanceof KotakNeoError
                 ? error.message
                 : "Option-chain request could not be completed",
+          });
+        }
+      },
+    );
+
+    api.get<{ Querystring: { expiry: string } }>(
+      "/api/options/nifty/volumes",
+      {
+        schema: {
+          tags: ["Options"],
+          summary: "Get option volumes for a NIFTY expiry",
+          description: "Returns a volume snapshot keyed by trading symbol; values are not live WebSocket updates.",
+          querystring: {
+            type: "object",
+            required: ["expiry"],
+            additionalProperties: false,
+            properties: { expiry: { type: "string", pattern: "^\\d{2}[A-Z]{3}\\d{4}$" } },
+          },
+          response: {
+            200: {
+              type: "object",
+              required: ["expiry", "volumes"],
+              properties: {
+                expiry: { type: "string" },
+                volumes: { type: "object", additionalProperties: { type: "number" } },
+              },
+            },
+            400: errorResponseSchema,
+            401: errorResponseSchema,
+            429: errorResponseSchema,
+            502: errorResponseSchema,
+            503: errorResponseSchema,
+            504: errorResponseSchema,
+          },
+        },
+      },
+      async (request, reply) => {
+        const expiry = expiryLabelToIsoDate(request.query.expiry);
+        if (!expiry) {
+          return reply.code(400).send({ error: "Expiry must be a valid date in DDMMMYYYY format" });
+        }
+        if (!client?.getOptionChain) {
+          return reply.code(503).send({
+            error: "Kotak Neo option-chain API is unavailable; configure KOTAK_NEO_CONSUMER_KEY",
+          });
+        }
+        try {
+          const optionChain = await client.getOptionChain(
+            { underlying: "NIFTY", expiry, count: 40 },
+            session?.baseUrl,
+          );
+          return { expiry: request.query.expiry, volumes: extractOptionVolumes(optionChain) };
+        } catch (error) {
+          const statusCode = brokerRequestStatus(error);
+          request.log.error(
+            {
+              statusCode,
+              expiry: request.query.expiry,
+              errorName: error instanceof Error ? error.name : "UnknownError",
+              ...(error instanceof KotakNeoError
+                ? { errorMessage: error.message, upstreamStatusCode: error.statusCode }
+                : {}),
+            },
+            "NIFTY option volume request failed",
+          );
+          return reply.code(statusCode).send({
+            error:
+              error instanceof KotakNeoError
+                ? error.message
+                : "NIFTY option volumes could not be loaded",
           });
         }
       },
