@@ -11,7 +11,7 @@ export async function callLiquiditySwingApi(apiToken) {
       Accept: "*/*",
       Authorization: `Bearer ${apiToken}`,
     },
-    redirect: "error",
+    redirect: "manual",
   });
 
   if (!response.ok) {

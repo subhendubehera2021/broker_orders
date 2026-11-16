@@ -47,7 +47,7 @@ test("scheduled handler waits until the target time and calls the API once", asy
     Accept: "*/*",
     Authorization: "Bearer test-api-token",
   });
-  assert.equal(requests[0].options.redirect, "error");
+  assert.equal(requests[0].options.redirect, "manual");
   assert.deepEqual(messages, [
     "[nifty-cron] cron=* * * * * scheduledForIST=16/11/2026, 12:28:59 IST startedAtIST=16/11/2026, 12:28:59 IST",
     "[nifty-cron] liquidity-swing-api status=200",
