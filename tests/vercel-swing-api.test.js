@@ -48,6 +48,7 @@ test("GET swing API selects highest-volume options, analyzes, then persists both
     SWING_API_SECRET: process.env.SWING_API_SECRET,
     KOTAK_NEO_API_TOKEN: process.env.KOTAK_NEO_API_TOKEN,
     KOTAK_NEO_BASE_URL: process.env.KOTAK_NEO_BASE_URL,
+    NIFTY_OPTION_CHAIN_COUNT: process.env.NIFTY_OPTION_CHAIN_COUNT,
   };
   const originalFetch = globalThis.fetch;
   const requestedTokens = [];
@@ -55,10 +56,12 @@ test("GET swing API selects highest-volume options, analyzes, then persists both
     SWING_API_SECRET: "shared-secret",
     KOTAK_NEO_API_TOKEN: "dashboard-token",
     KOTAK_NEO_BASE_URL: "https://cis.kotaksecurities.com",
+    NIFTY_OPTION_CHAIN_COUNT: "10",
   });
   globalThis.fetch = async (url, options) => {
     assert.equal(options.headers.Authorization, "dashboard-token");
     if (url.pathname.endsWith("/option-chain")) {
+      assert.equal(url.searchParams.get("count"), "10");
       return Response.json({
         data: {
           call: [

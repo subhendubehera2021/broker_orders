@@ -64,7 +64,7 @@ export function selectHighestVolumeCallAndPut(response) {
 }
 
 export async function fetchHighestVolumeNiftyOptions(
-  { apiToken, baseUrl },
+  { apiToken, baseUrl, count = 10 },
   fetchImpl = fetch,
 ) {
   if (typeof apiToken !== "string" || apiToken.trim() === "") {
@@ -72,6 +72,10 @@ export async function fetchHighestVolumeNiftyOptions(
   }
   if (typeof baseUrl !== "string" || baseUrl.trim() === "") {
     throw new Error("Missing required environment variable: KOTAK_NEO_BASE_URL");
+  }
+  const optionChainCount = Number(count);
+  if (!Number.isSafeInteger(optionChainCount) || optionChainCount < 1) {
+    throw new RangeError("NIFTY_OPTION_CHAIN_COUNT must be a positive integer");
   }
 
   const endpoint = createKotakApiUrl(
@@ -81,7 +85,7 @@ export async function fetchHighestVolumeNiftyOptions(
       exchange: "nse_fo",
       underlying: "NIFTY",
       instrument_type: "option",
-      count: "40",
+      count: String(optionChainCount),
     },
   );
 

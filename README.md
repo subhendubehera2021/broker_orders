@@ -23,6 +23,7 @@ Configure these variables for the Vercel environment:
 
 - `KOTAK_NEO_API_TOKEN`: the plain NEO API Dashboard token (not the session JWT).
 - `KOTAK_NEO_BASE_URL`: the `baseUrl` returned by `tradeApiValidate`.
+- `NIFTY_OPTION_CHAIN_COUNT`: number of option-chain items to request (default `10`).
 - `SWING_API_SECRET`: a strong random bearer-token secret. Set the same value in the Cloudflare Worker environment.
 - `TURSO_DATABASE_URL`: the database URL from Turso.
 - `TURSO_AUTH_TOKEN`: the database authentication token from Turso.

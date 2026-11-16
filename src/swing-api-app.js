@@ -74,7 +74,11 @@ export function registerSwingApiRoutes(
     let analyses;
     let instruments;
     try {
-      instruments = await fetchHighestVolumeNiftyOptions({ apiToken, baseUrl });
+      instruments = await fetchHighestVolumeNiftyOptions({
+        apiToken,
+        baseUrl,
+        count: process.env.NIFTY_OPTION_CHAIN_COUNT,
+      });
       const dateRange = recentIndiaDateRange();
       analyses = [];
       for (const [index, [optionSide, instrument]] of [
