@@ -1,30 +1,33 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "nifty-cron",
-  "main": "src/index.js",
-  "compatibility_date": "2026-11-16",
-  "kv_namespaces": [
-    {
-      "binding": "AUTO_TRADE_SETTINGS"
-    }
-  ],
-  "observability": {
-    "logs": {
-      "enabled": true,
-      "head_sampling_rate": 1,
-      "invocation_logs": true,
-      "persist": true
-    },
-    "traces": {
-      "enabled": true,
-      "head_sampling_rate": 1,
-      "persist": true
-    },
-    "issues": {
-      "enabled": true
-    }
-  },
-  "triggers": {
-    "crons": ["* * * * *"]
-  }
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "nifty-cron",
+	"main": "src/index.js",
+	"compatibility_date": "2026-11-16",
+	"kv_namespaces": [
+		{
+			"binding": "AUTO_TRADE_SETTINGS",
+			"id": "44d0a6f10bc74c838d158e3a44324b86"
+		}
+	],
+	"observability": {
+		"logs": {
+			"enabled": true,
+			"head_sampling_rate": 1,
+			"invocation_logs": true,
+			"persist": true
+		},
+		"traces": {
+			"enabled": true,
+			"head_sampling_rate": 1,
+			"persist": true
+		},
+		"issues": {
+			"enabled": true
+		}
+	},
+	"triggers": {
+		"crons": [
+			"* * * * *"
+		]
+	}
 }
