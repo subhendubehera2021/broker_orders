@@ -1,6 +1,6 @@
 # NIFTY Cron and Kotak Order WebSocket Worker
 
-A Cloudflare Worker with an existing per-minute Cron Trigger that continues to call the liquidity-swing API at 59 seconds past each scheduled minute. A separate once-per-minute Cron Trigger automatically starts/checks the Durable Object, which maintains one outbound Kotak order/position WebSocket connection. Order and position events are logged as they arrive; order numbers, account IDs, prices, and quantities are not logged. The Durable Object refreshes its connection every 12 minutes and reconnects after disconnects.
+A Cloudflare Worker with an existing per-minute Cron Trigger that continues to call the liquidity-swing API at 59 seconds past each scheduled minute. A separate once-per-minute Cron Trigger automatically starts/checks the Durable Object, which maintains one outbound Kotak order/position WebSocket connection. Every inbound WebSocket frame is logged in full, including order and position details; restrict Cloudflare log access and retention accordingly. The Durable Object refreshes its connection every 12 minutes and reconnects after disconnects.
 
 Wrangler requires Node.js 22.12 or newer.
 
@@ -19,10 +19,15 @@ The local Worker uses `.dev.vars` for the Vercel API and WebSocket credentials. 
 curl "http://localhost:8787/__scheduled?cron=*+*+*+*+*"
 ```
 
-Start the WebSocket listener separately:
+Open `http://localhost:8787/` for the WebSocket dashboard. Enter the `ORDER_STREAM_CONTROL_TOKEN`, then use **Connect** or **Check status**. The page polls status every five seconds and keeps the token only in the current tab.
+
+The same protected controls are available as HTTP endpoints:
 
 ```sh
 curl -X POST http://localhost:8787/internal/order-stream/start \
+  -H "Authorization: Bearer your-order-stream-control-token"
+
+curl http://localhost:8787/internal/order-stream/status \
   -H "Authorization: Bearer your-order-stream-control-token"
 ```
 
@@ -65,4 +70,4 @@ View deployed Worker logs with:
 npm run tail
 ```
 
-The Durable Object binding and first SQLite migration are configured in `wrangler.jsonc`. The existing cron expression remains `* * * * *` and retains its Vercel API call. A separate `*/1 * * * *` trigger starts/checks the order stream automatically (within one minute); send an authenticated `POST` to `/internal/order-stream/start` to start it immediately. Its Durable Object handles refresh and reconnect alarms independently.
+The dashboard is available at the Worker root URL. Enter the `ORDER_STREAM_CONTROL_TOKEN` to connect or inspect the stream; the status endpoint returns connection/authentication state and the last received message metadata. The token is not stored by the page. The Durable Object binding and first SQLite migration are configured in `wrangler.jsonc`. The existing cron expression remains `* * * * *` and retains its Vercel API call. A separate `*/1 * * * *` trigger starts/checks the order stream automatically (within one minute). Its Durable Object handles refresh and reconnect alarms independently.

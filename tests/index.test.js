@@ -160,3 +160,50 @@ test("start endpoint rejects unauthorized and non-POST requests", async () => {
   assert.equal(unauthorized.status, 401);
   assert.equal(wrongMethod.status, 404);
 });
+
+test("serves the dashboard and protects the status endpoint", async () => {
+  const calls = [];
+  const env = {
+    ORDER_STREAM_CONTROL_TOKEN: "control-secret",
+    ORDER_STREAM: {
+      idFromName: () => "stable-order-stream-id",
+      get: () => ({
+        async fetch(url, options) {
+          calls.push({ url, options });
+          return Response.json({
+            state: "connected",
+            authenticated: true,
+            lastMessageAt: null,
+            lastMessageType: null,
+          });
+        },
+      }),
+    },
+  };
+  const dashboard = await worker.fetch(new Request("https://worker.example/"), env);
+  const unauthorized = await worker.fetch(
+    new Request("https://worker.example/internal/order-stream/status"),
+    env,
+  );
+  const status = await worker.fetch(
+    new Request("https://worker.example/internal/order-stream/status", {
+      headers: { Authorization: "Bearer control-secret" },
+    }),
+    env,
+  );
+
+  assert.equal(dashboard.status, 200);
+  assert.match(dashboard.headers.get("content-type"), /text\/html/);
+  assert.match(await dashboard.text(), /Kotak order WebSocket/);
+  assert.equal(unauthorized.status, 401);
+  assert.equal(status.status, 200);
+  assert.deepEqual(await status.json(), {
+    state: "connected",
+    authenticated: true,
+    lastMessageAt: null,
+    lastMessageType: null,
+  });
+  assert.deepEqual(calls, [
+    { url: "https://order-stream.internal/status", options: { method: "GET" } },
+  ]);
+});

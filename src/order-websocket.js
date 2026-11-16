@@ -53,11 +53,17 @@ function parseMessage(data) {
   if (data instanceof ArrayBuffer) {
     return parseMessage(new TextDecoder().decode(data));
   }
+  if (ArrayBuffer.isView(data)) {
+    return parseMessage(new TextDecoder().decode(data));
+  }
   return null;
 }
 
-function logValue(value) {
-  return JSON.stringify(typeof value === "string" || typeof value === "number" ? String(value) : "-");
+function messageText(data) {
+  if (typeof data === "string") return data;
+  if (data instanceof ArrayBuffer) return new TextDecoder().decode(data);
+  if (ArrayBuffer.isView(data)) return new TextDecoder().decode(data);
+  return String(data);
 }
 
 export class KotakOrderStream {
@@ -67,19 +73,30 @@ export class KotakOrderStream {
     this.WebSocketImpl = WebSocketImpl;
     this.socket = null;
     this.authenticated = false;
+    this.connectionState = "disconnected";
+    this.lastMessageAt = null;
+    this.lastMessageType = null;
     this.retryScheduled = false;
     this.retryAttempt = 0;
   }
 
   async fetch(request) {
     const url = new URL(request.url);
+    if (request.method === "GET" && url.pathname === "/status") {
+      return Response.json(this.getStatus(), {
+        headers: { "Cache-Control": "no-store" },
+      });
+    }
     if (request.method !== "POST" || url.pathname !== "/start") {
       return new Response("Not found", { status: 404 });
     }
 
     try {
       const state = await this.start();
-      return Response.json({ state });
+      return Response.json(
+        { state },
+        { headers: { "Cache-Control": "no-store" } },
+      );
     } catch (error) {
       console.error("[order-websocket] unable to start Kotak connection", error);
       return Response.json({ error: "Unable to start Kotak order stream" }, { status: 503 });
@@ -100,6 +117,15 @@ export class KotakOrderStream {
     return "connecting";
   }
 
+  getStatus() {
+    return {
+      state: this.connectionState,
+      authenticated: this.authenticated,
+      lastMessageAt: this.lastMessageAt,
+      lastMessageType: this.lastMessageType,
+    };
+  }
+
   async connect() {
     if (typeof this.WebSocketImpl !== "function") {
       throw new Error("The Cloudflare WebSocket client is unavailable");
@@ -111,8 +137,10 @@ export class KotakOrderStream {
       this.env.KOTAK_WS_SID,
     );
     const socket = new this.WebSocketImpl(url);
+    socket.binaryType = "arraybuffer";
     this.socket = socket;
     this.authenticated = false;
+    this.connectionState = "connecting";
 
     socket.addEventListener("open", () => {
       try {
@@ -125,6 +153,7 @@ export class KotakOrderStream {
     socket.addEventListener("message", (event) => this.onMessage(socket, event.data));
     socket.addEventListener("error", () => {
       if (this.socket !== socket) return;
+      this.connectionState = "reconnecting";
       console.error("[order-websocket] Kotak WebSocket error");
       socket.close(1011, "Kotak WebSocket error");
     });
@@ -142,7 +171,12 @@ export class KotakOrderStream {
 
   onMessage(socket, data) {
     if (this.socket !== socket) return;
-    const message = parseMessage(data);
+    const rawData = messageText(data);
+    console.log("[order-websocket] incoming data", rawData);
+    const message = parseMessage(rawData);
+    this.lastMessageAt = new Date().toISOString();
+    this.lastMessageType =
+      isRecord(message) && typeof message.type === "string" ? message.type : "unparsed";
     if (!isRecord(message)) {
       console.warn("[order-websocket] ignored malformed message");
       return;
@@ -151,31 +185,16 @@ export class KotakOrderStream {
     if (message.type === "cn") {
       if (message.ak === "ok") {
         this.authenticated = true;
+        this.connectionState = "connected";
         this.retryAttempt = 0;
         this.retryScheduled = false;
         console.log("[order-websocket] authenticated");
       } else {
+        this.connectionState = "reconnecting";
         console.error("[order-websocket] Kotak rejected WebSocket authentication");
         socket.close(4001, "Kotak authentication rejected");
       }
       return;
-    }
-
-    if (!isRecord(message.data)) {
-      console.warn(`[order-websocket] ignored ${logValue(message.type)} message without data`);
-      return;
-    }
-
-    if (message.type === "order") {
-      console.log(
-        `[order-websocket] order status=${logValue(message.data.ordSt)}` +
-          ` symbol=${logValue(message.data.sym)}`,
-      );
-    } else if (message.type === "position") {
-      console.log(
-        `[order-websocket] position symbol=${logValue(message.data.sym)}` +
-          ` exchange=${logValue(message.data.exSeg)} product=${logValue(message.data.prod)}`,
-      );
     }
   }
 
@@ -183,6 +202,7 @@ export class KotakOrderStream {
     if (this.socket !== socket) return;
     this.socket = null;
     this.authenticated = false;
+    this.connectionState = "reconnecting";
     console.warn(`[order-websocket] Kotak connection closed code=${event.code}`);
     this.scheduleReconnect();
   }
@@ -192,6 +212,7 @@ export class KotakOrderStream {
     this.retryAttempt += 1;
     const delay = Math.min(INITIAL_RETRY_MS * 2 ** (this.retryAttempt - 1), MAX_RETRY_MS);
     this.retryScheduled = true;
+    this.connectionState = "reconnecting";
     const alarm = this.ctx.storage.setAlarm(Date.now() + delay);
     if (typeof this.ctx.waitUntil === "function") {
       this.ctx.waitUntil(alarm);
@@ -206,6 +227,7 @@ export class KotakOrderStream {
     const previousSocket = this.socket;
     this.socket = null;
     this.authenticated = false;
+    this.connectionState = "connecting";
     if (previousSocket && previousSocket.readyState < this.WebSocketImpl.CLOSING) {
       previousSocket.close(1000, "Refreshing Kotak connection");
     }

@@ -91,9 +91,16 @@ test("opens one socket and sends raw session authentication after open", async (
   assert.equal(await stream.start(), "connecting");
   assert.equal(FakeWebSocket.instances.length, 1);
   assert.equal(FakeWebSocket.instances[0].url, "wss://e21.kotaksecurities.com/realtime");
+  assert.equal(FakeWebSocket.instances[0].binaryType, "arraybuffer");
   assert.equal(alarms.length, 1);
   assert.ok(alarms[0] >= startedAt + 12 * 60 * 1000);
   assert.ok(alarms[0] <= Date.now() + 12 * 60 * 1000);
+  assert.deepEqual(stream.getStatus(), {
+    state: "connecting",
+    authenticated: false,
+    lastMessageAt: null,
+    lastMessageType: null,
+  });
 
   FakeWebSocket.instances[0].open();
   assert.deepEqual(FakeWebSocket.instances[0].sent, [
@@ -101,38 +108,55 @@ test("opens one socket and sends raw session authentication after open", async (
   ]);
   FakeWebSocket.instances[0].receive(JSON.stringify({ ak: "ok", type: "cn" }));
   assert.equal(await stream.start(), "connected");
+  assert.equal(stream.getStatus().state, "connected");
+  assert.equal(stream.getStatus().lastMessageType, "cn");
 });
 
-test("logs sanitized order and position summaries without sensitive fields", async () => {
+test("logs every complete inbound WebSocket frame", async () => {
   FakeWebSocket.instances = [];
   const { stream } = createStream();
   const messages = [];
   const originalLog = console.log;
-  console.log = (message) => messages.push(message);
+  console.log = (...args) => messages.push(args);
+  const frames = [
+    JSON.stringify({ ak: "ok", type: "cn", task: "cn", msg: "connected" }),
+    JSON.stringify({
+      type: "order",
+      data: {
+        ordSt: "complete",
+        sym: "NIFTY26N1725300CE",
+        avgPrc: "250",
+        nOrdNo: "order-number",
+      },
+    }),
+    JSON.stringify({
+      type: "position",
+      data: {
+        sym: "NIFTY26N1725300CE",
+        exSeg: "nse_fo",
+        prod: "MIS",
+        actId: "account-id",
+      },
+    }),
+    JSON.stringify({ type: "other", data: { detail: "additional event" } }),
+    "unparsed frame",
+  ];
 
   try {
     await stream.start();
     const socket = FakeWebSocket.instances[0];
     socket.open();
-    socket.receive(JSON.stringify({
-      type: "order",
-      data: { ordSt: "complete", sym: "NIFTY26N1725300CE", avgPrc: "250", nOrdNo: "private-order" },
-    }));
-    socket.receive(JSON.stringify({
-      type: "position",
-      data: { sym: "NIFTY26N1725300CE", exSeg: "nse_fo", prod: "MIS", actId: "private-account" },
-    }));
+    for (const frame of frames) socket.receive(frame);
   } finally {
     console.log = originalLog;
   }
 
-  assert.deepEqual(messages, [
-    "[order-websocket] connecting host=e21.kotaksecurities.com",
-    "[order-websocket] order status=\"complete\" symbol=\"NIFTY26N1725300CE\"",
-    "[order-websocket] position symbol=\"NIFTY26N1725300CE\" exchange=\"nse_fo\" product=\"MIS\"",
-  ]);
-  assert.equal(messages.some((message) => message.includes("private-")), false);
-  assert.equal(messages.some((message) => message.includes("250")), false);
+  const loggedFrames = messages
+    .filter(([prefix]) => prefix === "[order-websocket] incoming data")
+    .map(([, data]) => data);
+  assert.deepEqual(loggedFrames, frames);
+  assert.equal(stream.getStatus().lastMessageType, "unparsed");
+  assert.ok(stream.getStatus().lastMessageAt);
 });
 
 test("reconnects after a rejected authentication response", async () => {
@@ -179,5 +203,22 @@ test("requires session credentials before opening a socket", async () => {
   stream.env.KOTAK_WS_SID = "";
 
   await assert.rejects(stream.start(), /KOTAK_WS_SID/);
+  assert.equal(FakeWebSocket.instances.length, 0);
+});
+
+test("serves live status without opening a new socket", async () => {
+  FakeWebSocket.instances = [];
+  const { stream } = createStream();
+
+  const response = await stream.fetch(new Request("https://order-stream.internal/status"));
+
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  assert.deepEqual(await response.json(), {
+    state: "disconnected",
+    authenticated: false,
+    lastMessageAt: null,
+    lastMessageType: null,
+  });
   assert.equal(FakeWebSocket.instances.length, 0);
 });
