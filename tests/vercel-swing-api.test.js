@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
-import app from "../src/swing-api-app.js";
+import Fastify from "fastify";
+import { registerSwingApiRoutes } from "../src/swing-api-app.js";
+
+const app = Fastify({ bodyLimit: 1_024 });
+registerSwingApiRoutes(app);
 
 after(async () => {
   await app.close();
