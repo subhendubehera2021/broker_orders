@@ -1,6 +1,6 @@
 # NIFTY Cron Worker
 
-A minimal Cloudflare Worker with a Cron Trigger that runs at the start of every minute and logs the scheduled run time.
+A minimal Cloudflare Worker with a Cron Trigger that runs every minute and logs the scheduled minute boundary and actual start time in India time. Cloudflare may start an invocation slightly after its scheduled boundary.
 
 Wrangler requires Node.js 22.12 or newer.
 
