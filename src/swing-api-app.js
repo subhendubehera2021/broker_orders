@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { fetchLiquiditySwings, recentIndiaDateRange } from "./liquidity-swing/index.js";
+import { getTursoClient, persistSwingAnalyses } from "./turso-storage.js";
 
 const swaggerHtml = await readFile(new URL("../public/swagger.html", import.meta.url), "utf8");
 const openApiJson = await readFile(new URL("../public/openapi.json", import.meta.url), "utf8");
@@ -31,7 +32,10 @@ function waitForRequestSlot() {
   return new Promise((resolve) => setTimeout(resolve, 1_000));
 }
 
-export function registerSwingApiRoutes(app) {
+export function registerSwingApiRoutes(
+  app,
+  { createDbClient = getTursoClient, persistAnalyses = persistSwingAnalyses } = {},
+) {
   app.addHook("onRequest", async (_request, reply) => {
     reply.header("Cache-Control", "no-store");
   });
@@ -80,9 +84,18 @@ export function registerSwingApiRoutes(app) {
       return reply.code(500).send({ error: "Swing API is not configured" });
     }
 
+    let dbClient;
+    try {
+      dbClient = createDbClient();
+    } catch (error) {
+      console.error("[liquidity-swing-api] Turso is not configured", error);
+      return reply.code(500).send({ error: "Swing API database is not configured" });
+    }
+
+    let analyses;
     try {
       const dateRange = recentIndiaDateRange();
-      const analyses = [];
+      analyses = [];
       for (const [index, { token, optionSide }] of instruments.entries()) {
         if (index > 0) await waitForRequestSlot();
         const analysis = await fetchLiquiditySwings(
@@ -98,10 +111,18 @@ export function registerSwingApiRoutes(app) {
           swing: analysis.swing ?? null,
         });
       }
-      return reply.code(200).send({ analyses });
     } catch (error) {
       console.error("[liquidity-swing-api] Historical swing analysis failed", error);
       return reply.code(502).send({ error: "Unable to fetch swing analysis" });
     }
+
+    let scanId;
+    try {
+      scanId = await persistAnalyses(analyses, dbClient);
+    } catch (error) {
+      console.error("[liquidity-swing-api] Turso write failed", error);
+      return reply.code(503).send({ error: "Unable to store swing analysis" });
+    }
+    return reply.code(200).send({ scanId, analyses });
   });
 }

@@ -4,7 +4,14 @@ import Fastify from "fastify";
 import { registerSwingApiRoutes } from "../src/swing-api-app.js";
 
 const app = Fastify({ bodyLimit: 1_024 });
-registerSwingApiRoutes(app);
+let persistedAnalyses;
+registerSwingApiRoutes(app, {
+  createDbClient: () => ({}),
+  persistAnalyses: async (analyses) => {
+    persistedAnalyses = analyses;
+    return "test-scan-id";
+  },
+});
 
 after(async () => {
   await app.close();
@@ -78,6 +85,7 @@ test("Fastify swing API analyzes the call and put using server-side Kotak creden
   }
 
   assert.equal(response.statusCode, 200);
+  assert.equal(response.json().scanId, "test-scan-id");
   assert.deepEqual(requestedTokens, ["nse_fo|1", "nse_fo|2"]);
   assert.deepEqual(response.json().analyses, [
     {
@@ -97,6 +105,7 @@ test("Fastify swing API analyzes the call and put using server-side Kotak creden
       swing: null,
     },
   ]);
+  assert.deepEqual(persistedAnalyses, response.json().analyses);
 });
 
 test("Fastify serves Swagger and OpenAPI documentation", async () => {

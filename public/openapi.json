@@ -61,6 +61,9 @@
           },
           "502": {
             "description": "The historical candle request or swing analysis failed."
+          },
+          "503": {
+            "description": "Swing analysis succeeded, but storing it in Turso failed."
           }
         }
       }
@@ -115,9 +118,15 @@
       "SwingResponse": {
         "type": "object",
         "required": [
+          "scanId",
           "analyses"
         ],
         "properties": {
+          "scanId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Identifier shared by both stored option results."
+          },
           "analyses": {
             "type": "array",
             "items": {

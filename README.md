@@ -24,8 +24,10 @@ Configure these variables for the Vercel environment:
 - `KOTAK_NEO_API_TOKEN`: the plain NEO API Dashboard token (not the session JWT).
 - `KOTAK_NEO_BASE_URL`: the `baseUrl` returned by `tradeApiValidate`.
 - `SWING_API_SECRET`: a strong random bearer-token secret. Set the same value in the Cloudflare Worker environment.
+- `TURSO_DATABASE_URL`: the database URL from Turso.
+- `TURSO_AUTH_TOKEN`: the database authentication token from Turso.
 
-Do not put credentials in source files or expose them in logs. The endpoint uses the dashboard token in `Authorization`; a per-minute TOTP login is not required.
+Create the `liquidity_swing_results` table using the schema you set up. Each successful API request writes CALL and PUT rows together under one `scan_id`. Do not put credentials in source files or expose them in logs. The endpoint uses the dashboard token in `Authorization`; a per-minute TOTP login is not required.
 
 ## API and Swagger
 
