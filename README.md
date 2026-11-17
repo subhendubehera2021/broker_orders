@@ -65,8 +65,9 @@ stays server-side; only the current TOTP is submitted by the browser.
 - `GET /api/positions` — retrieve current positions from Kotak Neo; the Live
   activity page loads this snapshot before applying streaming updates.
 - `GET /api/orders/stream` — authenticated Server-Sent Events relay for Kotak's
-  order and position WebSocket stream. The broker connection uses the
-  `/realtime` endpoint returned via the authenticated session base URL.
+  order and position updates. Broker WebSocket streams are currently disabled,
+  so this endpoint does not receive live updates and automatic SELL monitoring
+  is unavailable.
 - `POST /api/orders/{orderNumber}/cancel` — cancel an order only if it is still
   open in the current order book.
 - `POST /api/orders/{orderNumber}/modify` — forward the supplied order details
@@ -77,9 +78,8 @@ stays server-side; only the current TOTP is submitted by the browser.
 - `GET /api/auth/session` — check whether this process has an authenticated
   session. Broker tokens are never returned.
 - `GET /api/market/nifty/stream` — stream live NIFTY 50 index prices from the
-  Kotak Neo market-data WebSocket, relayed as Server-Sent Events. Add
-  `?expiry=DDMMMYYYY` to stream live prices for the currently displayed NIFTY
-  options too.
+  Kotak Neo market-data feed, relayed as Server-Sent Events. Broker WebSocket
+  streams are currently disabled, so live prices are unavailable.
 - `GET /api/scrip-master` — retrieve Scrip Master file paths from Kotak Neo.
 - `GET /api/scrip-master/nse-fo` — retrieve the NSE F&O Scrip Master CSV.
 - `GET /api/options/nifty/expiries` — list NIFTY option expiries from the
@@ -138,20 +138,10 @@ The page provides search across every field, pagination, and a CSV download.
 Open the NIFTY option chain at
 [http://127.0.0.1:3000/option-chain](http://127.0.0.1:3000/option-chain) without
 signing in to browse contracts. Contract details and expiries are read from the
-local [`src/nse_fo.csv`](./src/nse_fo.csv) file. The page also displays the live
-NIFTY 50 index price from Kotak Neo's WebSocket feed; sign in first to enable
-live market data. The stream uses the account-specific `feedUrl` returned
-during login and the configured `KOTAK_NEO_NIFTY_INDEX_TOKEN` and
-`KOTAK_NEO_NIFTY_INDEX_SEGMENT` values (`Nifty 50` and `nse_cm` in `.env.example`).
-For the selected expiry, the page displays live LTPs for the three nearest
-strike prices below and above the live NIFTY price (six calls and six puts).
-The contracts are loaded through `/api/options/nifty/chain`; the market stream
-subscribes only to the currently displayed option tokens and follows the
-nearest strikes as NIFTY moves. Prices use Kotak Neo's NSE F&O WebSocket feed.
-Replace the CSV with an updated NSE F&O Scrip Master when you need new
-contracts. The page groups calls and puts by strike and supports expiry
-selection. Streaming follows Kotak's
-[market-data WebSocket guide](https://github.com/Kotak-Neo/Kotak-Neo/blob/main/docs/market-data-apis/websocket.md).
+local [`src/nse_fo.csv`](./src/nse_fo.csv) file. Live NIFTY and option prices
+from Kotak Neo's WebSocket feed are disabled. Replace the CSV with an updated
+NSE F&O Scrip Master when you need new contracts. The page groups calls and
+puts by strike and supports expiry selection.
 
 The margin calculator has a separate UI route at
 [http://127.0.0.1:3000/margin](http://127.0.0.1:3000/margin). Sign in at `/`

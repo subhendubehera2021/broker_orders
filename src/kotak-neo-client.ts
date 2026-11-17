@@ -38,7 +38,11 @@ export interface OrderPositionUpdate {
   data: Record<string, unknown>;
 }
 
-export type OrderPositionConnectionState = "connecting" | "connected" | "reconnecting";
+export type OrderPositionConnectionState =
+  | "connecting"
+  | "connected"
+  | "reconnecting"
+  | "disabled";
 
 interface MarketDataSocket {
   readyState: number;
@@ -173,8 +177,7 @@ export class KotakNeoClient {
   constructor(
     private readonly config: KotakNeoConfig & { consumerKey: string },
     private readonly fetchImpl: typeof fetch = fetch,
-    private readonly webSocketFactory: (url: string) => MarketDataSocket = (url) =>
-      new WebSocket(url),
+    private readonly webSocketFactory?: (url: string) => MarketDataSocket,
     private readonly loginResponseLogger?: LoginResponseLogger,
   ) {}
 
@@ -245,6 +248,12 @@ export class KotakNeoClient {
     onError: (error: Error) => void,
     onConnected: () => void = () => {},
   ): () => void {
+    const webSocketFactory = this.webSocketFactory;
+    if (!webSocketFactory) {
+      onError(new KotakNeoError("Kotak Neo WebSocket streams are disabled", 503));
+      return () => {};
+    }
+
     if (!session.feedUrl || !session.user) {
       onError(new KotakNeoError("Kotak market-data feed details are missing; sign in again", 503));
       return () => {};
@@ -252,7 +261,7 @@ export class KotakNeoClient {
 
     let socket: MarketDataSocket;
     try {
-      socket = this.webSocketFactory(toWebSocketUrl(session.feedUrl));
+      socket = webSocketFactory(toWebSocketUrl(session.feedUrl));
     } catch {
       onError(new KotakNeoError("Could not connect to the Kotak market-data feed", 503));
       return () => {};
@@ -436,6 +445,13 @@ export class KotakNeoClient {
     onState: (state: OrderPositionConnectionState) => void,
     onError: (error: Error) => void,
   ): () => void {
+    const webSocketFactory = this.webSocketFactory;
+    if (!webSocketFactory) {
+      onState("disabled");
+      onError(new KotakNeoError("Kotak Neo WebSocket streams are disabled", 503));
+      return () => {};
+    }
+
     if (!session.baseUrl) {
       onError(new KotakNeoError("Kotak order stream base URL is missing; sign in again", 503));
       return () => {};
@@ -469,7 +485,7 @@ export class KotakNeoClient {
       if (stopped) return;
       onState(reconnectAttempt === 0 ? "connecting" : "reconnecting");
       try {
-        socket = this.webSocketFactory(url);
+        socket = webSocketFactory(url);
       } catch {
         scheduleReconnect();
         return;

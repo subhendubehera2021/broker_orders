@@ -137,6 +137,45 @@ describe("KotakNeoClient", () => {
     assert.equal(socket.readyState, 3);
   });
 
+  it("keeps all broker WebSocket streams disabled by default", () => {
+    const client = new KotakNeoClient(prodConfig);
+    const errors: Error[] = [];
+    const orderStates: string[] = [];
+    const session = {
+      ...testSession,
+      baseUrl: "https://e21.kotaksecurities.com/api/",
+      feedUrl: "https://feed.kotaksecurities.com/apifeed",
+      user: "TESTUCC",
+    };
+
+    const stopIndex = client.streamNiftyIndexPrice(session, () => {}, (error) => errors.push(error));
+    const stopMarket = client.streamNiftyMarketData(
+      session,
+      [],
+      () => [],
+      () => {},
+      () => {},
+      (error) => errors.push(error),
+    );
+    const stopOrders = client.streamOrderPositionUpdates(
+      session,
+      () => {},
+      (state) => orderStates.push(state),
+      (error) => errors.push(error),
+    );
+
+    assert.equal(errors.length, 3);
+    for (const error of errors) {
+      assert.ok(error instanceof KotakNeoError);
+      assert.equal(error.statusCode, 503);
+      assert.match(error.message, /WebSocket streams are disabled/);
+    }
+    assert.deepEqual(orderStates, ["disabled"]);
+    stopIndex();
+    stopMarket();
+    stopOrders();
+  });
+
   it("cancels a regular order with Kotak's url-encoded jData request", async () => {
     let capturedUrl: URL | undefined;
     let capturedInit: RequestInit | undefined;

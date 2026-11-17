@@ -973,11 +973,13 @@ export function renderOptionChainPage(openOrderPriceStep = 1, autoSellStopLossRu
             activityStatusLabel.textContent =
               message.state === "connected"
                 ? "Connected · receiving live updates"
+                : message.state === "disabled"
+                  ? "Live updates are disabled"
                 : message.state === "reconnecting"
                   ? "Reconnecting to Kotak Neo…"
                   : "Connecting to Kotak Neo…";
             activityStatusLabel.dataset.state =
-              message.state === "connected" ? "connected" : "connecting";
+              message.state === "connected" ? "connected" : message.state === "disabled" ? "error" : "connecting";
           });
           activityEventSource.addEventListener("order", (event) => {
             handleActivityOrder(JSON.parse(event.data));
@@ -2331,6 +2333,7 @@ export function renderOptionChainPage(openOrderPriceStep = 1, autoSellStopLossRu
           } catch {
             setFeedStatus("disconnected", "Feed disconnected");
           }
+          source.close();
         });
         source.onerror = () => {
           setFeedStatus("reconnecting", "Reconnecting");

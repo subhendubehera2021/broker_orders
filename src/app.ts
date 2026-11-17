@@ -528,12 +528,14 @@ export function buildApp({
           },
           (state) => {
             orderStreamState = state;
+            autoSellStreamAvailable = state === "connected";
             broadcastOrderStreamEvent("connection", { state });
             if (state === "connected") {
               void reconcileAutoSellOrders(authenticatedSession, app.log);
             }
           },
           (error) => {
+            autoSellStreamAvailable = false;
             app.log.error(
               { errorName: error.name, errorMessage: error.message },
               "Kotak order and position stream reported an error",
@@ -541,7 +543,6 @@ export function buildApp({
             broadcastOrderStreamEvent("stream-error", { error: error.message });
           },
         );
-        autoSellStreamAvailable = true;
       } catch (error) {
         autoSellStreamAvailable = false;
         app.log.error(

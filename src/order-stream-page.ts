@@ -238,8 +238,10 @@ export function renderOrderStreamPage(): string {
             const message = JSON.parse(event.data);
             statusLabel.textContent = message.state === "connected"
               ? "Connected · receiving live updates"
+              : message.state === "disabled" ? "Live updates are disabled"
               : message.state === "reconnecting" ? "Reconnecting to Kotak Neo…" : "Connecting to Kotak Neo…";
-            statusLabel.dataset.state = message.state === "connected" ? "connected" : "connecting";
+            statusLabel.dataset.state =
+              message.state === "connected" ? "connected" : message.state === "disabled" ? "error" : "connecting";
           });
           eventSource.addEventListener("order", (event) => handleOrder(JSON.parse(event.data)));
           eventSource.addEventListener("position", (event) => handlePosition(JSON.parse(event.data)));
