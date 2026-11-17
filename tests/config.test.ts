@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { loadConfig } from "./config.js";
+import { loadConfig } from "../src/config.js";
 
 const validEnvironment: NodeJS.ProcessEnv = {
   HOST: "127.0.0.1",

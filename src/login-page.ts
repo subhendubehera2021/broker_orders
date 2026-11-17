@@ -154,18 +154,8 @@ const loginPageTemplate = `<!doctype html>
       .session-copy { margin: 13px 0 0; color: var(--muted); font-size: 12px; line-height: 1.7; }
       .logout { border: 1px solid #383d33; background: #22261f; color: #e5e9dd; }
       .logout:hover:not(:disabled) { background: #2b3027; }
-      .margin-link { display: flex; min-height: 47px; align-items: center; justify-content: center; margin-top: 22px; border: 1px solid #383d33; border-radius: 8px; color: var(--green); font-size: 12px; font-weight: 700; text-decoration: none; }
-      .margin-link:hover { background: #22261f; }
-      .scrip-link { display: block; margin-top: 13px; color: #a9aea3; font-size: 11px; text-align: center; text-decoration: none; }
-      .scrip-link:hover { color: var(--green); }
-      .option-link { display: block; margin-top: 10px; color: #a9aea3; font-size: 11px; text-align: center; text-decoration: none; }
-      .option-link:hover { color: var(--green); }
-      .orders-link { display: block; margin-top: 10px; color: #a9aea3; font-size: 11px; text-align: center; text-decoration: none; }
-      .orders-link:hover { color: var(--green); }
-      .activity-link { display: block; margin-top: 10px; color: #a9aea3; font-size: 11px; text-align: center; text-decoration: none; }
-      .activity-link:hover { color: var(--green); }
-      .auto-trade-link { display: block; margin-top: 10px; color: #a9aea3; font-size: 11px; text-align: center; text-decoration: none; }
-      .auto-trade-link:hover { color: var(--green); }
+      .docs-link { display: flex; min-height: 47px; align-items: center; justify-content: center; margin-top: 22px; border: 1px solid #383d33; border-radius: 8px; color: var(--green); font-size: 12px; font-weight: 700; text-decoration: none; }
+      .docs-link:hover { background: #22261f; }
       footer { display: flex; justify-content: space-between; gap: 20px; padding: 10px 7% 0; color: #63685e; font-size: 10px; }
       footer a { color: #92988a; text-decoration: none; }
       footer a:hover { color: var(--green); }
@@ -255,13 +245,8 @@ const loginPageTemplate = `<!doctype html>
 
           <div class="session-panel" id="session-panel" hidden>
             <div class="session-state">Kotak Neo session active</div>
-            <p class="session-copy">Your account is connected and ready to request a margin estimate.</p>
-            <a class="margin-link" href="/margin">Open margin calculator</a>
-            <a class="option-link" href="/option-chain">Open NIFTY option chain</a>
-            <a class="orders-link" href="/orders">View open and closed orders</a>
-            <a class="activity-link" href="/order-stream">View live order and position updates</a>
-            <a class="auto-trade-link" href="/auto-trade">Analyze liquidity swings</a>
-            <a class="scrip-link" href="/scrip-master">Browse NSE F&amp;O Scrip Master</a>
+            <p class="session-copy">Your account is connected and ready for order placement.</p>
+            <a class="docs-link" href="/docs/">Open API Documentation (Swagger)</a>
             <button class="logout" id="logout-button" type="button">Disconnect this session</button>
           </div>
 
