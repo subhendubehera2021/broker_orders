@@ -341,4 +341,79 @@ describe("KotakNeoClient", () => {
       },
     );
   });
+
+  it("submits an order cancellation request with correct headers and payload", async () => {
+    let capturedUrl: URL | undefined;
+    let capturedInit: RequestInit | undefined;
+    const client = new KotakNeoClient(
+      { ...prodConfig, cancelOrderPath: "quick/order/cancel" },
+      async (input, init) => {
+        capturedUrl = new URL(input.toString());
+        capturedInit = init;
+        return Response.json({ stat: "Ok", nOrdNo: "2105199703091997", stCode: 200 });
+      },
+    );
+
+    const response = await client.cancelOrder(
+      {
+        ...testSession,
+        serverId: "server-id",
+        baseUrl: "https://neo-gw.kotaksecurities.com/xyz/",
+      },
+      {
+        orderNumber: "2105199703091997",
+        amo: "NO",
+      },
+    );
+
+    assert.equal(
+      capturedUrl?.href,
+      "https://neo-gw.kotaksecurities.com/xyz/quick/order/cancel?sId=server-id",
+    );
+    assert.equal(capturedInit?.method, "POST");
+    const headers = new Headers(capturedInit?.headers);
+    assert.equal(headers.get("auth"), "test-trade-token");
+    assert.equal(headers.get("sid"), "test-sid");
+    assert.equal(headers.get("neo-fin-key"), "test-prod-financial-key");
+    assert.equal(headers.get("content-type"), "application/x-www-form-urlencoded");
+    const body = new URLSearchParams(String(capturedInit?.body));
+    assert.deepEqual(JSON.parse(body.get("jData") ?? "null"), {
+      am: "NO",
+      on: "2105199703091997",
+    });
+    assert.deepEqual(response, { stat: "Ok", nOrdNo: "2105199703091997", stCode: 200 });
+  });
+
+  it("submits an AMO order cancellation request with trading symbol", async () => {
+    let capturedInit: RequestInit | undefined;
+    const client = new KotakNeoClient(
+      { ...prodConfig, cancelOrderPath: "quick/order/cancel" },
+      async (_input, init) => {
+        capturedInit = init;
+        return Response.json({ stat: "Ok", nOrdNo: "2105199703091997", stCode: 200 });
+      },
+    );
+
+    await client.cancelOrder(testSession, {
+      orderNumber: "2105199703091997",
+      amo: "YES",
+      tradingSymbol: "TCS-EQ",
+    });
+
+    const body = new URLSearchParams(String(capturedInit?.body));
+    assert.deepEqual(JSON.parse(body.get("jData") ?? "null"), {
+      am: "YES",
+      on: "2105199703091997",
+      ts: "TCS-EQ",
+    });
+  });
+
+  it("throws KotakNeoError when cancelOrderPath is missing", async () => {
+    const client = new KotakNeoClient(prodConfig);
+
+    await assert.rejects(
+      client.cancelOrder(testSession, { orderNumber: "12345" }),
+      /Kotak Neo cancel order API is not configured/,
+    );
+  });
 });

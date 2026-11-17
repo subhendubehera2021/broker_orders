@@ -8,6 +8,7 @@ import {
   KotakNeoClient,
   KotakNeoError,
   type AuthenticatedSession,
+  type CancelOrderInput,
   type PlaceNiftyOptionOrderInput,
 } from "./kotak-neo-client.js";
 import { renderLoginPage } from "./login-page.js";
@@ -59,11 +60,23 @@ interface BuySlLimitOrderBody {
   tag?: string;
 }
 
+interface CancelOrderBody {
+  orderNumber?: string;
+  on?: string;
+  orderNo?: string;
+  amo?: "YES" | "NO";
+  tradingSymbol?: string;
+}
+
 interface AuthClient {
   login(input: KotakLoginInput): Promise<AuthenticatedSession>;
   placeNiftyOptionOrder?(
     session: AuthenticatedSession,
     input: PlaceNiftyOptionOrderInput,
+  ): Promise<unknown>;
+  cancelOrder?(
+    session: AuthenticatedSession,
+    input: CancelOrderInput,
   ): Promise<unknown>;
 }
 
@@ -672,6 +685,138 @@ export function buildApp({
               : error instanceof KotakNeoError
                 ? error.message
                 : "BUY SL-Limit order could not be prepared",
+          });
+        }
+      },
+    );
+
+    api.post<{ Body: CancelOrderBody }>(
+      "/api/orders/cancel",
+      {
+        schema: {
+          tags: ["Orders"],
+          summary: "Cancel an open order",
+          description:
+            "Cancels an open order by its order number (on / orderNumber). Supports After Market Orders (AMO) when amo is 'YES' and tradingSymbol is provided.",
+          body: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              orderNumber: {
+                type: "string",
+                minLength: 1,
+                maxLength: 64,
+                description: "Order number (Nest order number)",
+              },
+              on: {
+                type: "string",
+                minLength: 1,
+                maxLength: 64,
+                description: "Alias for orderNumber",
+              },
+              orderNo: {
+                type: "string",
+                minLength: 1,
+                maxLength: 64,
+                description: "Alias for orderNumber",
+              },
+              amo: {
+                type: "string",
+                enum: ["YES", "NO"],
+                default: "NO",
+                description: "AMO flag ('YES' for After Market Orders)",
+              },
+              tradingSymbol: {
+                type: "string",
+                minLength: 1,
+                maxLength: 64,
+                description: "Trading symbol (mandatory for AMO orders)",
+              },
+            },
+          },
+          response: {
+            200: {
+              type: "object",
+              additionalProperties: true,
+              description: "Kotak Neo order cancellation response.",
+            },
+            400: errorResponseSchema,
+            401: errorResponseSchema,
+            429: errorResponseSchema,
+            502: errorResponseSchema,
+            503: errorResponseSchema,
+            504: errorResponseSchema,
+          },
+        },
+      },
+      async (request, reply) => {
+        if (!session) {
+          return reply
+            .code(401)
+            .send({ error: "Authenticate with Kotak Neo before cancelling an order" });
+        }
+        if (!client?.cancelOrder || !config.kotakNeo.cancelOrderPath) {
+          return reply.code(503).send({
+            error:
+              "Kotak Neo cancel order API is not configured; set KOTAK_NEO_CANCEL_ORDER_PATH",
+          });
+        }
+        const authenticatedSession = session;
+        const body = request.body;
+        const orderNumber = body.orderNumber ?? body.on ?? body.orderNo;
+
+        if (!orderNumber || typeof orderNumber !== "string" || orderNumber.trim() === "") {
+          return reply.code(400).send({
+            error: "orderNumber (or on/orderNo) is required to cancel an order",
+          });
+        }
+
+        const amo = body.amo ?? "NO";
+        if (amo === "YES" && (!body.tradingSymbol || body.tradingSymbol.trim() === "")) {
+          return reply.code(400).send({
+            error: "tradingSymbol is required when cancelling an After Market Order (AMO)",
+          });
+        }
+
+        let brokerRequestStarted = false;
+        try {
+          brokerRequestStarted = true;
+          return await client.cancelOrder(authenticatedSession, {
+            orderNumber: orderNumber.trim(),
+            amo,
+            ...(body.tradingSymbol ? { tradingSymbol: body.tradingSymbol.trim() } : {}),
+          });
+        } catch (error) {
+          const statusCode = orderRequestStatus(error);
+          const outcomeUncertain =
+            brokerRequestStarted &&
+            (statusCode === 502 || statusCode === 503 || statusCode === 504);
+          request.log.error(
+            {
+              statusCode,
+              errorName: error instanceof Error ? error.name : "UnknownError",
+              ...(error instanceof Error ? { errorMessage: error.message } : {}),
+              ...(error instanceof KotakNeoError
+                ? {
+                    ...(error.upstreamMessage
+                      ? { upstreamErrorMessage: error.upstreamMessage }
+                      : {}),
+                    ...(error.upstreamHttpStatusCode !== undefined
+                      ? { upstreamStatusCode: error.upstreamHttpStatusCode }
+                      : {}),
+                    ...(error.upstreamCode ? { upstreamCode: error.upstreamCode } : {}),
+                    ...(error.upstreamStat ? { upstreamStat: error.upstreamStat } : {}),
+                  }
+                : {}),
+            },
+            "Kotak Neo cancel order failed",
+          );
+          return reply.code(statusCode).send({
+            error: outcomeUncertain
+              ? "Order cancellation outcome could not be confirmed; check your Kotak Neo order book before retrying"
+              : error instanceof KotakNeoError
+                ? error.message
+                : "Order cancellation could not be prepared",
           });
         }
       },

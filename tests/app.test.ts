@@ -28,6 +28,7 @@ const config: AppConfig = {
     scripMasterPath: "script-details/1.0/masterscrip/file-paths",
     marginPath: "quick/user/check-margin",
     placeOrderPath: "quick/order/rule/ms/place",
+    cancelOrderPath: "quick/order/cancel",
     orderSource: "NEOTRADEAPI",
     quotesPath: "script-details/1.0/quotes/neosymbol/{neo_symbols}/{quote_type}",
     niftyIndexToken: "Nifty 50",
@@ -258,6 +259,29 @@ describe("app routes", () => {
 
     assert.equal(response.statusCode, 503);
     assert.match(response.json().error, /KOTAK_NEO_PLACE_ORDER_PATH and KOTAK_NEO_ORDER_SOURCE/);
+  });
+
+  it("returns a clear configuration error when cancel order setting is absent", async () => {
+    const { cancelOrderPath: _cancelOrderPath, ...kotakNeo } = config.kotakNeo;
+    const app = buildApp({
+      config: { ...config, kotakNeo },
+      authClient: {
+        async login() {
+          return authenticatedSession;
+        },
+      },
+    });
+    apps.push(app);
+
+    await app.inject({ method: "POST", url: "/api/auth/login", payload: { totp: "123456" } });
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/orders/cancel",
+      payload: { orderNumber: "2105199703091997" },
+    });
+
+    assert.equal(response.statusCode, 503);
+    assert.match(response.json().error, /KOTAK_NEO_CANCEL_ORDER_PATH/);
   });
 
   it("rejects orders for unlisted contracts and quantities that are not whole lots", async () => {
@@ -565,6 +589,141 @@ describe("app routes", () => {
       disclosedQuantity: "0",
       marketProtection: "0",
       triggerPrice: "105.00",
+    });
+  });
+
+  it("requires authentication before cancelling an order", async () => {
+    let cancelCalls = 0;
+    const app = buildApp({
+      config,
+      authClient: {
+        async login() {
+          return authenticatedSession;
+        },
+        async cancelOrder() {
+          cancelCalls += 1;
+          return { stat: "Ok" };
+        },
+      },
+    });
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/orders/cancel",
+      payload: { orderNumber: "2105199703091997" },
+    });
+
+    assert.equal(response.statusCode, 401);
+    assert.equal(cancelCalls, 0);
+  });
+
+  it("validates required orderNumber and AMO tradingSymbol when cancelling", async () => {
+    let cancelCalls = 0;
+    const app = buildApp({
+      config,
+      authClient: {
+        async login() {
+          return authenticatedSession;
+        },
+        async cancelOrder() {
+          cancelCalls += 1;
+          return { stat: "Ok" };
+        },
+      },
+    });
+    apps.push(app);
+
+    await app.inject({ method: "POST", url: "/api/auth/login", payload: { totp: "123456" } });
+
+    const missingOrderNo = await app.inject({
+      method: "POST",
+      url: "/api/orders/cancel",
+      payload: { amo: "NO" },
+    });
+    assert.equal(missingOrderNo.statusCode, 400);
+    assert.match(missingOrderNo.json().error, /orderNumber/);
+
+    const missingAmoSymbol = await app.inject({
+      method: "POST",
+      url: "/api/orders/cancel",
+      payload: { orderNumber: "2105199703091997", amo: "YES" },
+    });
+    assert.equal(missingAmoSymbol.statusCode, 400);
+    assert.match(missingAmoSymbol.json().error, /tradingSymbol/);
+
+    assert.equal(cancelCalls, 0);
+  });
+
+  it("cancels an order successfully and forwards parameters", async () => {
+    let cancelledSession: AuthenticatedSession | undefined;
+    let cancelledInput: unknown;
+    const app = buildApp({
+      config,
+      authClient: {
+        async login() {
+          return { ...authenticatedSession, serverId: "server-id" };
+        },
+        async cancelOrder(session, input) {
+          cancelledSession = session;
+          cancelledInput = input;
+          return { stat: "Ok", nOrdNo: "2105199703091997", stCode: 200 };
+        },
+      },
+    });
+    apps.push(app);
+
+    await app.inject({ method: "POST", url: "/api/auth/login", payload: { totp: "123456" } });
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/orders/cancel",
+      payload: {
+        on: "2105199703091997",
+        amo: "NO",
+      },
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(response.json(), { stat: "Ok", nOrdNo: "2105199703091997", stCode: 200 });
+    assert.deepEqual(cancelledSession, { ...authenticatedSession, serverId: "server-id" });
+    assert.deepEqual(cancelledInput, {
+      orderNumber: "2105199703091997",
+      amo: "NO",
+    });
+  });
+
+  it("cancels an AMO order with tradingSymbol", async () => {
+    let cancelledInput: unknown;
+    const app = buildApp({
+      config,
+      authClient: {
+        async login() {
+          return authenticatedSession;
+        },
+        async cancelOrder(_session, input) {
+          cancelledInput = input;
+          return { stat: "Ok", nOrdNo: "2105199703091997", stCode: 200 };
+        },
+      },
+    });
+    apps.push(app);
+
+    await app.inject({ method: "POST", url: "/api/auth/login", payload: { totp: "123456" } });
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/orders/cancel",
+      payload: {
+        orderNumber: "2105199703091997",
+        amo: "YES",
+        tradingSymbol: "TCS-EQ",
+      },
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(cancelledInput, {
+      orderNumber: "2105199703091997",
+      amo: "YES",
+      tradingSymbol: "TCS-EQ",
     });
   });
 });

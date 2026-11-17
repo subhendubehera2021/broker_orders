@@ -40,6 +40,12 @@ export interface PlaceNiftyOptionOrderInput {
   lastTradedPrice?: string;
 }
 
+export interface CancelOrderInput {
+  orderNumber: string;
+  amo?: "YES" | "NO";
+  tradingSymbol?: string;
+}
+
 interface KotakResponse {
   data?: Record<string, unknown>;
   [key: string]: unknown;
@@ -198,6 +204,68 @@ export class KotakNeoClient {
       const statusCode = upstreamCode === "100008" ? 401 : 400;
       throw new KotakNeoError(
         `Kotak Neo rejected the order${upstreamCode ? ` (stCode=${upstreamCode})` : ""}${sanitizedMessage ? `: ${sanitizedMessage}` : ""}`,
+        statusCode,
+        upstreamCode,
+        200,
+        sanitizedMessage,
+        response.stat,
+      );
+    }
+    return response;
+  }
+
+  async cancelOrder(
+    session: AuthenticatedSession,
+    input: CancelOrderInput,
+  ): Promise<unknown> {
+    if (!this.config.cancelOrderPath) {
+      throw new KotakNeoError(
+        "Kotak Neo cancel order API is not configured; set KOTAK_NEO_CANCEL_ORDER_PATH",
+        503,
+      );
+    }
+    const orderData: Record<string, string> = {
+      on: input.orderNumber,
+      am: input.amo ?? "NO",
+    };
+    if (input.tradingSymbol) {
+      orderData.ts = input.tradingSymbol;
+    }
+    const body = new URLSearchParams({ jData: JSON.stringify(orderData) });
+
+    const baseUrl = session.baseUrl ?? this.config.apiBaseUrl;
+    const path = new URL(this.config.cancelOrderPath, ensureTrailingSlash(baseUrl));
+    if (session.serverId) path.searchParams.set("sId", session.serverId);
+    const response = await this.requestJson(
+      path.toString(),
+      {
+        method: "POST",
+        headers: {
+          Auth: session.tradeToken,
+          Sid: session.sid,
+          "neo-fin-key": this.config.financialKey,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body,
+      },
+      baseUrl,
+    );
+    if (
+      isRecord(response) &&
+      typeof response.stat === "string" &&
+      response.stat.toLowerCase() !== "ok"
+    ) {
+      const upstreamCode =
+        typeof response.stCode === "string" || typeof response.stCode === "number"
+          ? String(response.stCode)
+          : undefined;
+      const upstreamMessage = findErrorMessage(response);
+      const sanitizedMessage = upstreamMessage
+        ? sanitizeUpstreamMessage(upstreamMessage)
+        : undefined;
+      const statusCode = upstreamCode === "100008" ? 401 : 400;
+      throw new KotakNeoError(
+        `Kotak Neo rejected the order cancellation${upstreamCode ? ` (stCode=${upstreamCode})` : ""}${sanitizedMessage ? `: ${sanitizedMessage}` : ""}`,
         statusCode,
         upstreamCode,
         200,
