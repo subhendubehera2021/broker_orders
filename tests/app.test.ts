@@ -545,7 +545,6 @@ describe("app routes", () => {
       payload: {
         tradingSymbol: "NIFTY30JAN2030CE",
         quantity: "25",
-        price: "110",
         triggerPrice: "105",
       },
     });
@@ -559,12 +558,12 @@ describe("app routes", () => {
       quantity: "25",
       product: "MIS",
       orderType: "SL",
-      price: "110",
+      price: "105.20",
       validity: "DAY",
       amo: "NO",
       disclosedQuantity: "0",
       marketProtection: "0",
-      triggerPrice: "105",
+      triggerPrice: "105.00",
     });
   });
 });

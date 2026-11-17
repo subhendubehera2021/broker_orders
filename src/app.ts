@@ -52,8 +52,8 @@ interface NiftyOptionOrderBody {
 interface BuySlLimitOrderBody {
   tradingSymbol: string;
   quantity: string;
-  price: string;
-  triggerPrice: string;
+  price?: string;
+  triggerPrice?: string;
   product?: "MIS" | "NRML";
   tag?: string;
 }
@@ -538,12 +538,12 @@ export function buildApp({
       {
         schema: {
           tags: ["Orders"],
-          summary: "Place a simplified BUY SL-Limit order",
+          summary: "Place a simplified BUY SL-Limit order with serverside .20 price difference",
           description:
-            "Places a BUY Stop-Limit (SL) order with minimal required body parameters (tradingSymbol, quantity, price, triggerPrice).",
+            "Places a BUY Stop-Limit (SL) order with minimal required body parameters (tradingSymbol, quantity, and triggerPrice or price). Automatically computes a 0.20 difference between limit price and trigger price.",
           body: {
             type: "object",
-            required: ["tradingSymbol", "quantity", "price", "triggerPrice"],
+            required: ["tradingSymbol", "quantity"],
             additionalProperties: false,
             properties: {
               tradingSymbol: { type: "string", minLength: 1, maxLength: 64 },
@@ -585,15 +585,23 @@ export function buildApp({
         }
         const authenticatedSession = session;
         const body = request.body;
-        const priceNum = Number(body.price);
-        const triggerNum = Number(body.triggerPrice);
-        if (priceNum <= 0 || triggerNum <= 0) {
-          return reply.code(400).send({ error: "Price and trigger price must be positive numbers" });
-        }
-        if (priceNum < triggerNum) {
+        let triggerNum: number;
+        let priceNum: number;
+
+        if (body.triggerPrice !== undefined && Number(body.triggerPrice) > 0) {
+          triggerNum = Number(body.triggerPrice);
+          priceNum = Math.round((triggerNum + 0.20) * 100) / 100;
+        } else if (body.price !== undefined && Number(body.price) > 0) {
+          priceNum = Number(body.price);
+          triggerNum = Math.round((priceNum - 0.20) * 100) / 100;
+        } else {
           return reply.code(400).send({
-            error: "BUY stop-limit price must be greater than or equal to its trigger price",
+            error: "Provide either triggerPrice or price for the BUY SL-Limit order",
           });
+        }
+
+        if (triggerNum <= 0 || priceNum <= 0) {
+          return reply.code(400).send({ error: "Trigger price and price must be positive numbers" });
         }
 
         let brokerRequestStarted = false;
@@ -622,12 +630,12 @@ export function buildApp({
             quantity: body.quantity,
             product: body.product ?? "MIS",
             orderType: "SL",
-            price: body.price,
+            price: priceNum.toFixed(2),
             validity: "DAY",
             amo: "NO",
             disclosedQuantity: "0",
             marketProtection: "0",
-            triggerPrice: body.triggerPrice,
+            triggerPrice: triggerNum.toFixed(2),
             ...(body.tag ? { tag: body.tag } : {}),
           });
         } catch (error) {
