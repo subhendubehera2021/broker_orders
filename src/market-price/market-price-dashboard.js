@@ -55,7 +55,7 @@ export const marketPricePanelMarkup = `
           </header>
           <form class="market-price-form" id="market-price-form">
             <label for="market-instrument">Instrument</label>
-            <input class="market-price-input" id="market-instrument" type="text" autocomplete="off" spellcheck="false" placeholder="nse_cm|1333" required>
+            <input class="market-price-input" id="market-instrument" type="text" autocomplete="off" spellcheck="false" value="nse_cm|Nifty 50" required>
             <p class="market-price-example">Format: exchange|instrument, e.g. nse_cm|1333</p>
             <button class="primary market-price-submit" type="submit">Watch live price</button>
           </form>

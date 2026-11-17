@@ -21,7 +21,7 @@ curl "http://localhost:8787/__scheduled?cron=*+*+*+*+*"
 
 Open `http://localhost:8787/` for the WebSocket dashboard. Enter the `ORDER_STREAM_CONTROL_TOKEN` and select **Connect** to receive live status and broker frames over an authenticated Server-Sent Events (SSE) connection. The page displays each order message and connection acknowledgement as a row in separate tables, keeps the newest row at the top highlighted, replays up to the latest 50 in-memory frames on connection, and then pushes new ones. Frame previews are capped at 16,384 characters each. **Refresh status** makes a one-time status request. The page keeps the token only in the current tab.
 
-The right-side **Live stock price** panel uses Kotak's separate market-data WebSocket. Enter a Kotak instrument in `exchange|instrument` format (for example, `nse_cm|1333`, using the instrument token from Kotak's Scrip Master) and select **Watch live price**. Index names such as `nse_cm|Nifty 50` are also accepted. This on-demand feed streams the latest price and change through authenticated SSE; it does not use or alter the order-stream connection or its Cron Trigger.
+The right-side **Live stock price** panel uses Kotak's separate market-data WebSocket and defaults to `nse_cm|Nifty 50`. Change the value to another Kotak instrument in `exchange|instrument` format (for example, `nse_cm|1333`, using the instrument token from Kotak's Scrip Master) and select **Watch live price**. This on-demand feed streams the latest price and change through authenticated SSE; it does not use or alter the order-stream connection or its Cron Trigger.
 
 The same protected controls are available as HTTP endpoints:
 
@@ -47,10 +47,9 @@ KOTAK_NEO_BASE_URL=https://e21.kotaksecurities.com
 KOTAK_WS_SESSION_TOKEN=your-session-token
 KOTAK_WS_SID=your-session-sid
 KOTAK_MARKET_DATA_UCC=your-kotak-client-code
-KOTAK_MARKET_DATA_FEED_URL=https://your-account-feed-url
 ```
 
-The market-data feed URL is the account-specific `data.feedUrl` returned by Kotak's `tradeApiValidate` login flow. The market-data WebSocket uses the same `KOTAK_WS_SESSION_TOKEN` as the order stream but requires a separate UCC and feed URL.
+The market-data WebSocket uses the static Kotak endpoint `wss://sfeed.kotaksecurities.com/apifeed`. It reuses `KOTAK_WS_SESSION_TOKEN` but requires a separate `KOTAK_MARKET_DATA_UCC` secret.
 
 For deployment, set the session values as Cloudflare secrets. Set the base URL as a Worker variable in `wrangler.jsonc` or as a secret:
 
@@ -59,7 +58,6 @@ npx wrangler secret put LIQUIDITY_SWING_API_TOKEN
 npx wrangler secret put KOTAK_WS_SESSION_TOKEN
 npx wrangler secret put KOTAK_WS_SID
 npx wrangler secret put KOTAK_MARKET_DATA_UCC
-npx wrangler secret put KOTAK_MARKET_DATA_FEED_URL
 npx wrangler secret put KOTAK_NEO_BASE_URL
 npx wrangler secret put ORDER_STREAM_CONTROL_TOKEN
 ```

@@ -197,6 +197,7 @@ test("serves the dashboard and protects the status endpoint", async () => {
   const dashboardHtml = await dashboard.text();
   assert.match(dashboardHtml, /Order stream/);
   assert.match(dashboardHtml, /Live stock price/);
+  assert.match(dashboardHtml, /value="nse_cm\|Nifty 50"/);
   assert.equal(unauthorized.status, 401);
   assert.equal(status.status, 200);
   assert.deepEqual(await status.json(), {

@@ -59,7 +59,6 @@ function createStream() {
     },
   };
   const env = {
-    KOTAK_MARKET_DATA_FEED_URL: "https://feed.example.test/apifeed",
     KOTAK_MARKET_DATA_UCC: "client-code",
     KOTAK_WS_SESSION_TOKEN: "market-session-token",
   };
@@ -116,7 +115,14 @@ test("validates Kotak instruments and builds market-feed connection credentials"
     createKotakMarketDataWebSocketUrl("https://feed.example.test/apifeed?tenant=1"),
     "wss://feed.example.test/apifeed?tenant=1",
   );
-  assert.throws(() => createKotakMarketDataWebSocketUrl("http://feed.example.test"), /HTTPS URL/);
+  assert.equal(
+    createKotakMarketDataWebSocketUrl("wss://sfeed.kotaksecurities.com/apifeed"),
+    "wss://sfeed.kotaksecurities.com/apifeed",
+  );
+  assert.throws(
+    () => createKotakMarketDataWebSocketUrl("http://feed.example.test"),
+    /HTTPS or WSS URL/,
+  );
   assert.deepEqual(
     JSON.parse(createKotakMarketDataAuthPayload("client-code", "session-token", "2026-11-17")),
     {
@@ -169,7 +175,7 @@ test("authenticates, subscribes, and streams a live price over SSE", async () =>
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type"), /text\/event-stream/);
   assert.equal(FakeWebSocket.instances.length, 1);
-  assert.equal(FakeWebSocket.instances[0].url, "wss://feed.example.test/apifeed");
+  assert.equal(FakeWebSocket.instances[0].url, "wss://sfeed.kotaksecurities.com/apifeed");
   assert.equal(FakeWebSocket.instances[0].binaryType, "arraybuffer");
   assert.equal(alarms.length, 1);
   await Promise.all(backgroundTasks);

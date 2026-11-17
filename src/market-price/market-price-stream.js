@@ -5,6 +5,7 @@ const SSE_HEARTBEAT_MS = 15 * 1000;
 const MAX_SSE_CLIENTS = 10;
 const MAX_SSE_BACKLOG = 100;
 const utf8Encoder = new TextEncoder();
+const KOTAK_MARKET_DATA_FEED_URL = "wss://sfeed.kotaksecurities.com/apifeed";
 
 const EXCHANGE_IDS = Object.freeze({
   nse_cm: 1,
@@ -64,12 +65,16 @@ export function createKotakMarketDataWebSocketUrl(feedUrl) {
   try {
     endpoint = new URL(feedUrl);
   } catch {
-    throw new Error("KOTAK_MARKET_DATA_FEED_URL must be a valid HTTPS URL");
+    throw new Error("Kotak market-data feed URL must be a valid HTTPS or WSS URL");
   }
-  if (endpoint.protocol !== "https:" || endpoint.username || endpoint.password) {
-    throw new Error("KOTAK_MARKET_DATA_FEED_URL must be a valid HTTPS URL");
+  if (
+    (endpoint.protocol !== "https:" && endpoint.protocol !== "wss:") ||
+    endpoint.username ||
+    endpoint.password
+  ) {
+    throw new Error("Kotak market-data feed URL must be a valid HTTPS or WSS URL");
   }
-  endpoint.protocol = "wss:";
+  if (endpoint.protocol === "https:") endpoint.protocol = "wss:";
   endpoint.hash = "";
   return endpoint.toString();
 }
@@ -301,7 +306,7 @@ export class KotakMarketPriceStream {
     }
     if (!this.currentInstrument) throw new Error("Select an instrument before connecting");
 
-    const url = createKotakMarketDataWebSocketUrl(this.env.KOTAK_MARKET_DATA_FEED_URL);
+    const url = createKotakMarketDataWebSocketUrl(KOTAK_MARKET_DATA_FEED_URL);
     const authPayload = createKotakMarketDataAuthPayload(
       this.env.KOTAK_MARKET_DATA_UCC,
       this.env.KOTAK_WS_SESSION_TOKEN,
