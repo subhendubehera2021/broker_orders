@@ -8,6 +8,10 @@
 			{
 				"name": "ORDER_STREAM",
 				"class_name": "KotakOrderStream"
+			},
+			{
+				"name": "MARKET_PRICE_STREAM",
+				"class_name": "KotakMarketPriceStream"
 			}
 		]
 	},
@@ -15,6 +19,10 @@
 		{
 			"tag": "v1",
 			"new_sqlite_classes": ["KotakOrderStream"]
+		},
+		{
+			"tag": "v2",
+			"new_sqlite_classes": ["KotakMarketPriceStream"]
 		}
 	],
 	"observability": {

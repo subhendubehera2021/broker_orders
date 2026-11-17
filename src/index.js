@@ -1,10 +1,12 @@
 import { callLiquiditySwingApi } from "./liquidity-swing-api.js";
+import { KotakMarketPriceStream } from "./market-price/market-price-stream.js";
 import { orderWebSocketDashboard } from "./order-websocket-dashboard.js";
 import { KotakOrderStream } from "./order-websocket.js";
 
 const orderStreamPath = "/internal/order-stream/start";
 const orderStreamStatusPath = "/internal/order-stream/status";
 const orderStreamEventsPath = "/internal/order-stream/events";
+const marketPriceEventsPath = "/internal/market-price/events";
 const orderStreamCron = "*/1 * * * *";
 
 function isAuthorized(request, secret) {
@@ -30,6 +32,14 @@ async function callOrderStream(env, path, method) {
   return env.ORDER_STREAM.get(id).fetch(`https://order-stream.internal${path}`, { method });
 }
 
+async function callMarketPriceStream(env, instrument) {
+  const id = env.MARKET_PRICE_STREAM.idFromName("kotak-market-price-stream");
+  const path = `/events?instrument=${encodeURIComponent(instrument ?? "")}`;
+  return env.MARKET_PRICE_STREAM.get(id).fetch(`https://market-price.internal${path}`, {
+    method: "GET",
+  });
+}
+
 async function startOrderStream(env) {
   const response = await callOrderStream(env, "/start", "POST");
   if (!response.ok) {
@@ -52,7 +62,7 @@ const istDateTime = new Intl.DateTimeFormat("en-IN", {
   hourCycle: "h23",
 });
 
-export { KotakOrderStream };
+export { KotakMarketPriceStream, KotakOrderStream };
 
 export default {
   async fetch(request, env) {
@@ -72,12 +82,18 @@ export default {
     const isStart = url.pathname === orderStreamPath && request.method === "POST";
     const isStatus = url.pathname === orderStreamStatusPath && request.method === "GET";
     const isEvents = url.pathname === orderStreamEventsPath && request.method === "GET";
-    if (!isStart && !isStatus && !isEvents) return new Response("Not found", { status: 404 });
+    const isMarketPriceEvents = url.pathname === marketPriceEventsPath && request.method === "GET";
+    if (!isStart && !isStatus && !isEvents && !isMarketPriceEvents) {
+      return new Response("Not found", { status: 404 });
+    }
     if (!isAuthorized(request, env.ORDER_STREAM_CONTROL_TOKEN)) {
       return new Response("Unauthorized", { status: 401 });
     }
 
     if (isStart) return startOrderStream(env);
+    if (isMarketPriceEvents) {
+      return callMarketPriceStream(env, url.searchParams.get("instrument"));
+    }
     return callOrderStream(env, isStatus ? "/status" : "/events", "GET");
   },
 

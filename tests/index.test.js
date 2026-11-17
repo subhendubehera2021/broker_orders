@@ -194,7 +194,9 @@ test("serves the dashboard and protects the status endpoint", async () => {
 
   assert.equal(dashboard.status, 200);
   assert.match(dashboard.headers.get("content-type"), /text\/html/);
-  assert.match(await dashboard.text(), /Order stream/);
+  const dashboardHtml = await dashboard.text();
+  assert.match(dashboardHtml, /Order stream/);
+  assert.match(dashboardHtml, /Live stock price/);
   assert.equal(unauthorized.status, 401);
   assert.equal(status.status, 200);
   assert.deepEqual(await status.json(), {
@@ -239,5 +241,50 @@ test("protects and proxies the live SSE endpoint", async () => {
   assert.match(response.headers.get("content-type"), /text\/event-stream/);
   assert.deepEqual(calls, [
     { url: "https://order-stream.internal/events", options: { method: "GET" } },
+  ]);
+});
+
+test("protects and proxies the selected market-price instrument to its Durable Object", async () => {
+  const calls = [];
+  const env = {
+    ORDER_STREAM_CONTROL_TOKEN: "control-secret",
+    MARKET_PRICE_STREAM: {
+      idFromName(name) {
+        calls.push({ name });
+        return "stable-market-price-id";
+      },
+      get(id) {
+        calls.push({ id });
+        return {
+          async fetch(url, options) {
+            calls.push({ url, options });
+            return new Response("event: status\ndata: {}\n\n", {
+              headers: { "Content-Type": "text/event-stream; charset=utf-8" },
+            });
+          },
+        };
+      },
+    },
+  };
+  const unauthorized = await worker.fetch(
+    new Request("https://worker.example/internal/market-price/events?instrument=nse_cm%7C1333"),
+    env,
+  );
+  const response = await worker.fetch(
+    new Request("https://worker.example/internal/market-price/events?instrument=nse_cm%7C1333", {
+      headers: { Authorization: "Bearer control-secret" },
+    }),
+    env,
+  );
+
+  assert.equal(unauthorized.status, 401);
+  assert.match(response.headers.get("content-type"), /text\/event-stream/);
+  assert.deepEqual(calls, [
+    { name: "kotak-market-price-stream" },
+    { id: "stable-market-price-id" },
+    {
+      url: "https://market-price.internal/events?instrument=nse_cm%7C1333",
+      options: { method: "GET" },
+    },
   ]);
 });

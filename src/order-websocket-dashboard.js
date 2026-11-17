@@ -1,3 +1,9 @@
+import {
+  marketPriceDashboardScript,
+  marketPriceDashboardStyles,
+  marketPricePanelMarkup,
+} from "./market-price/market-price-dashboard.js";
+
 export const orderWebSocketDashboard = `<!doctype html>
 <html lang="en">
   <head>
@@ -36,7 +42,14 @@ export const orderWebSocketDashboard = `<!doctype html>
           #080e18;
       }
 
-      .dashboard { width: min(100%, 680px); }
+      .dashboard { width: min(100%, 1500px); }
+      .dashboard-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.8fr) minmax(330px, .8fr);
+        align-items: start;
+        gap: 18px;
+      }
+      .order-panel { min-width: 0; }
       .brand {
         display: flex;
         align-items: center;
@@ -223,15 +236,20 @@ export const orderWebSocketDashboard = `<!doctype html>
         .metrics { grid-template-columns: 1fr 1fr; }
         .metric:last-child { grid-column: 1 / -1; }
       }
+      @media (max-width: 980px) {
+        .dashboard-grid { grid-template-columns: minmax(0, 1fr); }
+      }
       @media (prefers-reduced-motion: reduce) {
         *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
       }
+      ${marketPriceDashboardStyles}
     </style>
   </head>
   <body>
     <main class="dashboard">
       <div class="brand"><span class="brand-mark" aria-hidden="true">KO</span><span>Market operations</span></div>
-      <section class="panel" aria-labelledby="page-title">
+      <div class="dashboard-grid">
+      <section class="panel order-panel" aria-labelledby="page-title">
         <header class="panel-header">
           <p class="eyebrow">Real-time monitoring</p>
           <h1 id="page-title">Order stream</h1>
@@ -303,6 +321,8 @@ export const orderWebSocketDashboard = `<!doctype html>
         </section>
         <p class="footnote">Each order or connection message appears as one row. New rows highlight briefly. Refresh status makes a one-time request. Your token stays in this tab and is not saved.</p>
       </section>
+      ${marketPricePanelMarkup}
+      </div>
     </main>
     <script>
       const tokenInput = document.querySelector("#token");
@@ -589,5 +609,6 @@ export const orderWebSocketDashboard = `<!doctype html>
       });
 
     </script>
+    <script>${marketPriceDashboardScript}</script>
   </body>
 </html>`;
