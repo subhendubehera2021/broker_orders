@@ -4,7 +4,11 @@
     <option name="autoReloadType" value="NONE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="ffd74a10-be5b-4153-97cc-11ff0acee5b5" name="Changes" comment="" />
+    <list default="true" id="ffd74a10-be5b-4153-97cc-11ff0acee5b5" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/service/swing-service.js" beforeDir="false" afterPath="$PROJECT_DIR$/src/service/swing-service.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/vercel-swing-api.test.js" beforeDir="false" afterPath="$PROJECT_DIR$/tests/vercel-swing-api.test.js" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -16,44 +20,44 @@
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
-  <component name="GitHubPullRequestSearchHistory"><![CDATA[{
-  "lastFilter": {
-    "state": "OPEN",
-    "assignee": "subhendubehera2021"
+  <component name="GitHubPullRequestSearchHistory">{
+  &quot;lastFilter&quot;: {
+    &quot;state&quot;: &quot;OPEN&quot;,
+    &quot;assignee&quot;: &quot;subhendubehera2021&quot;
   }
-}]]></component>
-  <component name="GithubPullRequestsUISettings"><![CDATA[{
-  "selectedUrlAndAccountId": {
-    "url": "https://github.com/subhendubehera2021/broker_orders.git",
-    "accountId": "f69b0b5d-1345-456b-8dac-da89ee06d017"
+}</component>
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;https://github.com/subhendubehera2021/broker_orders.git&quot;,
+    &quot;accountId&quot;: &quot;f69b0b5d-1345-456b-8dac-da89ee06d017&quot;
   }
-}]]></component>
-  <component name="ProjectColorInfo"><![CDATA[{
-  "customColor": "",
-  "associatedIndex": 7
-}]]></component>
+}</component>
+  <component name="ProjectColorInfo">{
+  &quot;customColor&quot;: &quot;&quot;,
+  &quot;associatedIndex&quot;: 7
+}</component>
   <component name="ProjectId" id="3MEXPzISuPqbKBZTHgmWjk4X3F2" />
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "CidrDebugProfileConversion": "true",
-    "ModuleVcsDetector.initialDetectionPerformed": "true",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "RunOnceActivity.cidr.known.project.marker": "true",
-    "RunOnceActivity.git.unshallow": "true",
-    "RunOnceActivity.readMode.enableVisualFormatting": "true",
-    "cf.first.check.clang-format": "false",
-    "cidr.known.project.marker": "true",
-    "dart.analysis.tool.window.visible": "false",
-    "git-widget-placeholder": "vercel-swing-api",
-    "kotlin-language-version-configured": "true",
-    "last_opened_file_path": "/Users/GJ/ss_brokers/broker_orders",
-    "show.migrate.to.gradle.popup": "false"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;CidrDebugProfileConversion&quot;: &quot;true&quot;,
+    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.cidr.known.project.marker&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.readMode.enableVisualFormatting&quot;: &quot;true&quot;,
+    &quot;cf.first.check.clang-format&quot;: &quot;false&quot;,
+    &quot;cidr.known.project.marker&quot;: &quot;true&quot;,
+    &quot;dart.analysis.tool.window.visible&quot;: &quot;false&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;vercel-swing-api&quot;,
+    &quot;kotlin-language-version-configured&quot;: &quot;true&quot;,
+    &quot;last_opened_file_path&quot;: &quot;/Users/GJ/ss_brokers/broker_orders&quot;,
+    &quot;show.migrate.to.gradle.popup&quot;: &quot;false&quot;
   }
-}]]></component>
+}</component>
   <component name="TaskManager">
     <task active="true" id="Default" summary="Default task">
       <changelist id="ffd74a10-be5b-4153-97cc-11ff0acee5b5" name="Changes" comment="" />
@@ -63,5 +67,9 @@
       <updated>1794916681098</updated>
     </task>
     <servers />
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="feat: integrate buy SL-limit order placement into swing service&#10;&#10;- Implemented buy SL-limit order client for submitting trade orders.&#10;- Integrated automatic order placement into the swing service workflow using instrument symbols, quantities, and swing levels as trigger prices.&#10;- Configured API app to pass order base URL, access token, and quantity parameters.&#10;- Updated tests to mock and verify order placement functionality." />
+    <option name="LAST_COMMIT_MESSAGE" value="feat: integrate buy SL-limit order placement into swing service&#10;&#10;- Implemented buy SL-limit order client for submitting trade orders.&#10;- Integrated automatic order placement into the swing service workflow using instrument symbols, quantities, and swing levels as trigger prices.&#10;- Configured API app to pass order base URL, access token, and quantity parameters.&#10;- Updated tests to mock and verify order placement functionality." />
   </component>
 </project>

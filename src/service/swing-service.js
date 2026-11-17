@@ -1,6 +1,6 @@
 import { fetchLiquiditySwings, recentIndiaDateRange } from "../liquidity-swing/index.js";
 import { fetchHighestVolumeNiftyOptions } from "../nifty-option-chain.js";
-import { placeBuySlLimitOrder } from "./buy-sl-limit-client.js";
+import { processSwingOrder } from "./swing-order-executor.js";
 
 function waitForRequestSlot() {
   return new Promise((resolve) => setTimeout(resolve, 1_000));
@@ -52,23 +52,15 @@ export async function processLiquiditySwing({
       { apiToken, baseUrl, ...dateRange },
     );
 
-    let orderResult = null;
-    if (placeOrder) {
-      try {
-        orderResult = await placeBuySlLimitOrder({
-          baseUrl: orderBaseUrl || "https://trade.brinto.in",
-          accessToken: orderAccessToken,
-          tradingSymbol: instrument.symbol,
-          quantity: orderQuantity,
-          ...(analysis.swing?.level != null ? { triggerPrice: String(analysis.swing.level) } : {}),
-        });
-      } catch (orderError) {
-        console.error(
-          `Failed to place BUY SL-Limit order for ${optionSide} (${instrument.symbol}):`,
-          orderError,
-        );
-      }
-    }
+    const orderResult = await processSwingOrder({
+      optionSide,
+      instrument,
+      analysis,
+      orderBaseUrl,
+      orderAccessToken,
+      orderQuantity,
+      placeOrder,
+    });
 
     analyses.push({
       optionSide,

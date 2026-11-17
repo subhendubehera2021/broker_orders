@@ -155,7 +155,7 @@ test("GET swing API selects highest-volume options, analyzes, then persists both
       pivotLookback: 5,
       bars: 0,
       swing: null,
-      orderResult: { stat: "Ok", nOrdNo: "order-123" },
+      orderResult: null,
     },
     {
       optionSide: "PUT",
@@ -166,7 +166,7 @@ test("GET swing API selects highest-volume options, analyzes, then persists both
       pivotLookback: 5,
       bars: 0,
       swing: null,
-      orderResult: { stat: "Ok", nOrdNo: "order-123" },
+      orderResult: null,
     },
   ]);
   assert.deepEqual(persistedAnalyses, result.analyses);
