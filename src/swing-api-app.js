@@ -133,7 +133,12 @@ export function registerSwingApiRoutes(
       createDbClient,
       persistAnalyses,
     }).catch((error) => {
-      console.error("[liquidity-swing-api] Background calculation failed", error);
+      console.error("[liquidity-swing-api] Background calculation failed with error details:", {
+        message: error.message,
+        code: error.code,
+        cause: error.cause,
+        stack: error.stack,
+      });
     });
 
     return reply.code(200).send({
