@@ -125,25 +125,22 @@ export function registerSwingApiRoutes(
     const credentials = getKotakCredentials(reply);
     if (!credentials) return;
 
-    // Process calculation in background (fire-and-forget)
-    processLiquiditySwing({
-      apiToken: credentials.apiToken,
-      baseUrl: credentials.baseUrl,
-      count: process.env.NIFTY_OPTION_CHAIN_COUNT,
-      createDbClient,
-      persistAnalyses,
-    }).catch((error) => {
-      console.error("[liquidity-swing-api] Background calculation failed with error details:", {
-        message: error.message,
-        code: error.code,
-        cause: error.cause,
-        stack: error.stack,
+    try {
+      const result = await processLiquiditySwing({
+        apiToken: credentials.apiToken,
+        baseUrl: credentials.baseUrl,
+        count: process.env.NIFTY_OPTION_CHAIN_COUNT,
+        createDbClient,
+        persistAnalyses,
       });
-    });
-
-    return reply.code(200).send({
-      status: "processing",
-      message: "Liquidity swing analysis started in the background",
-    });
+      return reply.code(200).send(result);
+    } catch (error) {
+      if (error.message?.includes("database") || error.code) {
+        console.error("[liquidity-swing-api] Turso write failed", error);
+        return reply.code(503).send({ error: "Unable to store swing analysis" });
+      }
+      console.error("[liquidity-swing-api] Option-chain or swing analysis failed", error);
+      return reply.code(502).send({ error: "Unable to fetch swing analysis" });
+    }
   });
 }

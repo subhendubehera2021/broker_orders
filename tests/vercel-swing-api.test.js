@@ -115,12 +115,6 @@ test("GET swing API selects highest-volume options, analyzes, then persists both
       url: "/api/liquidity-swing",
       headers: { authorization: "Bearer shared-secret" },
     });
-
-    // Wait until background task completes persistence
-    for (let i = 0; i < 50; i++) {
-      if (persistedAnalyses) break;
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    }
   } finally {
     globalThis.fetch = originalFetch;
     for (const [key, value] of Object.entries(previousEnv)) {
@@ -131,15 +125,24 @@ test("GET swing API selects highest-volume options, analyzes, then persists both
 
   const result = response.json();
   assert.equal(response.statusCode, 200);
-  assert.equal(result.status, "processing");
-  assert.equal(result.message, "Liquidity swing analysis started in the background");
-
-  // Wait briefly for background execution to complete and persist
-  await new Promise((resolve) => setTimeout(resolve, 150));
-  assert.ok(persistedAnalyses);
-  assert.equal(persistedAnalyses.length, 2);
+  assert.equal(result.scanId, "test-scan-id");
+  assert.equal(result.insertedRows, 2);
+  assert.deepEqual(result.selected, {
+    call: {
+      optionType: "CE",
+      symbol: "NIFTY-CE-HIGH",
+      token: "nse_fo|2",
+      volume: 900,
+    },
+    put: {
+      optionType: "PE",
+      symbol: "NIFTY-PE-HIGH",
+      token: "nse_fo|3",
+      volume: 1200,
+    },
+  });
   assert.deepEqual(requestedTokens, ["nse_fo|2", "nse_fo|3"]);
-  assert.deepEqual(persistedAnalyses, [
+  assert.deepEqual(result.analyses, [
     {
       optionSide: "CALL",
       symbol: "NIFTY-CE-HIGH",
@@ -161,6 +164,7 @@ test("GET swing API selects highest-volume options, analyzes, then persists both
       swing: null,
     },
   ]);
+  assert.deepEqual(persistedAnalyses, result.analyses);
 });
 
 test("GET option-chain API updates the latest CE and PE records", async () => {
