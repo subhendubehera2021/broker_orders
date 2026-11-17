@@ -4,6 +4,7 @@ import { KotakOrderStream } from "./order-websocket.js";
 
 const orderStreamPath = "/internal/order-stream/start";
 const orderStreamStatusPath = "/internal/order-stream/status";
+const orderStreamEventsPath = "/internal/order-stream/events";
 const orderStreamCron = "*/1 * * * *";
 
 function isAuthorized(request, secret) {
@@ -70,13 +71,14 @@ export default {
 
     const isStart = url.pathname === orderStreamPath && request.method === "POST";
     const isStatus = url.pathname === orderStreamStatusPath && request.method === "GET";
-    if (!isStart && !isStatus) return new Response("Not found", { status: 404 });
+    const isEvents = url.pathname === orderStreamEventsPath && request.method === "GET";
+    if (!isStart && !isStatus && !isEvents) return new Response("Not found", { status: 404 });
     if (!isAuthorized(request, env.ORDER_STREAM_CONTROL_TOKEN)) {
       return new Response("Unauthorized", { status: 401 });
     }
 
     if (isStart) return startOrderStream(env);
-    return callOrderStream(env, "/status", "GET");
+    return callOrderStream(env, isStatus ? "/status" : "/events", "GET");
   },
 
   async scheduled(controller, env) {

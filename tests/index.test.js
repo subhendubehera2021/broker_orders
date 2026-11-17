@@ -207,3 +207,37 @@ test("serves the dashboard and protects the status endpoint", async () => {
     { url: "https://order-stream.internal/status", options: { method: "GET" } },
   ]);
 });
+
+test("protects and proxies the live SSE endpoint", async () => {
+  const calls = [];
+  const env = {
+    ORDER_STREAM_CONTROL_TOKEN: "control-secret",
+    ORDER_STREAM: {
+      idFromName: () => "stable-order-stream-id",
+      get: () => ({
+        async fetch(url, options) {
+          calls.push({ url, options });
+          return new Response("event: status\ndata: {}\n\n", {
+            headers: { "Content-Type": "text/event-stream; charset=utf-8" },
+          });
+        },
+      }),
+    },
+  };
+  const unauthorized = await worker.fetch(
+    new Request("https://worker.example/internal/order-stream/events"),
+    env,
+  );
+  const response = await worker.fetch(
+    new Request("https://worker.example/internal/order-stream/events", {
+      headers: { Authorization: "Bearer control-secret" },
+    }),
+    env,
+  );
+
+  assert.equal(unauthorized.status, 401);
+  assert.match(response.headers.get("content-type"), /text\/event-stream/);
+  assert.deepEqual(calls, [
+    { url: "https://order-stream.internal/events", options: { method: "GET" } },
+  ]);
+});

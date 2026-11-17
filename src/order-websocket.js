@@ -1,6 +1,16 @@
 const CONNECTION_REFRESH_MS = 12 * 60 * 1000;
 const INITIAL_RETRY_MS = 15 * 1000;
 const MAX_RETRY_MS = 5 * 60 * 1000;
+const SSE_HEARTBEAT_MS = 15 * 1000;
+const MAX_SSE_CLIENTS = 10;
+const MAX_SSE_BACKLOG = 100;
+const MAX_RECENT_STREAM_EVENTS = 50;
+const MAX_STREAM_PREVIEW_LENGTH = 16_384;
+const utf8Encoder = new TextEncoder();
+
+function encodeSseEvent(name, data) {
+  return utf8Encoder.encode(`event: ${name}\ndata: ${JSON.stringify(data)}\n\n`);
+}
 
 function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -76,6 +86,9 @@ export class KotakOrderStream {
     this.connectionState = "disconnected";
     this.lastMessageAt = null;
     this.lastMessageType = null;
+    this.recentEvents = [];
+    this.eventSequence = 0;
+    this.sseClients = new Set();
     this.retryScheduled = false;
     this.retryAttempt = 0;
   }
@@ -86,6 +99,9 @@ export class KotakOrderStream {
       return Response.json(this.getStatus(), {
         headers: { "Cache-Control": "no-store" },
       });
+    }
+    if (request.method === "GET" && url.pathname === "/events") {
+      return this.createEventStream();
     }
     if (request.method !== "POST" || url.pathname !== "/start") {
       return new Response("Not found", { status: 404 });
@@ -126,6 +142,67 @@ export class KotakOrderStream {
     };
   }
 
+  createEventStream() {
+    if (this.sseClients.size >= MAX_SSE_CLIENTS) {
+      return Response.json(
+        { error: "Too many live dashboard connections" },
+        { status: 503, headers: { "Cache-Control": "no-store" } },
+      );
+    }
+
+    let client;
+    const body = new ReadableStream({
+      start: (controller) => {
+        client = { controller, heartbeat: null };
+        this.sseClients.add(client);
+        this.sendToEventClient(client, encodeSseEvent("status", this.getStatus()));
+        for (const event of this.recentEvents) {
+          this.sendToEventClient(client, encodeSseEvent("stream", event));
+        }
+        client.heartbeat = setInterval(() => {
+          this.sendToEventClient(client, utf8Encoder.encode(": keep-alive\n\n"));
+        }, SSE_HEARTBEAT_MS);
+      },
+      cancel: () => this.removeEventClient(client),
+    });
+
+    return new Response(body, {
+      headers: {
+        "Cache-Control": "no-cache, no-transform",
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "X-Accel-Buffering": "no",
+      },
+    });
+  }
+
+  removeEventClient(client) {
+    if (!client || !this.sseClients.delete(client)) return;
+    if (client.heartbeat !== null) clearInterval(client.heartbeat);
+  }
+
+  publishEvent(name, data) {
+    for (const client of this.sseClients) {
+      this.sendToEventClient(client, encodeSseEvent(name, data));
+    }
+  }
+
+  sendToEventClient(client, chunk) {
+    try {
+      if (client.controller.desiredSize < -MAX_SSE_BACKLOG) {
+        this.removeEventClient(client);
+        client.controller.error(new Error("SSE client is not keeping up"));
+        return;
+      }
+      client.controller.enqueue(chunk);
+    } catch {
+      this.removeEventClient(client);
+    }
+  }
+
+  publishStatus() {
+    this.publishEvent("status", this.getStatus());
+  }
+
   async connect() {
     if (typeof this.WebSocketImpl !== "function") {
       throw new Error("The Cloudflare WebSocket client is unavailable");
@@ -141,6 +218,7 @@ export class KotakOrderStream {
     this.socket = socket;
     this.authenticated = false;
     this.connectionState = "connecting";
+    this.publishStatus();
 
     socket.addEventListener("open", () => {
       try {
@@ -154,6 +232,7 @@ export class KotakOrderStream {
     socket.addEventListener("error", () => {
       if (this.socket !== socket) return;
       this.connectionState = "reconnecting";
+      this.publishStatus();
       console.error("[order-websocket] Kotak WebSocket error");
       socket.close(1011, "Kotak WebSocket error");
     });
@@ -163,7 +242,9 @@ export class KotakOrderStream {
       await this.ctx.storage.setAlarm(Date.now() + CONNECTION_REFRESH_MS);
     } catch (error) {
       this.socket = null;
+      this.connectionState = "disconnected";
       socket.close(1011, "Unable to schedule connection refresh");
+      this.publishStatus();
       throw error;
     }
     console.log(`[order-websocket] connecting host=${new URL(url).hostname}`);
@@ -177,7 +258,18 @@ export class KotakOrderStream {
     this.lastMessageAt = new Date().toISOString();
     this.lastMessageType =
       isRecord(message) && typeof message.type === "string" ? message.type : "unparsed";
+    const streamEvent = {
+      id: `${this.lastMessageAt}:${++this.eventSequence}`,
+      receivedAt: this.lastMessageAt,
+      type: this.lastMessageType,
+      data: rawData.slice(0, MAX_STREAM_PREVIEW_LENGTH),
+      truncated: rawData.length > MAX_STREAM_PREVIEW_LENGTH,
+    };
+    this.recentEvents.push(streamEvent);
+    if (this.recentEvents.length > MAX_RECENT_STREAM_EVENTS) this.recentEvents.shift();
     if (!isRecord(message)) {
+      this.publishStatus();
+      this.publishEvent("stream", streamEvent);
       console.warn("[order-websocket] ignored malformed message");
       return;
     }
@@ -194,8 +286,9 @@ export class KotakOrderStream {
         console.error("[order-websocket] Kotak rejected WebSocket authentication");
         socket.close(4001, "Kotak authentication rejected");
       }
-      return;
     }
+    this.publishStatus();
+    this.publishEvent("stream", streamEvent);
   }
 
   onClose(socket, event) {
@@ -220,6 +313,7 @@ export class KotakOrderStream {
       alarm.catch((error) => console.error("[order-websocket] unable to schedule reconnect", error));
     }
     console.warn(`[order-websocket] reconnect scheduled delayMs=${delay}`);
+    this.publishStatus();
   }
 
   async alarm() {

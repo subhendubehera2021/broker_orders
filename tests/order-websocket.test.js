@@ -222,3 +222,37 @@ test("serves live status without opening a new socket", async () => {
   });
   assert.equal(FakeWebSocket.instances.length, 0);
 });
+
+test("streams status and broker frames over SSE and cleans up disconnected clients", async () => {
+  FakeWebSocket.instances = [];
+  const { stream } = createStream();
+  await stream.start();
+  const socket = FakeWebSocket.instances[0];
+  socket.receive(JSON.stringify({ type: "order", data: { orderId: "before-sse" } }));
+
+  const response = await stream.fetch(new Request("https://order-stream.internal/events"));
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type"), /text\/event-stream/);
+  assert.equal(response.headers.get("cache-control"), "no-cache, no-transform");
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  const readEvent = async () => decoder.decode((await reader.read()).value);
+  assert.match(await readEvent(), /event: status\ndata: .*"state":"connecting"/);
+  const replay = JSON.parse((await readEvent()).match(/data: (.*)\n\n/)[1]);
+  assert.equal(replay.type, "order");
+  assert.deepEqual(JSON.parse(replay.data), { type: "order", data: { orderId: "before-sse" } });
+
+  socket.receive(JSON.stringify({ type: "cn", ak: "ok" }));
+  assert.match(await readEvent(), /event: status\ndata: .*"state":"connected"/);
+  assert.match(await readEvent(), /event: stream\ndata: .*"type":"cn"/);
+
+  socket.receive(JSON.stringify({ type: "order", data: { orderId: "test-order" } }));
+  assert.match(await readEvent(), /event: status\ndata: .*"lastMessageType":"order"/);
+  const frame = JSON.parse((await readEvent()).match(/data: (.*)\n\n/)[1]);
+  assert.equal(frame.type, "order");
+  assert.deepEqual(JSON.parse(frame.data), { type: "order", data: { orderId: "test-order" } });
+
+  await reader.cancel();
+  assert.equal(stream.sseClients.size, 0);
+});

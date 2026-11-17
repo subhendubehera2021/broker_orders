@@ -36,7 +36,7 @@ export const orderWebSocketDashboard = `<!doctype html>
           #080e18;
       }
 
-      .dashboard { width: min(100%, 496px); }
+      .dashboard { width: min(100%, 680px); }
       .brand {
         display: flex;
         align-items: center;
@@ -191,6 +191,27 @@ export const orderWebSocketDashboard = `<!doctype html>
       #message { min-height: 18px; margin: 12px 0 0; color: #b7c5d8; font-size: 11px; }
       #message[data-error="true"] { color: #ff9a9a; }
       .footnote { margin: 0; padding: 0 26px 20px; color: #748198; font-size: 10px; }
+      .stream { padding: 0 14px 18px; }
+      .stream-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 0 2px 9px; }
+      .stream-title { margin: 0; font-size: 12px; font-weight: 700; }
+      .stream-status, .stream-count { color: var(--muted); font-size: 10px; }
+      .event-list {
+        max-height: 340px;
+        overflow: auto;
+        border: 1px solid var(--line);
+        border-radius: 11px;
+        background: rgba(7, 13, 22, .3);
+        scrollbar-color: #3b4658 transparent;
+        scrollbar-width: thin;
+      }
+      .event-empty { margin: 0; padding: 20px 14px; color: var(--muted); font-size: 11px; text-align: center; }
+      .event { padding: 12px; }
+      .event + .event { border-top: 1px solid var(--line); }
+      .event-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+      .event-type { overflow: hidden; color: var(--accent-hover); font-size: 10px; font-weight: 750; letter-spacing: .08em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+      .event-time { flex: 0 0 auto; color: var(--muted); font-size: 10px; }
+      .event-data { overflow: auto; margin: 0; color: #c6d2e2; font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+      .event-truncated { margin: 7px 0 0; color: #e8b56e; font-size: 10px; }
 
       @keyframes pulse { 0% { transform: scale(.65); opacity: .8; } 100% { transform: scale(1.7); opacity: 0; } }
       @keyframes blink { 50% { opacity: .38; } }
@@ -247,7 +268,17 @@ export const orderWebSocketDashboard = `<!doctype html>
           </div>
           <p id="message" role="status" aria-live="polite"></p>
         </section>
-        <p class="footnote">Status refreshes automatically. Your token stays in this tab and is not saved.</p>
+        <section class="stream" aria-labelledby="stream-title">
+          <div class="stream-heading">
+            <h2 class="stream-title" id="stream-title">Live stream data</h2>
+            <span class="stream-status" id="stream-status">Offline</span>
+            <span class="stream-count" id="event-count">0 frames</span>
+          </div>
+          <div class="event-list" id="event-list" aria-live="polite">
+            <p class="event-empty">Connect to view incoming order and position frames.</p>
+          </div>
+        </section>
+        <p class="footnote">Live status and the latest 50 in-memory frames arrive over SSE after connecting. History clears if the stream instance restarts. Refresh status makes a one-time request. Your token stays in this tab and is not saved.</p>
       </section>
     </main>
     <script>
@@ -256,6 +287,12 @@ export const orderWebSocketDashboard = `<!doctype html>
       const indicator = document.querySelector("#indicator");
       const messageOutput = document.querySelector("#message");
       const connectButton = document.querySelector("#connect");
+      const eventList = document.querySelector("#event-list");
+      const eventCount = document.querySelector("#event-count");
+      const streamStatus = document.querySelector("#stream-status");
+      const seenEventIds = new Set();
+      let streamController = null;
+      let streamToken = null;
 
       async function request(path, method = "GET") {
         const token = tokenInput.value.trim();
@@ -285,6 +322,150 @@ export const orderWebSocketDashboard = `<!doctype html>
         document.querySelector("#last-message").textContent = formatTimestamp(status.lastMessageAt);
       }
 
+      function renderStreamEvent(event) {
+        const eventId = event.id || event.receivedAt + ":" + event.type;
+        if (seenEventIds.has(eventId)) return;
+        seenEventIds.add(eventId);
+        const article = document.createElement("article");
+        article.className = "event";
+        article.dataset.eventId = eventId;
+        const header = document.createElement("div");
+        header.className = "event-header";
+        const type = document.createElement("span");
+        type.className = "event-type";
+        type.textContent = event.type || "unknown";
+        const time = document.createElement("time");
+        time.className = "event-time";
+        time.dateTime = event.receivedAt || "";
+        time.textContent = formatTimestamp(event.receivedAt);
+        const data = document.createElement("pre");
+        data.className = "event-data";
+        try {
+          data.textContent = JSON.stringify(JSON.parse(event.data), null, 2);
+        } catch {
+          data.textContent = event.data;
+        }
+        header.append(type, time);
+        article.append(header, data);
+        if (event.truncated) {
+          const notice = document.createElement("p");
+          notice.className = "event-truncated";
+          notice.textContent = "Frame preview truncated at 16,384 characters.";
+          article.append(notice);
+        }
+        eventList.querySelector(".event-empty")?.remove();
+        eventList.prepend(article);
+        while (eventList.children.length > 50) {
+          const oldest = eventList.lastElementChild;
+          seenEventIds.delete(oldest.dataset.eventId);
+          oldest.remove();
+        }
+        const frameCount = eventList.querySelectorAll(".event").length;
+        eventCount.textContent = frameCount + (frameCount === 1 ? " frame" : " frames");
+      }
+
+      function dispatchSseFrame(frame) {
+        let name = "message";
+        const dataLines = [];
+        for (const line of frame.split(/\\r?\\n/)) {
+          if (!line || line.startsWith(":")) continue;
+          const separator = line.indexOf(":");
+          const field = separator < 0 ? line : line.slice(0, separator);
+          let value = separator < 0 ? "" : line.slice(separator + 1);
+          if (value.startsWith(" ")) value = value.slice(1);
+          if (field === "event") name = value;
+          if (field === "data") dataLines.push(value);
+        }
+        if (!dataLines.length) return;
+        let data;
+        try {
+          data = JSON.parse(dataLines.join("\\n"));
+        } catch {
+          return;
+        }
+        if (name === "status") renderStatus(data);
+        if (name === "stream") renderStreamEvent(data);
+      }
+
+      async function readEventStream(body, signal) {
+        const reader = body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        try {
+          while (!signal.aborted) {
+            const { value, done } = await reader.read();
+            buffer += decoder.decode(value, { stream: !done });
+            let boundary = buffer.indexOf("\\n\\n");
+            while (boundary !== -1) {
+              dispatchSseFrame(buffer.slice(0, boundary));
+              buffer = buffer.slice(boundary + 2);
+              boundary = buffer.indexOf("\\n\\n");
+            }
+            if (done) break;
+          }
+        } finally {
+          reader.releaseLock();
+        }
+      }
+
+      function retryDelay(milliseconds, signal) {
+        return new Promise((resolve) => {
+          const finish = () => {
+            clearTimeout(timer);
+            signal.removeEventListener("abort", finish);
+            resolve();
+          };
+          const timer = setTimeout(finish, milliseconds);
+          signal.addEventListener("abort", finish, { once: true });
+        });
+      }
+
+      async function runEventStream(token, signal) {
+        let delay = 1000;
+        while (!signal.aborted) {
+          try {
+            const response = await fetch("/internal/order-stream/events", {
+              headers: { Authorization: "Bearer " + token },
+              signal
+            });
+            if (!response.ok) {
+              const result = await response.json().catch(() => ({}));
+              throw new Error(result.error || "Live stream request failed: " + response.status);
+            }
+            if (!response.body) throw new Error("Streaming response is unavailable.");
+            streamStatus.textContent = "Live";
+            messageOutput.textContent = "";
+            messageOutput.dataset.error = "false";
+            await readEventStream(response.body, signal);
+            if (!signal.aborted) throw new Error("Live stream ended.");
+          } catch (error) {
+            if (signal.aborted) return;
+            streamStatus.textContent = "Reconnecting";
+            messageOutput.textContent = "Live updates reconnecting: " + error.message;
+            messageOutput.dataset.error = "false";
+          }
+          await retryDelay(delay, signal);
+          delay = Math.min(delay * 2, 15000);
+        }
+      }
+
+      function startEventStream() {
+        const token = tokenInput.value.trim();
+        if (!token) throw new Error("Enter the Worker control token first.");
+        if (streamController && streamToken === token) return;
+        streamController?.abort();
+        const controller = new AbortController();
+        streamController = controller;
+        streamToken = token;
+        streamStatus.textContent = "Connecting";
+        void runEventStream(token, controller.signal).finally(() => {
+          if (streamController !== controller) return;
+          streamController = null;
+          streamToken = null;
+          streamStatus.textContent = "Offline";
+        });
+      }
+
       async function checkStatus() {
         renderStatus(await request("/internal/order-stream/status"));
         messageOutput.textContent = "";
@@ -306,8 +487,8 @@ export const orderWebSocketDashboard = `<!doctype html>
         messageOutput.dataset.error = "false";
         try {
           await request("/internal/order-stream/start", "POST");
-          await checkStatus();
-          messageOutput.textContent = "Connection request sent.";
+          startEventStream();
+          messageOutput.textContent = "Connection requested. Waiting for live updates.";
         } catch (error) {
           showError(error);
         } finally {
@@ -319,16 +500,19 @@ export const orderWebSocketDashboard = `<!doctype html>
       document.querySelector("#refresh").addEventListener("click", async () => {
         try {
           await checkStatus();
+          startEventStream();
         } catch (error) {
           showError(error);
         }
       });
 
-      setInterval(() => {
-        if (tokenInput.value.trim()) {
-          checkStatus().catch(showError);
+      tokenInput.addEventListener("change", () => {
+        if (streamToken && streamToken !== tokenInput.value.trim()) {
+          streamController?.abort();
+          streamStatus.textContent = "Offline";
         }
-      }, 5000);
+      });
+
     </script>
   </body>
 </html>`;

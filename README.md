@@ -19,7 +19,7 @@ The local Worker uses `.dev.vars` for the Vercel API and WebSocket credentials. 
 curl "http://localhost:8787/__scheduled?cron=*+*+*+*+*"
 ```
 
-Open `http://localhost:8787/` for the WebSocket dashboard. Enter the `ORDER_STREAM_CONTROL_TOKEN`, then use **Connect** or **Check status**. The page polls status every five seconds and keeps the token only in the current tab.
+Open `http://localhost:8787/` for the WebSocket dashboard. Enter the `ORDER_STREAM_CONTROL_TOKEN` and select **Connect** to receive live status and broker frames over an authenticated Server-Sent Events (SSE) connection. The SSE feed replays up to the latest 50 in-memory frames on connection and then pushes new ones. Frame previews are capped at 16,384 characters each. **Refresh status** makes a one-time status request. The page keeps the token only in the current tab.
 
 The same protected controls are available as HTTP endpoints:
 
@@ -28,6 +28,9 @@ curl -X POST http://localhost:8787/internal/order-stream/start \
   -H "Authorization: Bearer your-order-stream-control-token"
 
 curl http://localhost:8787/internal/order-stream/status \
+  -H "Authorization: Bearer your-order-stream-control-token"
+
+curl -N http://localhost:8787/internal/order-stream/events \
   -H "Authorization: Bearer your-order-stream-control-token"
 ```
 
@@ -70,4 +73,4 @@ View deployed Worker logs with:
 npm run tail
 ```
 
-The dashboard is available at the Worker root URL. Enter the `ORDER_STREAM_CONTROL_TOKEN` to connect or inspect the stream; the status endpoint returns connection/authentication state and the last received message metadata. The token is not stored by the page. The Durable Object binding and first SQLite migration are configured in `wrangler.jsonc`. The existing cron expression remains `* * * * *` and retains its Vercel API call. A separate `*/1 * * * *` trigger starts/checks the order stream automatically (within one minute). Its Durable Object handles refresh and reconnect alarms independently.
+The dashboard is available at the Worker root URL. Enter the `ORDER_STREAM_CONTROL_TOKEN` to connect or inspect the stream; the status endpoint returns connection/authentication state and the last received message metadata, while the authenticated SSE endpoint pushes live status changes and broker frames. The token is not stored by the page or included in the stream URL. The Durable Object binding and first SQLite migration are configured in `wrangler.jsonc`. The existing cron expression remains `* * * * *` and retains its Vercel API call. A separate `*/1 * * * *` trigger starts/checks the order stream automatically (within one minute). Its Durable Object handles refresh and reconnect alarms independently.
