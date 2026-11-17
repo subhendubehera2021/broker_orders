@@ -559,7 +559,7 @@ describe("app routes", () => {
       quantity: "25",
       product: "MIS",
       orderType: "SL",
-      price: "105.20",
+      price: "105.10",
       validity: "DAY",
       amo: "NO",
       disclosedQuantity: "0",

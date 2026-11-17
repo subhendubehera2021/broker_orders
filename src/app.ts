@@ -539,9 +539,9 @@ export function buildApp({
       {
         schema: {
           tags: ["Orders"],
-          summary: "Place a simplified BUY SL-Limit order with auto 0.20 price difference and auto-AMO",
+          summary: "Place a simplified BUY SL-Limit order with auto 0.10 price difference and auto-AMO",
           description:
-            "Places a BUY Stop-Limit (SL) order with minimal required body parameters (tradingSymbol, quantity, and either triggerPrice or price). Automatically computes a 0.20 difference between limit price and trigger price, and auto-detects After Market Orders (AMO: YES) outside regular Indian market hours (3:30 PM – 9:00 AM IST and weekends).",
+            "Places a BUY Stop-Limit (SL) order with minimal required body parameters (tradingSymbol, quantity, and either triggerPrice or price). Automatically computes a 0.10 difference between limit price and trigger price, and auto-detects After Market Orders (AMO: YES) outside regular Indian market hours (3:30 PM – 9:00 AM IST and weekends).",
           body: {
             type: "object",
             required: ["tradingSymbol", "quantity"],
@@ -592,10 +592,10 @@ export function buildApp({
 
         if (body.triggerPrice !== undefined && Number(body.triggerPrice) > 0) {
           triggerNum = Number(body.triggerPrice);
-          priceNum = Math.round((triggerNum + 0.20) * 100) / 100;
+          priceNum = Math.round((triggerNum + 0.10) * 100) / 100;
         } else if (body.price !== undefined && Number(body.price) > 0) {
           priceNum = Number(body.price);
-          triggerNum = Math.round((priceNum - 0.20) * 100) / 100;
+          triggerNum = Math.round((priceNum - 0.10) * 100) / 100;
         } else {
           return reply.code(400).send({
             error: "Provide either triggerPrice or price for the BUY SL-Limit order",
