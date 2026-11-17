@@ -194,24 +194,24 @@ export const orderWebSocketDashboard = `<!doctype html>
       .stream { padding: 0 14px 18px; }
       .stream-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 0 2px 9px; }
       .stream-title { margin: 0; font-size: 12px; font-weight: 700; }
-      .stream-status, .stream-count { color: var(--muted); font-size: 10px; }
-      .event-list {
-        max-height: 340px;
-        overflow: auto;
-        border: 1px solid var(--line);
-        border-radius: 11px;
-        background: rgba(7, 13, 22, .3);
-        scrollbar-color: #3b4658 transparent;
-        scrollbar-width: thin;
-      }
-      .event-empty { margin: 0; padding: 20px 14px; color: var(--muted); font-size: 11px; text-align: center; }
-      .event { padding: 12px; }
-      .event + .event { border-top: 1px solid var(--line); }
-      .event-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
-      .event-type { overflow: hidden; color: var(--accent-hover); font-size: 10px; font-weight: 750; letter-spacing: .08em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
-      .event-time { flex: 0 0 auto; color: var(--muted); font-size: 10px; }
-      .event-data { overflow: auto; margin: 0; color: #c6d2e2; font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
-      .event-truncated { margin: 7px 0 0; color: #e8b56e; font-size: 10px; }
+      .stream-status, .stream-count, .table-updated-at { color: var(--muted); font-size: 10px; }
+      .message-tables { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+      .data-card { min-width: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 11px; background: rgba(7, 13, 22, .3); }
+      .data-card.table-updated { animation: table-flash 1s ease-out; }
+      .data-card-header { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 12px; border-bottom: 1px solid var(--line); }
+      .data-card-title { margin: 0; color: #dce5f2; font-size: 11px; font-weight: 700; }
+      .data-table-scroll { max-height: 360px; overflow: auto; scrollbar-color: #3b4658 transparent; scrollbar-width: thin; }
+      .data-table { width: max-content; min-width: 100%; border-collapse: collapse; }
+      .data-table th { position: sticky; top: 0; z-index: 1; padding: 8px 10px; color: var(--muted); background: #111a28; font-size: 9px; font-weight: 700; letter-spacing: .09em; text-align: left; text-transform: uppercase; white-space: nowrap; }
+      .data-table td { max-width: 240px; padding: 7px 10px; border-top: 1px solid rgba(165, 187, 217, .08); color: #c6d2e2; font-size: 10px; vertical-align: top; overflow-wrap: anywhere; }
+      .data-table th:first-child { left: 0; z-index: 2; }
+      .data-table td:first-child { position: sticky; left: 0; z-index: 1; color: #9eacc0; background: #111a28; font-weight: 650; white-space: nowrap; }
+      .data-table tr.record-latest td { background: rgba(242, 140, 40, .12); }
+      .data-table tr.record-latest td:first-child { background: rgba(242, 140, 40, .22); }
+      .data-table tr.record-new td { animation: value-flash 1.1s ease-out; }
+      .table-empty { padding: 18px 10px !important; color: var(--muted) !important; text-align: center; }
+      @keyframes table-flash { 0% { border-color: rgba(242, 140, 40, .9); box-shadow: 0 0 0 3px rgba(242, 140, 40, .15); } 100% { border-color: var(--line); box-shadow: none; } }
+      @keyframes value-flash { 0% { background: rgba(242, 140, 40, .28); } 100% { background: transparent; } }
 
       @keyframes pulse { 0% { transform: scale(.65); opacity: .8; } 100% { transform: scale(1.7); opacity: 0; } }
       @keyframes blink { 50% { opacity: .38; } }
@@ -270,15 +270,38 @@ export const orderWebSocketDashboard = `<!doctype html>
         </section>
         <section class="stream" aria-labelledby="stream-title">
           <div class="stream-heading">
-            <h2 class="stream-title" id="stream-title">Live stream data</h2>
+            <h2 class="stream-title" id="stream-title">Live stream tables</h2>
             <span class="stream-status" id="stream-status">Offline</span>
             <span class="stream-count" id="event-count">0 frames</span>
           </div>
-          <div class="event-list" id="event-list" aria-live="polite">
-            <p class="event-empty">Connect to view incoming order and position frames.</p>
+          <div class="message-tables">
+            <section class="data-card" id="order-card" aria-labelledby="order-table-title">
+              <header class="data-card-header">
+                <h3 class="data-card-title" id="order-table-title">Order update</h3>
+                <time class="table-updated-at" id="order-updated-at">Waiting for order data</time>
+              </header>
+              <div class="data-table-scroll">
+                <table class="data-table" aria-label="Latest order update fields">
+                  <thead id="order-table-head"><tr><th scope="col">Received</th></tr></thead>
+                  <tbody id="order-table-body"><tr><td class="table-empty" colspan="1">No order updates yet</td></tr></tbody>
+                </table>
+              </div>
+            </section>
+            <section class="data-card" id="connection-card" aria-labelledby="connection-table-title">
+              <header class="data-card-header">
+                <h3 class="data-card-title" id="connection-table-title">Connection acknowledgement</h3>
+                <time class="table-updated-at" id="connection-updated-at">Waiting for acknowledgement</time>
+              </header>
+              <div class="data-table-scroll">
+                <table class="data-table" aria-label="Latest connection acknowledgement fields">
+                  <thead id="connection-table-head"><tr><th scope="col">Received</th></tr></thead>
+                  <tbody id="connection-table-body"><tr><td class="table-empty" colspan="1">No acknowledgement yet</td></tr></tbody>
+                </table>
+              </div>
+            </section>
           </div>
         </section>
-        <p class="footnote">Live status and the latest 50 in-memory frames arrive over SSE after connecting. History clears if the stream instance restarts. Refresh status makes a one-time request. Your token stays in this tab and is not saved.</p>
+        <p class="footnote">Each order or connection message appears as one row. New rows highlight briefly. Refresh status makes a one-time request. Your token stays in this tab and is not saved.</p>
       </section>
     </main>
     <script>
@@ -287,12 +310,31 @@ export const orderWebSocketDashboard = `<!doctype html>
       const indicator = document.querySelector("#indicator");
       const messageOutput = document.querySelector("#message");
       const connectButton = document.querySelector("#connect");
-      const eventList = document.querySelector("#event-list");
       const eventCount = document.querySelector("#event-count");
       const streamStatus = document.querySelector("#stream-status");
       const seenEventIds = new Set();
+      const eventIdOrder = [];
+      let receivedFrameCount = 0;
       let streamController = null;
       let streamToken = null;
+      const tables = {
+        order: {
+          head: document.querySelector("#order-table-head"),
+          body: document.querySelector("#order-table-body"),
+          card: document.querySelector("#order-card"),
+          updatedAt: document.querySelector("#order-updated-at"),
+          columns: [],
+          records: []
+        },
+        connection: {
+          head: document.querySelector("#connection-table-head"),
+          body: document.querySelector("#connection-table-body"),
+          card: document.querySelector("#connection-card"),
+          updatedAt: document.querySelector("#connection-updated-at"),
+          columns: [],
+          records: []
+        }
+      };
 
       async function request(path, method = "GET") {
         const token = tokenInput.value.trim();
@@ -326,42 +368,75 @@ export const orderWebSocketDashboard = `<!doctype html>
         const eventId = event.id || event.receivedAt + ":" + event.type;
         if (seenEventIds.has(eventId)) return;
         seenEventIds.add(eventId);
-        const article = document.createElement("article");
-        article.className = "event";
-        article.dataset.eventId = eventId;
-        const header = document.createElement("div");
-        header.className = "event-header";
-        const type = document.createElement("span");
-        type.className = "event-type";
-        type.textContent = event.type || "unknown";
-        const time = document.createElement("time");
-        time.className = "event-time";
-        time.dateTime = event.receivedAt || "";
-        time.textContent = formatTimestamp(event.receivedAt);
-        const data = document.createElement("pre");
-        data.className = "event-data";
+        eventIdOrder.push(eventId);
+        if (eventIdOrder.length > 100) seenEventIds.delete(eventIdOrder.shift());
+        receivedFrameCount += 1;
+        eventCount.textContent = receivedFrameCount + (receivedFrameCount === 1 ? " frame" : " frames");
+
+        let frame;
         try {
-          data.textContent = JSON.stringify(JSON.parse(event.data), null, 2);
+          frame = JSON.parse(event.data);
         } catch {
-          data.textContent = event.data;
+          return;
         }
-        header.append(type, time);
-        article.append(header, data);
-        if (event.truncated) {
-          const notice = document.createElement("p");
-          notice.className = "event-truncated";
-          notice.textContent = "Frame preview truncated at 16,384 characters.";
-          article.append(notice);
+        if (!frame || typeof frame !== "object" || Array.isArray(frame)) return;
+
+        if (event.type === "order" && frame.data && typeof frame.data === "object" && !Array.isArray(frame.data)) {
+          appendRecord(tables.order, frame.data, event.receivedAt, eventId);
+        } else if (event.type === "cn") {
+          appendRecord(tables.connection, frame, event.receivedAt, eventId);
         }
-        eventList.querySelector(".event-empty")?.remove();
-        eventList.prepend(article);
-        while (eventList.children.length > 50) {
-          const oldest = eventList.lastElementChild;
-          seenEventIds.delete(oldest.dataset.eventId);
-          oldest.remove();
+      }
+
+      function displayValue(value) {
+        if (value === null) return "null";
+        if (typeof value === "object") return JSON.stringify(value);
+        return String(value);
+      }
+
+      function appendRecord(table, values, receivedAt, eventId) {
+        for (const field of Object.keys(values)) {
+          if (!table.columns.includes(field)) table.columns.push(field);
         }
-        const frameCount = eventList.querySelectorAll(".event").length;
-        eventCount.textContent = frameCount + (frameCount === 1 ? " frame" : " frames");
+        table.records.unshift({ eventId, receivedAt, values });
+        if (table.records.length > 50) table.records.pop();
+
+        const header = document.createElement("tr");
+        const timeHeader = document.createElement("th");
+        timeHeader.scope = "col";
+        timeHeader.textContent = "Received";
+        header.append(timeHeader);
+        for (const field of table.columns) {
+          const cell = document.createElement("th");
+          cell.scope = "col";
+          cell.textContent = field;
+          header.append(cell);
+        }
+        table.head.replaceChildren(header);
+
+        const fragment = document.createDocumentFragment();
+        table.records.forEach((record, index) => {
+          const row = document.createElement("tr");
+          row.className = index === 0 ? "record-latest" : "";
+          if (record.eventId === eventId) row.classList.add("record-new");
+          const time = document.createElement("td");
+          time.textContent = formatTimestamp(record.receivedAt);
+          row.append(time);
+          for (const field of table.columns) {
+            const cell = document.createElement("td");
+            cell.textContent = Object.prototype.hasOwnProperty.call(record.values, field)
+              ? displayValue(record.values[field])
+              : "";
+            row.append(cell);
+          }
+          fragment.append(row);
+        });
+        table.body.replaceChildren(fragment);
+        table.updatedAt.dateTime = receivedAt || "";
+        table.updatedAt.textContent = formatTimestamp(receivedAt);
+        table.card.classList.remove("table-updated");
+        void table.card.offsetWidth;
+        table.card.classList.add("table-updated");
       }
 
       function dispatchSseFrame(frame) {

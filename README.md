@@ -19,7 +19,7 @@ The local Worker uses `.dev.vars` for the Vercel API and WebSocket credentials. 
 curl "http://localhost:8787/__scheduled?cron=*+*+*+*+*"
 ```
 
-Open `http://localhost:8787/` for the WebSocket dashboard. Enter the `ORDER_STREAM_CONTROL_TOKEN` and select **Connect** to receive live status and broker frames over an authenticated Server-Sent Events (SSE) connection. The SSE feed replays up to the latest 50 in-memory frames on connection and then pushes new ones. Frame previews are capped at 16,384 characters each. **Refresh status** makes a one-time status request. The page keeps the token only in the current tab.
+Open `http://localhost:8787/` for the WebSocket dashboard. Enter the `ORDER_STREAM_CONTROL_TOKEN` and select **Connect** to receive live status and broker frames over an authenticated Server-Sent Events (SSE) connection. The page displays each order message and connection acknowledgement as a row in separate tables, keeps the newest row at the top highlighted, replays up to the latest 50 in-memory frames on connection, and then pushes new ones. Frame previews are capped at 16,384 characters each. **Refresh status** makes a one-time status request. The page keeps the token only in the current tab.
 
 The same protected controls are available as HTTP endpoints:
 
