@@ -35,6 +35,7 @@ describe("loadConfig", () => {
     assert.deepEqual(loadConfig(validEnvironment), {
       host: "127.0.0.1",
       port: 3000,
+      apiKey: "SKB9178",
       openOrderPriceStep: 1,
       autoSellStopLossRupees: 5,
       webAccessPasscode: "SKB9178",

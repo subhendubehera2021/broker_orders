@@ -25,6 +25,7 @@ export interface KotakNeoConfig {
 export interface AppConfig {
   host: string;
   port: number;
+  apiKey: string;
   webAccessPasscode: string;
   openOrderPriceStep: number;
   autoSellStopLossRupees: number;
@@ -106,9 +107,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     "KOTAK_NEO_QUOTES_PATH",
   );
 
+  const apiKey = env.API_KEY?.trim() || env.X_API_KEY?.trim() || webAccessPasscode;
+
   return {
     host: requiredValue(env.HOST, "HOST"),
     port,
+    apiKey,
     webAccessPasscode,
     openOrderPriceStep,
     autoSellStopLossRupees,

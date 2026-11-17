@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { timingSafeEqual } from "node:crypto";
 import Fastify, { LogController, type FastifyInstance } from "fastify";
 import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
@@ -174,6 +175,62 @@ export function buildApp({
         authenticated: Boolean(session),
         orderReady: Boolean(session),
       }),
+    );
+
+    api.get(
+      "/api/auth/session-details",
+      {
+        schema: {
+          tags: ["Authentication"],
+          summary: "Get stored Kotak Neo login session details",
+          description:
+            "Returns stored Kotak Neo login session details (sid, tradeToken, baseUrl, feedUrl, user, serverId, rid) for requests authenticated with a valid x-api-key header.",
+          headers: {
+            type: "object",
+            properties: {
+              "x-api-key": { type: "string" },
+            },
+          },
+          response: {
+            200: {
+              type: "object",
+              required: ["authenticated", "session"],
+              properties: {
+                authenticated: { type: "boolean", const: true },
+                session: {
+                  type: "object",
+                  required: ["sid", "tradeToken"],
+                  properties: {
+                    sid: { type: "string" },
+                    tradeToken: { type: "string" },
+                    baseUrl: { type: "string" },
+                    feedUrl: { type: "string" },
+                    user: { type: "string" },
+                    rid: { type: "string" },
+                    serverId: { type: "string" },
+                  },
+                },
+              },
+            },
+            401: errorResponseSchema,
+            404: errorResponseSchema,
+          },
+        },
+      },
+      async (request, reply) => {
+        const apiKeyHeader = request.headers["x-api-key"];
+        const providedKey = typeof apiKeyHeader === "string" ? apiKeyHeader.trim() : undefined;
+        if (!providedKey || !validateApiKey(providedKey, config.apiKey)) {
+          return reply.code(401).send({ error: "Invalid or missing x-api-key header" });
+        }
+        if (!session) {
+          return reply.code(404).send({ error: "No active Kotak Neo session found" });
+        }
+        return {
+          authenticated: true,
+          session,
+        };
+      },
     );
 
     api.post<{ Body: LoginBody }>(
@@ -514,4 +571,14 @@ function orderRequestStatus(error: unknown): 400 | 401 | 429 | 502 | 503 | 504 {
     return error.statusCode;
   }
   return 502;
+}
+
+function validateApiKey(provided: string | undefined, expected: string): boolean {
+  if (!provided) return false;
+  const providedBuf = Buffer.from(provided);
+  const expectedBuf = Buffer.from(expected);
+  return (
+    providedBuf.length === expectedBuf.length &&
+    timingSafeEqual(providedBuf, expectedBuf)
+  );
 }

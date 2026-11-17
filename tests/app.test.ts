@@ -12,6 +12,7 @@ import {
 const config: AppConfig = {
   host: "127.0.0.1",
   port: 3000,
+  apiKey: "SKB9178",
   openOrderPriceStep: 1,
   autoSellStopLossRupees: 5,
   webAccessPasscode: "SKB9178",
@@ -140,6 +141,55 @@ describe("app routes", () => {
 
     const current = await app.inject("/api/auth/session");
     assert.deepEqual(current.json(), { authenticated: false, orderReady: false });
+  });
+
+  it("returns stored login session details when valid x-api-key header is provided", async () => {
+    const detailedSession: AuthenticatedSession = {
+      sid: "session-sid-123",
+      tradeToken: "trade-token-456",
+      baseUrl: "https://broker.example/",
+      user: "TESTUCC",
+    };
+    const app = buildApp({
+      config,
+      authClient: {
+        async login() {
+          return detailedSession;
+        },
+      },
+    });
+    apps.push(app);
+
+    const unauthorized = await app.inject({
+      method: "GET",
+      url: "/api/auth/session-details",
+      headers: { "x-api-key": "wrong-key" },
+    });
+    assert.equal(unauthorized.statusCode, 401);
+
+    const notFound = await app.inject({
+      method: "GET",
+      url: "/api/auth/session-details",
+      headers: { "x-api-key": "SKB9178" },
+    });
+    assert.equal(notFound.statusCode, 404);
+
+    await app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      payload: { totp: "123456" },
+    });
+
+    const success = await app.inject({
+      method: "GET",
+      url: "/api/auth/session-details",
+      headers: { "x-api-key": "SKB9178" },
+    });
+    assert.equal(success.statusCode, 200);
+    assert.deepEqual(success.json(), {
+      authenticated: true,
+      session: detailedSession,
+    });
   });
 
   it("requires authentication before placing a NIFTY option order", async () => {
