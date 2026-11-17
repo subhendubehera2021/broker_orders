@@ -408,6 +408,12 @@ export class KotakMarketPriceStream {
       await this.ensureDefault();
       return;
     }
+    if (this.explicitInstruments.has(instrument.inputToken)) {
+      if (this.socket?.readyState === this.WebSocketImpl.OPEN && this.authenticated) {
+        this.subscribeInstrument(instrument);
+      }
+      return;
+    }
     this.explicitInstruments.set(instrument.inputToken, instrument);
     await this.ctx.storage.put("marketPriceInstruments", [...this.explicitInstruments.keys()]);
     this.currentInstrument ??= DEFAULT_MARKET_INSTRUMENT;

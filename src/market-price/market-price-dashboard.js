@@ -225,13 +225,9 @@ export const marketPriceDashboardScript = String.raw`
     if (!Array.isArray(items)) return;
     instruments.clear();
     for (const item of items) {
-      if (
-        item &&
-        typeof item.inputToken === "string" &&
-        !removedInstruments.has(item.inputToken)
-      ) {
-        instruments.set(item.inputToken, item);
-      }
+      if (!item || typeof item.inputToken !== "string") continue;
+      removedInstruments.delete(item.inputToken);
+      instruments.set(item.inputToken, item);
     }
     renderRows();
   }

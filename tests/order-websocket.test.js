@@ -159,6 +159,48 @@ test("logs every complete inbound WebSocket frame", async () => {
   assert.ok(stream.getStatus().lastMessageAt);
 });
 
+test("subscribes an order's exchange and token to live market prices", async () => {
+  FakeWebSocket.instances = [];
+  const { stream, backgroundTasks } = createStream();
+  const marketPriceCalls = [];
+  stream.env.MARKET_PRICE_STREAM = {
+    idFromName(name) {
+      marketPriceCalls.push({ name });
+      return "market-price-id";
+    },
+    get(id) {
+      marketPriceCalls.push({ id });
+      return {
+        async fetch(url, options) {
+          marketPriceCalls.push({ url, options });
+          return Response.json({ instruments: [] });
+        },
+      };
+    },
+  };
+
+  await stream.start();
+  const socket = FakeWebSocket.instances[0];
+  socket.receive(JSON.stringify({
+    type: "position",
+    data: { exSeg: "nse_fo", tok: "45318" },
+  }));
+  socket.receive(JSON.stringify({
+    type: "order",
+    data: { exSeg: "nse_fo", tok: "45318" },
+  }));
+  await Promise.all(backgroundTasks);
+
+  assert.deepEqual(marketPriceCalls, [
+    { name: "kotak-market-price-stream" },
+    { id: "market-price-id" },
+    {
+      url: "https://market-price.internal/subscribe?instrument=nse_fo%7C45318",
+      options: { method: "POST" },
+    },
+  ]);
+});
+
 test("reconnects after a rejected authentication response", async () => {
   FakeWebSocket.instances = [];
   const { stream, alarms, backgroundTasks } = createStream();
