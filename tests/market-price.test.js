@@ -240,11 +240,7 @@ test("authenticates, subscribes, and streams a live price over SSE", async () =>
   assert.equal(price.ltp, 1234.56);
   assert.equal(price.change, 14.56);
   assert.equal(stream.getStatus().state, "live");
-  const loggedTicks = loggedMessages
-    .filter((message) => message.startsWith("[market-price] tick "))
-    .map((message) => JSON.parse(message.slice("[market-price] tick ".length)));
-  assert.ok(loggedTicks.some((tick) => tick.inputToken === "nse_cm|Nifty 50" && tick.ltp === 1212.34));
-  assert.ok(loggedTicks.some((tick) => tick.inputToken === "nse_cm|1333" && tick.ltp === 1234.56));
+  assert.ok(!loggedMessages.some((message) => message.startsWith("[market-price] tick ")));
 
   await reader.cancel();
   await Promise.all(backgroundTasks);

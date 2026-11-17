@@ -589,7 +589,6 @@ export class KotakMarketPriceStream {
               : null) ??
             instrument.instrument,
         };
-        console.log(`[market-price] tick ${JSON.stringify(tick)}`);
         this.lastPrices.set(instrument.inputToken, tick);
         if (instrument.inputToken === this.currentInstrument?.inputToken) {
           this.lastPrice = tick;
