@@ -515,4 +515,56 @@ describe("app routes", () => {
     assert.match(response.json().error, /greater than or equal/);
     assert.equal(orderCalls, 0);
   });
+
+  it("places a simplified BUY SL-Limit order with minimal body data", async () => {
+    const expiryEpoch = String(Date.UTC(2030, 0, 30) / 1000 - 315_511_200);
+    const csv = [
+      "pSymbol,pInstType,pSymbolName,pTrdSymbol,pOptionType,pExpiryDate,dStrikePrice;,lLotSize",
+      `123,OPTIDX,NIFTY,NIFTY30JAN2030CE,CE,${expiryEpoch},2500000,25`,
+    ].join("\n");
+    let submittedInput: unknown;
+    const app = buildApp({
+      config,
+      authClient: {
+        async login() {
+          return authenticatedSession;
+        },
+        async placeNiftyOptionOrder(_session, input) {
+          submittedInput = input;
+          return { stat: "Ok", nOrdNo: "order-sl-1" };
+        },
+      },
+      optionChainCsvLoader: async () => csv,
+    });
+    apps.push(app);
+
+    await app.inject({ method: "POST", url: "/api/auth/login", payload: { totp: "123456" } });
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/orders/buy-sl-limit",
+      payload: {
+        tradingSymbol: "NIFTY30JAN2030CE",
+        quantity: "25",
+        price: "110",
+        triggerPrice: "105",
+      },
+    });
+
+    assert.equal(response.statusCode, 200, response.body);
+    assert.deepEqual(response.json(), { stat: "Ok", nOrdNo: "order-sl-1" });
+    assert.deepEqual(submittedInput, {
+      tradingSymbol: "NIFTY30JAN2030CE",
+      instrumentToken: "123",
+      transactionType: "B",
+      quantity: "25",
+      product: "MIS",
+      orderType: "SL",
+      price: "110",
+      validity: "DAY",
+      amo: "NO",
+      disclosedQuantity: "0",
+      marketProtection: "0",
+      triggerPrice: "105",
+    });
+  });
 });
