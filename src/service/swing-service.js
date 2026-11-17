@@ -1,10 +1,6 @@
 import { fetchLiquiditySwings, recentIndiaDateRange } from "../liquidity-swing/index.js";
 import { fetchHighestVolumeNiftyOptions } from "../nifty-option-chain.js";
 
-function waitForRequestSlot() {
-  return new Promise((resolve) => setTimeout(resolve, 1_000));
-}
-
 export async function processNiftyOptionChain({
   apiToken,
   baseUrl,
@@ -36,27 +32,35 @@ export async function processLiquiditySwing({
     count,
   });
   const dateRange = recentIndiaDateRange();
-  const analyses = [];
-  for (const [index, [optionSide, instrument]] of [
-    ["CALL", instruments.call],
-    ["PUT", instruments.put],
-  ].entries()) {
-    if (index > 0) await waitForRequestSlot();
-    const analysis = await fetchLiquiditySwings(
-      { token: instrument.token },
+
+  const analyses = await Promise.all([
+    fetchLiquiditySwings(
+      { token: instruments.call.token },
       { apiToken, baseUrl, ...dateRange },
-    );
-    analyses.push({
-      optionSide,
-      symbol: instrument.symbol,
-      token: instrument.token,
-      optionVolume: instrument.volume,
+    ).then((analysis) => ({
+      optionSide: "CALL",
+      symbol: instruments.call.symbol,
+      token: instruments.call.token,
+      optionVolume: instruments.call.volume,
       interval: analysis.interval,
       pivotLookback: analysis.pivotLookback,
       bars: analysis.bars.length,
       swing: analysis.swing ?? null,
-    });
-  }
+    })),
+    fetchLiquiditySwings(
+      { token: instruments.put.token },
+      { apiToken, baseUrl, ...dateRange },
+    ).then((analysis) => ({
+      optionSide: "PUT",
+      symbol: instruments.put.symbol,
+      token: instruments.put.token,
+      optionVolume: instruments.put.volume,
+      interval: analysis.interval,
+      pivotLookback: analysis.pivotLookback,
+      bars: analysis.bars.length,
+      swing: analysis.swing ?? null,
+    })),
+  ]);
 
   const persistence = await persistAnalyses(analyses, dbClient);
   return {
