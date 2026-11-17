@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import worker from "../src/index.js";
 
-test("scheduled handler waits until the target time and calls the API once", async () => {
+test("scheduled API handler waits until the target time and reports the API as disabled", async () => {
   const messages = [];
   const requests = [];
   const originalLog = console.log;
@@ -40,17 +40,10 @@ test("scheduled handler waits until the target time and calls the API once", asy
   }
 
   assert.equal(delay, 58_000);
-  assert.equal(requests.length, 1);
-  assert.equal(requests[0].url, "https://broker-orders.vercel.app/api/liquidity-swing");
-  assert.equal(requests[0].options.method, "GET");
-  assert.deepEqual(requests[0].options.headers, {
-    Accept: "*/*",
-    Authorization: "Bearer test-api-token",
-  });
-  assert.equal(requests[0].options.redirect, "manual");
+  assert.equal(requests.length, 0);
   assert.deepEqual(messages, [
     "[nifty-cron] cron=* * * * * scheduledForIST=16/11/2026, 12:28:59 IST startedAtIST=16/11/2026, 12:28:59 IST",
-    "[nifty-cron] liquidity-swing-api status=200",
+    "[nifty-cron] liquidity-swing-api status=disabled",
   ]);
 });
 
