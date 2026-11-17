@@ -60,6 +60,7 @@ function createStream() {
   };
   const env = {
     KOTAK_MARKET_DATA_UCC: "client-code",
+    KOTAK_WS_SID: "market-session-sid",
     KOTAK_WS_SESSION_TOKEN: "market-session-token",
   };
   return {
@@ -124,10 +125,10 @@ test("validates Kotak instruments and builds market-feed connection credentials"
     /HTTPS or WSS URL/,
   );
   assert.deepEqual(
-    JSON.parse(createKotakMarketDataAuthPayload("client-code", "session-token", "2026-11-17")),
+    JSON.parse(createKotakMarketDataAuthPayload("client-code", "session-sid", "2026-11-17")),
     {
       user: "client-code",
-      auth: "session-token",
+      auth: "session-sid",
       format: "native_batch",
       source: "NEOTRADEAPI",
       sdk_version: 1.1,
@@ -135,6 +136,7 @@ test("validates Kotak instruments and builds market-feed connection credentials"
     },
   );
   assert.throws(() => createKotakMarketDataAuthPayload("", "session-token"), /KOTAK_MARKET_DATA_UCC/);
+  assert.throws(() => createKotakMarketDataAuthPayload("client-code", ""), /KOTAK_WS_SID/);
 });
 
 test("decodes matching mini touch-line and index packets with exchange dividers", () => {
@@ -189,7 +191,7 @@ test("authenticates, subscribes, and streams a live price over SSE", async () =>
   socket.open();
   const auth = JSON.parse(socket.sent[0]);
   assert.equal(auth.user, "client-code");
-  assert.equal(auth.auth, "market-session-token");
+  assert.equal(auth.auth, "market-session-sid");
 
   socket.receive(JSON.stringify({
     message_code: 1117,

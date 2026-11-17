@@ -79,10 +79,10 @@ export function createKotakMarketDataWebSocketUrl(feedUrl) {
   return endpoint.toString();
 }
 
-export function createKotakMarketDataAuthPayload(ucc, token, sdkDate = new Date().toISOString().slice(0, 10)) {
+export function createKotakMarketDataAuthPayload(ucc, sid, sdkDate = new Date().toISOString().slice(0, 10)) {
   return JSON.stringify({
     user: requiredCredential(ucc, "KOTAK_MARKET_DATA_UCC"),
-    auth: requiredCredential(token, "KOTAK_WS_SESSION_TOKEN"),
+    auth: requiredCredential(sid, "KOTAK_WS_SID"),
     format: "native_batch",
     source: "NEOTRADEAPI",
     sdk_version: 1.1,
@@ -309,7 +309,7 @@ export class KotakMarketPriceStream {
     const url = createKotakMarketDataWebSocketUrl(KOTAK_MARKET_DATA_FEED_URL);
     const authPayload = createKotakMarketDataAuthPayload(
       this.env.KOTAK_MARKET_DATA_UCC,
-      this.env.KOTAK_WS_SESSION_TOKEN,
+      this.env.KOTAK_WS_SID,
     );
     const socket = new this.WebSocketImpl(url);
     socket.binaryType = "arraybuffer";

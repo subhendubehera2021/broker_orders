@@ -49,7 +49,7 @@ KOTAK_WS_SID=your-session-sid
 KOTAK_MARKET_DATA_UCC=your-kotak-client-code
 ```
 
-The market-data WebSocket uses the static Kotak endpoint `wss://sfeed.kotaksecurities.com/apifeed`. It reuses `KOTAK_WS_SESSION_TOKEN` but requires a separate `KOTAK_MARKET_DATA_UCC` secret.
+The market-data WebSocket uses the static Kotak endpoint `wss://sfeed.kotaksecurities.com/apifeed`. Its `auth` value is the `sid` from the same Kotak login response (`KOTAK_WS_SID`), not the separate trade token in `KOTAK_WS_SESSION_TOKEN`. It also requires `KOTAK_MARKET_DATA_UCC`.
 
 For deployment, set the session values as Cloudflare secrets. Set the base URL as a Worker variable in `wrangler.jsonc` or as a secret:
 
