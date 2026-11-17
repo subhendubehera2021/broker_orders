@@ -132,6 +132,9 @@ export function registerSwingApiRoutes(
         count: process.env.NIFTY_OPTION_CHAIN_COUNT,
         createDbClient,
         persistAnalyses,
+        orderBaseUrl: process.env.ORDER_BASE_URL || "https://trade.brinto.in",
+        orderAccessToken: request.headers.authorization?.slice(7),
+        orderQuantity: process.env.ORDER_QUANTITY || "65",
       });
       return reply.code(200).send(result);
     } catch (error) {

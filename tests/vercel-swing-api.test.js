@@ -67,9 +67,12 @@ test("GET swing API selects highest-volume options, analyzes, then persists both
     NIFTY_OPTION_CHAIN_COUNT: "10",
   });
   globalThis.fetch = async (url, options) => {
+    if (String(url).includes("/api/orders/buy-sl-limit")) {
+      return Response.json({ stat: "Ok", nOrdNo: "order-123" });
+    }
     assert.equal(options.headers.Authorization, "dashboard-token");
-    if (url.pathname.endsWith("/option-chain")) {
-      assert.equal(url.searchParams.get("count"), "10");
+    if (new URL(url).pathname.endsWith("/option-chain")) {
+      assert.equal(new URL(url).searchParams.get("count"), "10");
       return Response.json({
         data: {
           call: [
@@ -104,7 +107,7 @@ test("GET swing API selects highest-volume options, analyzes, then persists both
       });
     }
 
-    requestedTokens.push(url.searchParams.get("neosymbol"));
+    requestedTokens.push(new URL(url).searchParams.get("neosymbol"));
     return Response.json({ status: "success", data: { candles: [] } });
   };
 
@@ -152,6 +155,7 @@ test("GET swing API selects highest-volume options, analyzes, then persists both
       pivotLookback: 5,
       bars: 0,
       swing: null,
+      orderResult: { stat: "Ok", nOrdNo: "order-123" },
     },
     {
       optionSide: "PUT",
@@ -162,6 +166,7 @@ test("GET swing API selects highest-volume options, analyzes, then persists both
       pivotLookback: 5,
       bars: 0,
       swing: null,
+      orderResult: { stat: "Ok", nOrdNo: "order-123" },
     },
   ]);
   assert.deepEqual(persistedAnalyses, result.analyses);
@@ -187,8 +192,9 @@ test("GET option-chain API updates the latest CE and PE records", async () => {
   });
   globalThis.fetch = async (url, options) => {
     requests += 1;
-    assert.equal(url.pathname, "/market-data/1.0/watchlist/option-chain");
-    assert.equal(url.searchParams.get("count"), "10");
+    const parsedUrl = new URL(url);
+    assert.equal(parsedUrl.pathname, "/market-data/1.0/watchlist/option-chain");
+    assert.equal(parsedUrl.searchParams.get("count"), "10");
     assert.equal(options.headers.Authorization, "dashboard-token");
     assert.equal(options.redirect, "manual");
     return Response.json({
