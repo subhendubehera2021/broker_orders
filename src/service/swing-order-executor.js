@@ -16,6 +16,7 @@ export async function processSwingOrder({
       tradingSymbol: instrument.symbol,
       triggerPrice: analysis.swing.level,
       pivotTime: analysis.swing.pivotTime,
+      optionSide,
     };
 
     if (hasOrderBeenProcessed(orderSignature)) {
@@ -31,7 +32,7 @@ export async function processSwingOrder({
           quantity: orderQuantity,
           triggerPrice: String(analysis.swing.level),
         });
-        markOrderProcessed(orderSignature);
+        markOrderProcessed(orderSignature, { ...orderResult, optionSide });
       } catch (orderError) {
         console.error(
           `Failed to place BUY SL-Limit order for ${optionSide} (${instrument.symbol}):`,
