@@ -61,6 +61,15 @@ export const orderWebSocketDashboard = `<!doctype html>
         letter-spacing: .13em;
         text-transform: uppercase;
       }
+      .brand-link {
+        margin-left: auto;
+        color: #b7c3d5;
+        font-size: 10px;
+        letter-spacing: normal;
+        text-decoration: none;
+        text-transform: none;
+      }
+      .brand-link:hover { color: var(--accent-hover); }
       .brand-mark {
         width: 30px;
         height: 30px;
@@ -247,7 +256,11 @@ export const orderWebSocketDashboard = `<!doctype html>
   </head>
   <body>
     <main class="dashboard">
-      <div class="brand"><span class="brand-mark" aria-hidden="true">KO</span><span>Market operations</span></div>
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">KO</span>
+        <span>Market operations</span>
+        <a class="brand-link" href="/live-price">Live price only</a>
+      </div>
       <div class="dashboard-grid">
       <section class="panel order-panel" aria-labelledby="page-title">
         <header class="panel-header">

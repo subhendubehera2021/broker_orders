@@ -1,4 +1,5 @@
 import { callLiquiditySwingApi } from "./liquidity-swing-api.js";
+import { marketPricePage } from "./market-price/market-price-page.js";
 import { KotakMarketPriceStream } from "./market-price/market-price-stream.js";
 import { orderWebSocketDashboard } from "./order-websocket-dashboard.js";
 import { KotakOrderStream } from "./order-websocket.js";
@@ -40,6 +41,21 @@ async function callMarketPriceStream(env, instrument) {
   });
 }
 
+async function ensureDefaultMarketPriceStream(env) {
+  const id = env.MARKET_PRICE_STREAM.idFromName("kotak-market-price-stream");
+  const response = await env.MARKET_PRICE_STREAM.get(id).fetch(
+    "https://market-price.internal/ensure-default",
+    { method: "POST" },
+  );
+  if (!response.ok) {
+    const result = await response.json();
+    throw new Error(result.error ?? `Market-price stream start failed with status ${response.status}`);
+  }
+  const { state } = await response.json();
+  console.log(`[market-price] supervisor state=${state}`);
+  return response;
+}
+
 async function startOrderStream(env) {
   const response = await callOrderStream(env, "/start", "POST");
   if (!response.ok) {
@@ -65,10 +81,21 @@ const istDateTime = new Intl.DateTimeFormat("en-IN", {
 export { KotakMarketPriceStream, KotakOrderStream };
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
-    if (request.method === "GET" && url.pathname === "/") {
-      return new Response(orderWebSocketDashboard, {
+    if (
+      request.method === "GET" &&
+      (url.pathname === "/" || url.pathname === "/live-price")
+    ) {
+      const marketPriceStartup = ensureDefaultMarketPriceStream(env).catch((error) => {
+        console.error("[market-price] unable to start on page request", error);
+      });
+      if (typeof ctx?.waitUntil === "function") {
+        ctx.waitUntil(marketPriceStartup);
+      } else {
+        await marketPriceStartup;
+      }
+      return new Response(url.pathname === "/live-price" ? marketPricePage : orderWebSocketDashboard, {
         headers: {
           "Cache-Control": "no-store",
           "Content-Security-Policy":
@@ -99,7 +126,10 @@ export default {
 
   async scheduled(controller, env) {
     if (controller.cron === orderStreamCron) {
-      await startOrderStream(env);
+      await Promise.all([
+        startOrderStream(env),
+        ensureDefaultMarketPriceStream(env),
+      ]);
       return;
     }
 

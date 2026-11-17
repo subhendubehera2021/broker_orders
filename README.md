@@ -19,9 +19,9 @@ The local Worker uses `.dev.vars` for the Vercel API and WebSocket credentials. 
 curl "http://localhost:8787/__scheduled?cron=*+*+*+*+*"
 ```
 
-Open `http://localhost:8787/` for the WebSocket dashboard. Enter the `ORDER_STREAM_CONTROL_TOKEN` and select **Connect** to receive live status and broker frames over an authenticated Server-Sent Events (SSE) connection. The page displays each order message and connection acknowledgement as a row in separate tables, keeps the newest row at the top highlighted, replays up to the latest 50 in-memory frames on connection, and then pushes new ones. Frame previews are capped at 16,384 characters each. **Refresh status** makes a one-time status request. The page keeps the token only in the current tab.
+Open `http://localhost:8787/` for the combined WebSocket dashboard or `http://localhost:8787/live-price` for the standalone live-price monitor. Enter the `ORDER_STREAM_CONTROL_TOKEN` on the page; on the combined dashboard, **Connect** starts the order stream and **Watch live price** starts the market feed. The standalone page focuses on the market feed. Both streams use authenticated Server-Sent Events (SSE). The combined dashboard displays each order message and connection acknowledgement as a row in separate tables, keeps the newest row at the top highlighted, replays up to the latest 50 in-memory frames on connection, and then pushes new ones. Frame previews are capped at 16,384 characters each. **Refresh status** makes a one-time status request. The token stays in the current tab.
 
-The right-side **Live stock price** panel uses Kotak's separate market-data WebSocket and defaults to `nse_cm|Nifty 50`. Change the value to another Kotak instrument in `exchange|instrument` format (for example, `nse_cm|1333`, using the instrument token from Kotak's Scrip Master) and select **Watch live price**. This on-demand feed streams the latest price and change through authenticated SSE; it does not use or alter the order-stream connection or its Cron Trigger.
+The right-side **Live stock price** panel uses Kotak's separate market-data WebSocket and defaults to `nse_cm|Nifty 50`. Change the value to another Kotak instrument in `exchange|instrument` format (for example, `nse_cm|1333`, using the instrument token from Kotak's Scrip Master) and select **Watch live price**. This on-demand feed streams the latest price and change through authenticated SSE; it does not use or alter the order-stream connection or its Cron Trigger. Opening either dashboard starts the background Nifty connection; the once-per-minute trigger restores it if needed. Each decoded tick is logged as JSON in Worker logs even when no page is open. If a feed handshake stalls for 15 seconds or Kotak rejects a subscription, the Worker closes the socket and retries with exponential backoff. Invalid or expired credentials still need to be refreshed.
 
 The same protected controls are available as HTTP endpoints:
 
@@ -38,18 +38,9 @@ curl -N http://localhost:8787/internal/order-stream/events \
 
 ## Kotak WebSocket credentials
 
-The WebSocket needs the session token and `Sid` returned by Kotak's login/`tradeApiValidate` flow, plus the Kotak base URL. The Dashboard API token alone is not sufficient. For local development, create a git-ignored `.dev.vars` file:
+The WebSockets need the session token and `Sid` returned by Kotak's login/`tradeApiValidate` flow, plus the Kotak base URL. The Dashboard API token alone is not sufficient. For local development, copy `.env.example` to the git-ignored `.env` file and fill in the values.
 
-```sh
-LIQUIDITY_SWING_API_TOKEN=your-vercel-api-token
-ORDER_STREAM_CONTROL_TOKEN=your-random-control-token
-KOTAK_NEO_BASE_URL=https://e21.kotaksecurities.com
-KOTAK_WS_SESSION_TOKEN=your-session-token
-KOTAK_WS_SID=your-session-sid
-KOTAK_MARKET_DATA_UCC=your-kotak-client-code
-```
-
-The market-data WebSocket uses the static Kotak endpoint `wss://sfeed.kotaksecurities.com/apifeed`. Its `auth` value is the `sid` from the same Kotak login response (`KOTAK_WS_SID`), not the separate trade token in `KOTAK_WS_SESSION_TOKEN`. It also requires `KOTAK_MARKET_DATA_UCC`.
+Keep the Kotak values from the same fresh login response together: `data.token` goes in `KOTAK_WS_SESSION_TOKEN`, `data.sid` in `KOTAK_WS_SID`, `data.baseUrl` in `KOTAK_NEO_BASE_URL`, and `data.feedUrl` in `KOTAK_MARKET_DATA_FEED_URL`. The market-data WebSocket uses `KOTAK_WS_SID` for its `auth` value and also requires `KOTAK_MARKET_DATA_UCC`. If no feed URL is configured, it defaults to `wss://sfeed.kotaksecurities.com/apifeed`.
 
 For deployment, set the session values as Cloudflare secrets. Set the base URL as a Worker variable in `wrangler.jsonc` or as a secret:
 
@@ -58,11 +49,12 @@ npx wrangler secret put LIQUIDITY_SWING_API_TOKEN
 npx wrangler secret put KOTAK_WS_SESSION_TOKEN
 npx wrangler secret put KOTAK_WS_SID
 npx wrangler secret put KOTAK_MARKET_DATA_UCC
+npx wrangler secret put KOTAK_MARKET_DATA_FEED_URL
 npx wrangler secret put KOTAK_NEO_BASE_URL
 npx wrangler secret put ORDER_STREAM_CONTROL_TOKEN
 ```
 
-Keep `LIQUIDITY_SWING_API_TOKEN` configured for the existing cron. Do not commit credentials. Session credentials expire; update the secrets after Kotak requires a new login. The Worker sends the broker's required raw authentication string immediately after opening the connection.
+Keep `LIQUIDITY_SWING_API_TOKEN` configured for the existing cron. Do not commit credentials. Session credentials expire; after each Kotak login, update the token, SID, base URL, and feed URL together. The Worker sends the broker's required authentication frame immediately after opening the connection.
 
 ## Deploy
 
@@ -79,4 +71,4 @@ View deployed Worker logs with:
 npm run tail
 ```
 
-The dashboard is available at the Worker root URL. Enter the `ORDER_STREAM_CONTROL_TOKEN` to connect or inspect the order stream and watch a market price; the token is not stored by the page or included in either stream URL. The order and market-price feeds use separate Durable Objects and authenticated SSE endpoints. The existing cron expression remains `* * * * *` and retains its Vercel API call. A separate `*/1 * * * *` trigger starts/checks only the order stream automatically (within one minute). Both WebSocket connections handle refresh and reconnect alarms independently.
+The dashboard is available at the Worker root URL; the standalone live-price monitor is at `/live-price`. Enter the `ORDER_STREAM_CONTROL_TOKEN` to connect or inspect the order stream and watch a market price; the token is not stored by the page or included in either stream URL. The order and market-price feeds use separate Durable Objects and authenticated SSE endpoints. The existing cron expression remains `* * * * *` and retains its Vercel API call. A separate `*/1 * * * *` trigger starts/checks the order stream and maintains a background market-data connection subscribed to `nse_cm|Nifty 50`, even with no live-price page open. Other requested instruments are added as needed; the default Nifty subscription is never explicitly unsubscribed. Both WebSocket connections handle refresh and reconnect alarms independently.

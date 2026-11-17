@@ -1,4 +1,5 @@
 const CONNECTION_REFRESH_MS = 12 * 60 * 1000;
+const HANDSHAKE_TIMEOUT_MS = 15 * 1000;
 const INITIAL_RETRY_MS = 15 * 1000;
 const MAX_RETRY_MS = 5 * 60 * 1000;
 const SSE_HEARTBEAT_MS = 15 * 1000;
@@ -59,6 +60,8 @@ export function parseMarketInstrument(value) {
     token,
   };
 }
+
+const DEFAULT_MARKET_INSTRUMENT = parseMarketInstrument("nse_cm|Nifty 50");
 
 export function createKotakMarketDataWebSocketUrl(feedUrl) {
   let endpoint;
@@ -190,6 +193,8 @@ export class KotakMarketPriceStream {
     this.WebSocketImpl = WebSocketImpl;
     this.socket = null;
     this.currentInstrument = null;
+    this.subscribedInstruments = new Set();
+    this.acknowledgedInstruments = new Set();
     this.authenticated = false;
     this.connectionState = "disconnected";
     this.lastError = null;
@@ -199,13 +204,21 @@ export class KotakMarketPriceStream {
     this.sseClients = new Set();
     this.retryScheduled = false;
     this.retryAttempt = 0;
+    this.backgroundMode = false;
+    this.backgroundModeLoaded = false;
   }
 
   async fetch(request) {
     const url = new URL(request.url);
+    if (request.method === "POST" && url.pathname === "/ensure-default") {
+      await this.ensureDefault();
+      return Response.json(this.getStatus());
+    }
     if (request.method !== "GET" || url.pathname !== "/events") {
       return new Response("Not found", { status: 404 });
     }
+
+    await this.loadBackgroundMode();
 
     let instrument;
     try {
@@ -275,11 +288,13 @@ export class KotakMarketPriceStream {
       this.tradingSymbol = null;
       this.lastError = null;
       this.retryAttempt = 0;
+      this.retryScheduled = false;
     }
 
     if (this.socket?.readyState === this.WebSocketImpl.OPEN && this.authenticated) {
       if (changed && previousInstrument) this.unsubscribeInstrument(previousInstrument);
-      if (changed || !this.lastPrice) this.subscribeInstrument();
+      this.subscribeInstrument(DEFAULT_MARKET_INSTRUMENT);
+      this.subscribeInstrument(instrument);
       this.publishStatus();
       return;
     }
@@ -304,9 +319,11 @@ export class KotakMarketPriceStream {
     if (typeof this.WebSocketImpl !== "function") {
       throw new Error("The Cloudflare WebSocket client is unavailable");
     }
-    if (!this.currentInstrument) throw new Error("Select an instrument before connecting");
+    if (!this.currentInstrument) this.currentInstrument = DEFAULT_MARKET_INSTRUMENT;
 
-    const url = createKotakMarketDataWebSocketUrl(KOTAK_MARKET_DATA_FEED_URL);
+    const url = createKotakMarketDataWebSocketUrl(
+      this.env.KOTAK_MARKET_DATA_FEED_URL ?? KOTAK_MARKET_DATA_FEED_URL,
+    );
     const authPayload = createKotakMarketDataAuthPayload(
       this.env.KOTAK_MARKET_DATA_UCC,
       this.env.KOTAK_WS_SID,
@@ -314,6 +331,8 @@ export class KotakMarketPriceStream {
     const socket = new this.WebSocketImpl(url);
     socket.binaryType = "arraybuffer";
     this.socket = socket;
+    this.subscribedInstruments.clear();
+    this.acknowledgedInstruments.clear();
     this.authenticated = false;
     this.connectionState = "connecting";
     this.lastError = null;
@@ -342,7 +361,7 @@ export class KotakMarketPriceStream {
     socket.addEventListener("close", (event) => this.onClose(socket, event));
 
     try {
-      await this.ctx.storage.setAlarm(Date.now() + CONNECTION_REFRESH_MS);
+      await this.ctx.storage.setAlarm(Date.now() + HANDSHAKE_TIMEOUT_MS);
     } catch (error) {
       if (this.socket === socket) this.socket = null;
       this.connectionState = "disconnected";
@@ -364,15 +383,35 @@ export class KotakMarketPriceStream {
     }
 
     if (!this.currentInstrument) return;
-    for (const price of decodeMarketDataBatch(data, this.currentInstrument, this.dividers)) {
-      this.lastPrice = {
-        ...price,
-        symbol: this.tradingSymbol || this.currentInstrument.instrument,
-      };
-      this.connectionState = "live";
-      this.lastError = null;
-      this.publishEvent("price", this.lastPrice);
-      this.publishStatus();
+    const instruments = [DEFAULT_MARKET_INSTRUMENT];
+    if (this.currentInstrument.inputToken !== DEFAULT_MARKET_INSTRUMENT.inputToken) {
+      instruments.push(this.currentInstrument);
+    }
+
+    for (const instrument of instruments) {
+      for (const price of decodeMarketDataBatch(data, instrument, this.dividers)) {
+        const tick = {
+          ...price,
+          symbol: instrument.inputToken === this.currentInstrument.inputToken
+            ? this.tradingSymbol || instrument.instrument
+            : instrument.instrument,
+        };
+        console.log(`[market-price] tick ${JSON.stringify(tick)}`);
+        if (instrument.inputToken !== this.currentInstrument.inputToken) continue;
+
+        this.lastPrice = tick;
+        if (this.connectionState !== "live") {
+          this.retryAttempt = 0;
+          this.runBackground(
+            this.ctx.storage.setAlarm(Date.now() + CONNECTION_REFRESH_MS),
+            "unable to schedule market-feed refresh",
+          );
+        }
+        this.connectionState = "live";
+        this.lastError = null;
+        this.publishEvent("price", this.lastPrice);
+        this.publishStatus();
+      }
     }
   }
 
@@ -395,9 +434,15 @@ export class KotakMarketPriceStream {
       this.authenticated = true;
       this.connectionState = "subscribing";
       this.lastError = null;
-      this.retryAttempt = 0;
       this.retryScheduled = false;
-      this.subscribeInstrument();
+      this.runBackground(
+        this.ctx.storage.setAlarm(Date.now() + HANDSHAKE_TIMEOUT_MS),
+        "unable to schedule market-feed subscription timeout",
+      );
+      this.subscribeInstrument(DEFAULT_MARKET_INSTRUMENT);
+      if (this.currentInstrument?.inputToken !== DEFAULT_MARKET_INSTRUMENT.inputToken) {
+        this.subscribeInstrument(this.currentInstrument);
+      }
       this.publishStatus();
       return;
     }
@@ -408,19 +453,39 @@ export class KotakMarketPriceStream {
     }
     if (message.message_code === 1109) {
       if (Number(message.error_code) !== 0) {
-        this.connectionState = "error";
-        this.lastError = typeof message.description === "string"
+        const description = typeof message.description === "string"
           ? message.description
           : "Kotak rejected the instrument subscription";
+        this.failConnection(
+          socket,
+          new Error(description),
+          `Kotak rejected instrument subscription: ${description}`,
+        );
+        return;
+      }
+      if (isRecord(message.data)) {
+        for (const [inputToken, entry] of Object.entries(message.data)) {
+          this.acknowledgedInstruments.add(inputToken);
+          if (
+            inputToken === this.currentInstrument?.inputToken &&
+            typeof entry?.trading_symbols === "string"
+          ) {
+            this.tradingSymbol = entry.trading_symbols;
+          }
+        }
+      }
+      if (!this.acknowledgedInstruments.has(this.currentInstrument?.inputToken)) {
+        this.connectionState = "subscribing";
         this.publishStatus();
         return;
       }
-      const entry = message.data?.[this.currentInstrument?.inputToken];
-      if (typeof entry?.trading_symbols === "string") {
-        this.tradingSymbol = entry.trading_symbols;
-      }
       this.connectionState = this.lastPrice ? "live" : "subscribed";
       this.lastError = null;
+      this.retryAttempt = 0;
+      this.runBackground(
+        this.ctx.storage.setAlarm(Date.now() + CONNECTION_REFRESH_MS),
+        "unable to schedule market-feed refresh",
+      );
       this.publishStatus();
     }
   }
@@ -436,17 +501,18 @@ export class KotakMarketPriceStream {
     }
   }
 
-  subscribeInstrument() {
+  subscribeInstrument(instrument = this.currentInstrument) {
     if (
       !this.socket ||
       this.socket.readyState !== this.WebSocketImpl.OPEN ||
       !this.authenticated ||
-      !this.currentInstrument
+      !instrument ||
+      this.subscribedInstruments.has(instrument.inputToken)
     ) {
       return;
     }
-    const suffix = this.currentInstrument.isIndex ? "Indices" : "ScripsLite";
-    const inputtoken = this.currentInstrument.inputToken;
+    const suffix = instrument.isIndex ? "Indices" : "ScripsLite";
+    const inputtoken = instrument.inputToken;
     try {
       this.socket.send(JSON.stringify({
         event: `subscribe${suffix}`,
@@ -458,6 +524,7 @@ export class KotakMarketPriceStream {
         inputtoken,
         ack_symbol: true,
       }));
+      this.subscribedInstruments.add(inputtoken);
       this.connectionState = "subscribing";
       this.lastError = null;
     } catch (error) {
@@ -466,13 +533,21 @@ export class KotakMarketPriceStream {
   }
 
   unsubscribeInstrument(instrument) {
-    if (!this.socket || this.socket.readyState !== this.WebSocketImpl.OPEN) return;
+    if (
+      !this.socket ||
+      this.socket.readyState !== this.WebSocketImpl.OPEN ||
+      !instrument ||
+      instrument.inputToken === DEFAULT_MARKET_INSTRUMENT.inputToken ||
+      !this.subscribedInstruments.has(instrument.inputToken)
+    ) return;
     const suffix = instrument.isIndex ? "Indices" : "ScripsLite";
     try {
       this.socket.send(JSON.stringify({
         event: `unsubscribe${suffix}`,
         inputtoken: instrument.inputToken,
       }));
+      this.subscribedInstruments.delete(instrument.inputToken);
+      this.acknowledgedInstruments.delete(instrument.inputToken);
     } catch (error) {
       this.failConnection(this.socket, error, "Unable to unsubscribe from previous market instrument");
     }
@@ -492,7 +567,9 @@ export class KotakMarketPriceStream {
     if (this.socket !== socket) return;
     this.socket = null;
     this.authenticated = false;
-    if (this.sseClients.size === 0 || !this.currentInstrument) {
+    this.subscribedInstruments.clear();
+    this.acknowledgedInstruments.clear();
+    if ((this.sseClients.size === 0 && !this.backgroundMode) || !this.currentInstrument) {
       this.connectionState = "disconnected";
       this.publishStatus();
       return;
@@ -504,7 +581,11 @@ export class KotakMarketPriceStream {
   }
 
   scheduleReconnect() {
-    if (this.retryScheduled || this.sseClients.size === 0 || !this.currentInstrument) return;
+    if (
+      this.retryScheduled ||
+      (this.sseClients.size === 0 && !this.backgroundMode) ||
+      !this.currentInstrument
+    ) return;
     this.retryAttempt += 1;
     const delay = Math.min(INITIAL_RETRY_MS * 2 ** (this.retryAttempt - 1), MAX_RETRY_MS);
     this.retryScheduled = true;
@@ -515,17 +596,29 @@ export class KotakMarketPriceStream {
   }
 
   async alarm() {
+    await this.loadBackgroundMode();
+    if (!this.currentInstrument && this.backgroundMode) {
+      this.currentInstrument = DEFAULT_MARKET_INSTRUMENT;
+    }
     this.retryScheduled = false;
-    if (!this.currentInstrument || this.sseClients.size === 0) return;
+    if (!this.currentInstrument || (this.sseClients.size === 0 && !this.backgroundMode)) return;
 
+    const previousState = this.connectionState;
     const previousSocket = this.socket;
     this.socket = null;
     this.authenticated = false;
-    this.connectionState = "connecting";
     if (previousSocket && previousSocket.readyState < this.WebSocketImpl.CLOSING) {
       previousSocket.close(1000, "Refreshing Kotak market-data connection");
     }
 
+    if (["connecting", "authenticating", "subscribing"].includes(previousState)) {
+      this.lastError = `Kotak market-data ${previousState} timed out`;
+      this.connectionState = "reconnecting";
+      this.scheduleReconnect();
+      return;
+    }
+
+    this.connectionState = "connecting";
     try {
       await this.connect();
     } catch (error) {
@@ -544,6 +637,21 @@ export class KotakMarketPriceStream {
   }
 
   async stop() {
+    if (this.backgroundMode) {
+      if (this.currentInstrument?.inputToken !== DEFAULT_MARKET_INSTRUMENT.inputToken) {
+        this.unsubscribeInstrument(this.currentInstrument);
+      }
+      this.currentInstrument = DEFAULT_MARKET_INSTRUMENT;
+      this.lastPrice = null;
+      this.tradingSymbol = null;
+      if (this.socket?.readyState === this.WebSocketImpl.OPEN && this.authenticated) {
+        this.connectionState = "subscribed";
+        this.lastError = null;
+      }
+      this.publishStatus();
+      return;
+    }
+
     const socket = this.socket;
     this.socket = null;
     this.currentInstrument = null;
@@ -552,12 +660,46 @@ export class KotakMarketPriceStream {
     this.lastError = null;
     this.lastPrice = null;
     this.tradingSymbol = null;
+    this.subscribedInstruments.clear();
+    this.acknowledgedInstruments.clear();
     this.retryScheduled = false;
     this.retryAttempt = 0;
     if (socket && socket.readyState < this.WebSocketImpl.CLOSING) {
       socket.close(1000, "No live market-price clients");
     }
     await this.ctx.storage.deleteAlarm();
+  }
+
+  async ensureDefault() {
+    await this.loadBackgroundMode();
+    if (!this.backgroundMode) {
+      await this.ctx.storage.put("backgroundMode", true);
+      this.backgroundMode = true;
+    }
+    this.currentInstrument ??= DEFAULT_MARKET_INSTRUMENT;
+
+    if (this.socket?.readyState === this.WebSocketImpl.OPEN && this.authenticated) {
+      this.subscribeInstrument(DEFAULT_MARKET_INSTRUMENT);
+      if (this.currentInstrument.inputToken !== DEFAULT_MARKET_INSTRUMENT.inputToken) {
+        this.subscribeInstrument(this.currentInstrument);
+      }
+      this.publishStatus();
+      return;
+    }
+    if (
+      this.socket &&
+      (this.socket.readyState === this.WebSocketImpl.CONNECTING ||
+        this.socket.readyState === this.WebSocketImpl.OPEN)
+    ) return;
+    if (this.retryScheduled) return;
+
+    await this.connect();
+  }
+
+  async loadBackgroundMode() {
+    if (this.backgroundModeLoaded) return;
+    this.backgroundMode = await this.ctx.storage.get("backgroundMode") === true;
+    this.backgroundModeLoaded = true;
   }
 
   runBackground(promise, message) {

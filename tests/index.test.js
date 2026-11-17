@@ -54,7 +54,7 @@ test("scheduled handler waits until the target time and calls the API once", asy
   ]);
 });
 
-test("separate scheduled trigger starts the WebSocket without invoking the existing cron API", async () => {
+test("separate scheduled trigger starts the order and default market-price streams", async () => {
   const calls = [];
   const messages = [];
   const originalLog = console.log;
@@ -64,6 +64,21 @@ test("separate scheduled trigger starts the WebSocket without invoking the exist
       idFromName(name) {
         calls.push({ name });
         return "stable-order-stream-id";
+      },
+      get(id) {
+        calls.push({ id });
+        return {
+          async fetch(url, options) {
+            calls.push({ url, options });
+            return Response.json({ state: "connecting" });
+          },
+        };
+      },
+    },
+    MARKET_PRICE_STREAM: {
+      idFromName(name) {
+        calls.push({ name });
+        return "stable-market-price-stream-id";
       },
       get(id) {
         calls.push({ id });
@@ -90,8 +105,17 @@ test("separate scheduled trigger starts the WebSocket without invoking the exist
       url: "https://order-stream.internal/start",
       options: { method: "POST" },
     },
+    { name: "kotak-market-price-stream" },
+    { id: "stable-market-price-stream-id" },
+    {
+      url: "https://market-price.internal/ensure-default",
+      options: { method: "POST" },
+    },
   ]);
-  assert.deepEqual(messages, ["[order-websocket] supervisor state=connecting"]);
+  assert.deepEqual(messages.sort(), [
+    "[market-price] supervisor state=connecting",
+    "[order-websocket] supervisor state=connecting",
+  ]);
 });
 
 test("authenticated start endpoint starts the single Durable Object stream", async () => {
@@ -179,6 +203,21 @@ test("serves the dashboard and protects the status endpoint", async () => {
         },
       }),
     },
+    MARKET_PRICE_STREAM: {
+      idFromName(name) {
+        calls.push({ name });
+        return "stable-market-price-stream-id";
+      },
+      get(id) {
+        calls.push({ id });
+        return {
+          async fetch(url, options) {
+            calls.push({ url, options });
+            return Response.json({ state: "connecting" });
+          },
+        };
+      },
+    },
   };
   const dashboard = await worker.fetch(new Request("https://worker.example/"), env);
   const unauthorized = await worker.fetch(
@@ -207,8 +246,36 @@ test("serves the dashboard and protects the status endpoint", async () => {
     lastMessageType: null,
   });
   assert.deepEqual(calls, [
+    { name: "kotak-market-price-stream" },
+    { id: "stable-market-price-stream-id" },
+    {
+      url: "https://market-price.internal/ensure-default",
+      options: { method: "POST" },
+    },
     { url: "https://order-stream.internal/status", options: { method: "GET" } },
   ]);
+});
+
+test("serves a standalone live-price page with its own control-token field", async () => {
+  const response = await worker.fetch(new Request("https://worker.example/live-price"), {
+    MARKET_PRICE_STREAM: {
+      idFromName: () => "stable-market-price-stream-id",
+      get: () => ({
+        async fetch() {
+          return Response.json({ state: "connecting" });
+        },
+      }),
+    },
+  });
+  const html = await response.text();
+
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type"), /text\/html/);
+  assert.match(response.headers.get("content-security-policy"), /connect-src 'self'/);
+  assert.match(html, /<title>Kotak Live Market Price<\/title>/);
+  assert.match(html, /id="token"/);
+  assert.match(html, /value="nse_cm\|Nifty 50"/);
+  assert.doesNotMatch(html, /id="order-table-body"/);
 });
 
 test("protects and proxies the live SSE endpoint", async () => {
