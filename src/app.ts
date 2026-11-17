@@ -55,6 +55,7 @@ interface BuySlLimitOrderBody {
   price?: string;
   triggerPrice?: string;
   product?: "MIS" | "NRML";
+  amo?: "YES" | "NO";
   tag?: string;
 }
 
@@ -551,6 +552,7 @@ export function buildApp({
               price: { type: "string", pattern: "^\\d+(\\.\\d{1,4})?$" },
               triggerPrice: { type: "string", pattern: "^\\d+(\\.\\d{1,4})?$" },
               product: { type: "string", enum: ["MIS", "NRML"], default: "MIS" },
+              amo: { type: "string", enum: ["YES", "NO"] },
               tag: { type: "string", minLength: 1, maxLength: 20 },
             },
           },
@@ -623,6 +625,7 @@ export function buildApp({
           }
 
           brokerRequestStarted = true;
+          const amo = body.amo ?? (isAfterMarketHours() ? "YES" : "NO");
           return await client.placeNiftyOptionOrder(authenticatedSession, {
             tradingSymbol: contract.tradingSymbol,
             instrumentToken: contract.instrumentToken,
@@ -632,7 +635,7 @@ export function buildApp({
             orderType: "SL",
             price: priceNum.toFixed(2),
             validity: "DAY",
-            amo: "NO",
+            amo,
             disclosedQuantity: "0",
             marketProtection: "0",
             triggerPrice: triggerNum.toFixed(2),
@@ -719,4 +722,28 @@ function validateApiKey(provided: string | undefined, expected: string): boolean
     providedBuf.length === expectedBuf.length &&
     timingSafeEqual(providedBuf, expectedBuf)
   );
+}
+
+function isAfterMarketHours(now = new Date()): boolean {
+  const weekday = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata",
+    weekday: "short",
+  }).format(now);
+  if (weekday === "Sat" || weekday === "Sun") return true;
+
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(now);
+
+  const hour = Number(parts.find(({ type }) => type === "hour")?.value ?? 0);
+  const minute = Number(parts.find(({ type }) => type === "minute")?.value ?? 0);
+  const timeMinutes = hour * 60 + minute;
+
+  const marketOpenMinutes = 9 * 60; // 09:00 IST
+  const marketCloseMinutes = 15 * 60 + 30; // 15:30 IST
+
+  return timeMinutes < marketOpenMinutes || timeMinutes > marketCloseMinutes;
 }

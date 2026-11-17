@@ -546,6 +546,7 @@ describe("app routes", () => {
         tradingSymbol: "NIFTY30JAN2030CE",
         quantity: "25",
         triggerPrice: "105",
+        amo: "NO",
       },
     });
 
