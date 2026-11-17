@@ -53,3 +53,5 @@ Vercel detects the Fastify application from the root `app.js`. Deploy the `verce
 ## Swing algorithm attribution
 
 The swing-high calculation is adapted from Liquidity Swings by LuxAlgo, licensed under CC BY-NC-SA 4.0. The adaptation retains the same noncommercial restriction; commercial use requires permission from the rights holder.
+
+
