@@ -64,29 +64,35 @@ export async function processLiquiditySwing({
       fetchLiquiditySwings(
         { token: instruments.call.token },
         { apiToken, baseUrl, ...dateRange },
-      ).then((analysis) => ({
-        optionSide: "CALL",
-        symbol: instruments.call.symbol,
-        token: instruments.call.token,
-        optionVolume: instruments.call.volume,
-        interval: analysis.interval,
-        pivotLookback: analysis.pivotLookback,
-        bars: analysis.bars.length,
-        swing: analysis.swing ?? null,
-      })),
+      ).then((analysis) => {
+        console.log("[liquidity-swing-service] fetchLiquiditySwings completed for CALL:", instruments.call.symbol);
+        return {
+          optionSide: "CALL",
+          symbol: instruments.call.symbol,
+          token: instruments.call.token,
+          optionVolume: instruments.call.volume,
+          interval: analysis.interval,
+          pivotLookback: analysis.pivotLookback,
+          bars: analysis.bars.length,
+          swing: analysis.swing ?? null,
+        };
+      }),
       fetchLiquiditySwings(
         { token: instruments.put.token },
         { apiToken, baseUrl, ...dateRange },
-      ).then((analysis) => ({
-        optionSide: "PUT",
-        symbol: instruments.put.symbol,
-        token: instruments.put.token,
-        optionVolume: instruments.put.volume,
-        interval: analysis.interval,
-        pivotLookback: analysis.pivotLookback,
-        bars: analysis.bars.length,
-        swing: analysis.swing ?? null,
-      })),
+      ).then((analysis) => {
+        console.log("[liquidity-swing-service] fetchLiquiditySwings completed for PUT:", instruments.put.symbol);
+        return {
+          optionSide: "PUT",
+          symbol: instruments.put.symbol,
+          token: instruments.put.token,
+          optionVolume: instruments.put.volume,
+          interval: analysis.interval,
+          pivotLookback: analysis.pivotLookback,
+          bars: analysis.bars.length,
+          swing: analysis.swing ?? null,
+        };
+      }),
     ]);
     console.log("[liquidity-swing-service] Liquidity swing analysis completed successfully for both CALL & PUT.");
   } catch (error) {
