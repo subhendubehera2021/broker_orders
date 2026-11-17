@@ -541,7 +541,7 @@ export function buildApp({
           tags: ["Orders"],
           summary: "Place a simplified BUY SL-Limit order with auto 0.10 price difference and auto-AMO",
           description:
-            "Places a BUY Stop-Limit (SL) order with minimal required body parameters (tradingSymbol, quantity, and either triggerPrice or price). Automatically computes a 0.10 difference between limit price and trigger price, and auto-detects After Market Orders (AMO: YES) outside regular Indian market hours (3:30 PM – 9:00 AM IST and weekends).",
+            "Places a BUY Stop-Limit (SL) order with minimal required body parameters (tradingSymbol, quantity, and either triggerPrice or price). If triggerPrice is provided, price is automatically calculated as triggerPrice + 0.10. Auto-detects After Market Orders (AMO: YES) outside regular Indian market hours (3:30 PM – 9:00 AM IST and weekends).",
           body: {
             type: "object",
             required: ["tradingSymbol", "quantity"],
@@ -549,10 +549,22 @@ export function buildApp({
             properties: {
               tradingSymbol: { type: "string", minLength: 1, maxLength: 64 },
               quantity: { type: "string", pattern: "^[1-9]\\d{0,7}$" },
-              price: { type: "string", pattern: "^\\d+(\\.\\d{1,4})?$" },
-              triggerPrice: { type: "string", pattern: "^\\d+(\\.\\d{1,4})?$" },
+              triggerPrice: {
+                type: "string",
+                pattern: "^\\d+(\\.\\d{1,4})?$",
+                description: "Stop trigger price (limit price is automatically calculated as triggerPrice + 0.10 if price is omitted)",
+              },
+              price: {
+                type: "string",
+                pattern: "^\\d+(\\.\\d{1,4})?$",
+                description: "Limit price (optional; if omitted, computed automatically from triggerPrice)",
+              },
               product: { type: "string", enum: ["MIS", "NRML"], default: "MIS" },
-              amo: { type: "string", enum: ["YES", "NO"] },
+              amo: {
+                type: "string",
+                enum: ["YES", "NO"],
+                description: "Auto-detected if omitted (YES after 3:30 PM, before 9:00 AM IST, or weekends)",
+              },
               tag: { type: "string", minLength: 1, maxLength: 20 },
             },
           },
