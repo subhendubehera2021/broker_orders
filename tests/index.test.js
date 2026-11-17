@@ -2,52 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import worker from "../src/index.js";
 
-test("scheduled API handler waits until the target time and reports the API as disabled", async () => {
-  const messages = [];
-  const requests = [];
-  const originalLog = console.log;
-  const originalNow = Date.now;
-  const originalSetTimeout = globalThis.setTimeout;
-  const originalFetch = globalThis.fetch;
-  let now = Date.UTC(2026, 10, 16, 6, 58, 1);
-  let delay;
-  console.log = (message) => messages.push(message);
-  Date.now = () => now;
-  globalThis.setTimeout = (callback, waitMs) => {
-    delay = waitMs;
-    now += waitMs;
-    callback();
-    return 0;
-  };
-  globalThis.fetch = async (url, options) => {
-    requests.push({ url, options });
-    return new Response(null, { status: 200 });
-  };
-
-  try {
-    await worker.scheduled(
-      {
-        cron: "* * * * *",
-        scheduledTime: Date.UTC(2026, 10, 16, 6, 58, 0),
-      },
-      { LIQUIDITY_SWING_API_TOKEN: "test-api-token" },
-    );
-  } finally {
-    console.log = originalLog;
-    Date.now = originalNow;
-    globalThis.setTimeout = originalSetTimeout;
-    globalThis.fetch = originalFetch;
-  }
-
-  assert.equal(delay, 58_000);
-  assert.equal(requests.length, 0);
-  assert.deepEqual(messages, [
-    "[nifty-cron] cron=* * * * * scheduledForIST=16/11/2026, 12:28:59 IST startedAtIST=16/11/2026, 12:28:59 IST",
-    "[nifty-cron] liquidity-swing-api status=disabled",
-  ]);
-});
-
-test("separate scheduled trigger starts the order and default market-price streams", async () => {
+test("scheduled trigger starts both streams with a normalized cron expression", async () => {
   const calls = [];
   const messages = [];
   const originalLog = console.log;
@@ -86,7 +41,7 @@ test("separate scheduled trigger starts the order and default market-price strea
   };
 
   try {
-    await worker.scheduled({ cron: "*/1 * * * *" }, env);
+    await worker.scheduled({ cron: "* * * * *" }, env);
   } finally {
     console.log = originalLog;
   }

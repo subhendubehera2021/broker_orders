@@ -1,4 +1,3 @@
-import { callLiquiditySwingApi } from "./liquidity-swing-api.js";
 import { marketPricePage } from "./market-price/market-price-page.js";
 import { KotakMarketPriceStream } from "./market-price/market-price-stream.js";
 import { orderWebSocketDashboard } from "./order-websocket-dashboard.js";
@@ -12,8 +11,6 @@ const marketPriceInstrumentsPath = "/internal/market-price/instruments";
 const marketPriceSubscribePath = "/internal/market-price/subscribe";
 const marketPriceUnsubscribePath = "/internal/market-price/unsubscribe";
 const marketPriceRestartPath = "/internal/market-price/restart";
-const orderStreamCron = "*/1 * * * *";
-
 function isAuthorized(request, secret) {
   const authorization = request.headers.get("Authorization");
   if (typeof secret !== "string" || secret.trim() === "" || !authorization?.startsWith("Bearer ")) {
@@ -26,10 +23,6 @@ function isAuthorized(request, secret) {
     mismatch |= (actual[index] ?? 0) ^ (expected[index] ?? 0);
   }
   return mismatch === 0;
-}
-
-function formatIST(timestamp) {
-  return `${istDateTime.format(new Date(timestamp))} IST`;
 }
 
 async function callOrderStream(env, path, method) {
@@ -79,17 +72,6 @@ async function startOrderStream(env) {
   console.log(`[order-websocket] supervisor state=${state}`);
   return response;
 }
-
-const istDateTime = new Intl.DateTimeFormat("en-IN", {
-  timeZone: "Asia/Kolkata",
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-  hour: "2-digit",
-  minute: "2-digit",
-  second: "2-digit",
-  hourCycle: "h23",
-});
 
 export { KotakMarketPriceStream, KotakOrderStream };
 
@@ -170,29 +152,10 @@ export default {
     return callOrderStream(env, isStatus ? "/status" : "/events", "GET");
   },
 
-  async scheduled(controller, env) {
-    if (controller.cron === orderStreamCron) {
-      await Promise.all([
-        startOrderStream(env),
-        ensureDefaultMarketPriceStream(env),
-      ]);
-      return;
-    }
-
-    const scheduledMinute = Math.floor(controller.scheduledTime / 60_000) * 60_000;
-    const scheduledFor = scheduledMinute + 59_000;
-    const delay = scheduledFor - Date.now();
-    if (delay > 0) {
-      await new Promise((resolve) => setTimeout(resolve, delay));
-    }
-
-    console.log(
-      `[nifty-cron] cron=${controller.cron}` +
-        ` scheduledForIST=${formatIST(scheduledFor)}` +
-        ` startedAtIST=${formatIST(Date.now())}`,
-    );
-
-    const status = await callLiquiditySwingApi(env.LIQUIDITY_SWING_API_TOKEN);
-    console.log(`[nifty-cron] liquidity-swing-api status=${status}`);
+  async scheduled(_controller, env) {
+    await Promise.all([
+      startOrderStream(env),
+      ensureDefaultMarketPriceStream(env),
+    ]);
   },
 };
