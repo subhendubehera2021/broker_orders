@@ -8,6 +8,9 @@ const orderStreamPath = "/internal/order-stream/start";
 const orderStreamStatusPath = "/internal/order-stream/status";
 const orderStreamEventsPath = "/internal/order-stream/events";
 const marketPriceEventsPath = "/internal/market-price/events";
+const marketPriceInstrumentsPath = "/internal/market-price/instruments";
+const marketPriceSubscribePath = "/internal/market-price/subscribe";
+const marketPriceUnsubscribePath = "/internal/market-price/unsubscribe";
 const orderStreamCron = "*/1 * * * *";
 
 function isAuthorized(request, secret) {
@@ -35,9 +38,18 @@ async function callOrderStream(env, path, method) {
 
 async function callMarketPriceStream(env, instrument) {
   const id = env.MARKET_PRICE_STREAM.idFromName("kotak-market-price-stream");
-  const path = `/events?instrument=${encodeURIComponent(instrument ?? "")}`;
+  const path = instrument
+    ? `/events?instrument=${encodeURIComponent(instrument)}`
+    : "/events";
   return env.MARKET_PRICE_STREAM.get(id).fetch(`https://market-price.internal${path}`, {
     method: "GET",
+  });
+}
+
+async function callMarketPriceControl(env, path, method) {
+  const id = env.MARKET_PRICE_STREAM.idFromName("kotak-market-price-stream");
+  return env.MARKET_PRICE_STREAM.get(id).fetch(`https://market-price.internal${path}`, {
+    method,
   });
 }
 
@@ -110,7 +122,21 @@ export default {
     const isStatus = url.pathname === orderStreamStatusPath && request.method === "GET";
     const isEvents = url.pathname === orderStreamEventsPath && request.method === "GET";
     const isMarketPriceEvents = url.pathname === marketPriceEventsPath && request.method === "GET";
-    if (!isStart && !isStatus && !isEvents && !isMarketPriceEvents) {
+    const isMarketPriceInstruments =
+      url.pathname === marketPriceInstrumentsPath && request.method === "GET";
+    const isMarketPriceSubscribe =
+      url.pathname === marketPriceSubscribePath && request.method === "POST";
+    const isMarketPriceUnsubscribe =
+      url.pathname === marketPriceUnsubscribePath && request.method === "POST";
+    if (
+      !isStart &&
+      !isStatus &&
+      !isEvents &&
+      !isMarketPriceEvents &&
+      !isMarketPriceInstruments &&
+      !isMarketPriceSubscribe &&
+      !isMarketPriceUnsubscribe
+    ) {
       return new Response("Not found", { status: 404 });
     }
     if (!isAuthorized(request, env.ORDER_STREAM_CONTROL_TOKEN)) {
@@ -120,6 +146,19 @@ export default {
     if (isStart) return startOrderStream(env);
     if (isMarketPriceEvents) {
       return callMarketPriceStream(env, url.searchParams.get("instrument"));
+    }
+    if (isMarketPriceInstruments) {
+      return callMarketPriceControl(env, "/instruments", "GET");
+    }
+    if (isMarketPriceSubscribe || isMarketPriceUnsubscribe) {
+      const instrument = url.searchParams.get("instrument");
+      if (!instrument) return new Response("Missing instrument", { status: 400 });
+      const path = isMarketPriceSubscribe ? "/subscribe" : "/unsubscribe";
+      return callMarketPriceControl(
+        env,
+        `${path}?instrument=${encodeURIComponent(instrument)}`,
+        "POST",
+      );
     }
     return callOrderStream(env, isStatus ? "/status" : "/events", "GET");
   },

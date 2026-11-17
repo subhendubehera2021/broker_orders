@@ -77,12 +77,12 @@ function createStream() {
   };
 }
 
-function createMiniTouchLine(token = 1333) {
+function createMiniTouchLine(token = 1333, exchangeId = 1) {
   const bytes = new Uint8Array(54);
   const view = new DataView(bytes.buffer);
   view.setUint16(0, 54, true);
   view.setUint16(2, 7208, true);
-  view.setInt8(4, 1);
+  view.setInt8(4, exchangeId);
   view.setUint8(5, 1);
   view.setUint32(9, token, true);
   view.setBigInt64(13, 0n, true);
@@ -301,6 +301,91 @@ test("keeps background Nifty subscribed while adding and removing requested inst
   }));
 });
 
+test("maintains multiple explicit instruments and unsubscribes only the selected instrument", async () => {
+  FakeWebSocket.instances = [];
+  const { stream, backgroundTasks } = createStream();
+  const addOne = await stream.fetch(new Request(
+    "https://market-price.internal/subscribe?instrument=nse_cm%7C1333",
+    { method: "POST" },
+  ));
+  const addTwo = await stream.fetch(new Request(
+    "https://market-price.internal/subscribe?instrument=nse_fo%7C45402",
+    { method: "POST" },
+  ));
+  assert.equal(addOne.status, 200);
+  assert.equal(addTwo.status, 200);
+  assert.deepEqual((await addTwo.json()).instruments.map(({ inputToken }) => inputToken), [
+    "nse_cm|Nifty 50",
+    "nse_cm|1333",
+    "nse_fo|45402",
+  ]);
+  await Promise.all(backgroundTasks);
+
+  const response = await stream.fetch(new Request("https://market-price.internal/events"));
+  const reader = response.body.getReader();
+  await Promise.all(backgroundTasks);
+  const socket = FakeWebSocket.instances[0];
+  socket.open();
+  socket.receive(JSON.stringify({ message_code: 1117 }));
+  const subscriptions = socket.sent.slice(1).map((message) => {
+    const parsed = JSON.parse(message);
+    return [parsed.event, parsed.inputtoken];
+  });
+  assert.deepEqual(subscriptions, [
+    ["subscribeIndices", "nse_cm|Nifty 50"],
+    ["snapshotIndices", "nse_cm|Nifty 50"],
+    ["subscribeScripsLite", "nse_cm|1333"],
+    ["snapshotScripsLite", "nse_cm|1333"],
+    ["subscribeScripsLite", "nse_fo|45402"],
+    ["snapshotScripsLite", "nse_fo|45402"],
+  ]);
+  socket.receive(JSON.stringify({
+    message_code: 1109,
+    error_code: 0,
+    data: {
+      "nse_cm|Nifty 50": { trading_symbols: "NIFTY 50" },
+      "nse_cm|1333": { trading_symbols: "HDFCBANK-EQ" },
+      "nse_fo|45402": { trading_symbols: "NIFTY-FUT" },
+    },
+  }));
+  socket.receive(createMiniTouchLine(1333, 1));
+  socket.receive(createMiniTouchLine(45402, 2));
+
+  const decoder = new TextDecoder();
+  const prices = new Set();
+  while (prices.size < 2) {
+    const { value, done } = await reader.read();
+    assert.equal(done, false);
+    const event = decoder.decode(value);
+    if (!event.startsWith("event: price")) continue;
+    prices.add(JSON.parse(event.match(/data: (.*)\n\n/)[1]).inputToken);
+  }
+  assert.deepEqual([...prices].sort(), ["nse_cm|1333", "nse_fo|45402"]);
+
+  const removed = await stream.fetch(new Request(
+    "https://market-price.internal/unsubscribe?instrument=nse_cm%7C1333",
+    { method: "POST" },
+  ));
+  assert.equal(removed.status, 200);
+  assert.deepEqual((await removed.json()).instruments.map(({ inputToken }) => inputToken), [
+    "nse_cm|Nifty 50",
+    "nse_fo|45402",
+  ]);
+  assert.ok(socket.sent.some((message) => {
+    const parsed = JSON.parse(message);
+    return parsed.event === "unsubscribeScripsLite" && parsed.inputtoken === "nse_cm|1333";
+  }));
+  const defaultUnsubscribe = await stream.fetch(new Request(
+    "https://market-price.internal/unsubscribe?instrument=nse_cm%7CNifty%2050",
+    { method: "POST" },
+  ));
+  assert.equal(defaultUnsubscribe.status, 400);
+
+  await reader.cancel();
+  await Promise.all(backgroundTasks);
+  assert.equal(socket.closeArgs, null);
+});
+
 test("reconnects the background Nifty stream without SSE clients", async () => {
   FakeWebSocket.instances = [];
   const { stream, backgroundTasks } = createStream();
@@ -433,9 +518,14 @@ test("rejects malformed instruments and reports missing market-feed credentials"
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   const initial = decoder.decode((await reader.read()).value);
-  const errorEvent = await reader.read();
   assert.match(initial, /"state":"disconnected"/);
-  assert.match(decoder.decode(errorEvent.value), /"state":"error".*KOTAK_MARKET_DATA_UCC/);
+  let events = "";
+  while (!events.includes('"state":"error"')) {
+    const { value, done } = await reader.read();
+    assert.equal(done, false);
+    events += decoder.decode(value);
+  }
+  assert.match(events, /"state":"error".*KOTAK_MARKET_DATA_UCC/);
   assert.equal(FakeWebSocket.instances.length, 0);
   await reader.cancel();
 });

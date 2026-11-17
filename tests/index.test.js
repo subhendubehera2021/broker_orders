@@ -235,8 +235,9 @@ test("serves the dashboard and protects the status endpoint", async () => {
   assert.match(dashboard.headers.get("content-type"), /text\/html/);
   const dashboardHtml = await dashboard.text();
   assert.match(dashboardHtml, /Order stream/);
-  assert.match(dashboardHtml, /Live stock price/);
-  assert.match(dashboardHtml, /value="nse_cm\|Nifty 50"/);
+  assert.match(dashboardHtml, /Live stock prices/);
+  assert.match(dashboardHtml, /id="market-price-rows"/);
+  assert.match(dashboardHtml, /Nifty 50 remains subscribed by default/);
   assert.equal(unauthorized.status, 401);
   assert.equal(status.status, 200);
   assert.deepEqual(await status.json(), {
@@ -274,7 +275,7 @@ test("serves a standalone live-price page with its own control-token field", asy
   assert.match(response.headers.get("content-security-policy"), /connect-src 'self'/);
   assert.match(html, /<title>Kotak Live Market Price<\/title>/);
   assert.match(html, /id="token"/);
-  assert.match(html, /value="nse_cm\|Nifty 50"/);
+  assert.match(html, /id="market-price-rows"/);
   assert.doesNotMatch(html, /id="order-table-body"/);
 });
 
@@ -354,5 +355,84 @@ test("protects and proxies the selected market-price instrument to its Durable O
       url: "https://market-price.internal/events?instrument=nse_cm%7C1333",
       options: { method: "GET" },
     },
+  ]);
+});
+
+test("protects and proxies market watchlist APIs and the shared event stream", async () => {
+  const calls = [];
+  const env = {
+    ORDER_STREAM_CONTROL_TOKEN: "control-secret",
+    MARKET_PRICE_STREAM: {
+      idFromName: (name) => {
+        calls.push({ name });
+        return "stable-market-price-id";
+      },
+      get: (id) => {
+        calls.push({ id });
+        return {
+          async fetch(url, options) {
+            calls.push({ url, options });
+            return Response.json({ instruments: [] });
+          },
+        };
+      },
+    },
+  };
+  const unauthorized = await worker.fetch(
+    new Request("https://worker.example/internal/market-price/instruments"),
+    env,
+  );
+  assert.equal(unauthorized.status, 401);
+
+  const listed = await worker.fetch(
+    new Request("https://worker.example/internal/market-price/instruments", {
+      headers: { Authorization: "Bearer control-secret" },
+    }),
+    env,
+  );
+  const subscribed = await worker.fetch(
+    new Request("https://worker.example/internal/market-price/subscribe?instrument=nse_cm%7C1333", {
+      method: "POST",
+      headers: { Authorization: "Bearer control-secret" },
+    }),
+    env,
+  );
+  const unsubscribed = await worker.fetch(
+    new Request("https://worker.example/internal/market-price/unsubscribe?instrument=nse_cm%7C1333", {
+      method: "POST",
+      headers: { Authorization: "Bearer control-secret" },
+    }),
+    env,
+  );
+  const events = await worker.fetch(
+    new Request("https://worker.example/internal/market-price/events", {
+      headers: { Authorization: "Bearer control-secret" },
+    }),
+    env,
+  );
+
+  assert.equal(listed.status, 200);
+  assert.equal(subscribed.status, 200);
+  assert.equal(unsubscribed.status, 200);
+  assert.equal(events.status, 200);
+  assert.deepEqual(calls, [
+    { name: "kotak-market-price-stream" },
+    { id: "stable-market-price-id" },
+    { url: "https://market-price.internal/instruments", options: { method: "GET" } },
+    { name: "kotak-market-price-stream" },
+    { id: "stable-market-price-id" },
+    {
+      url: "https://market-price.internal/subscribe?instrument=nse_cm%7C1333",
+      options: { method: "POST" },
+    },
+    { name: "kotak-market-price-stream" },
+    { id: "stable-market-price-id" },
+    {
+      url: "https://market-price.internal/unsubscribe?instrument=nse_cm%7C1333",
+      options: { method: "POST" },
+    },
+    { name: "kotak-market-price-stream" },
+    { id: "stable-market-price-id" },
+    { url: "https://market-price.internal/events", options: { method: "GET" } },
   ]);
 });
