@@ -539,9 +539,9 @@ export function buildApp({
       {
         schema: {
           tags: ["Orders"],
-          summary: "Place a simplified BUY SL-Limit order with serverside .20 price difference",
+          summary: "Place a simplified BUY SL-Limit order with auto 0.20 price difference and auto-AMO",
           description:
-            "Places a BUY Stop-Limit (SL) order with minimal required body parameters (tradingSymbol, quantity, and triggerPrice or price). Automatically computes a 0.20 difference between limit price and trigger price.",
+            "Places a BUY Stop-Limit (SL) order with minimal required body parameters (tradingSymbol, quantity, and either triggerPrice or price). Automatically computes a 0.20 difference between limit price and trigger price, and auto-detects After Market Orders (AMO: YES) outside regular Indian market hours (3:30 PM – 9:00 AM IST and weekends).",
           body: {
             type: "object",
             required: ["tradingSymbol", "quantity"],
