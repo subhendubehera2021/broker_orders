@@ -34,7 +34,12 @@ curl http://localhost:8787/internal/order-stream/status \
 
 curl -N http://localhost:8787/internal/order-stream/events \
   -H "Authorization: Bearer your-order-stream-control-token"
+
+curl -X POST http://localhost:8787/internal/market-price/restart \
+  -H "Authorization: Bearer your-order-stream-control-token"
 ```
+
+The market-price restart endpoint closes and immediately reconnects the market-data WebSocket while preserving Nifty 50 and all saved instrument subscriptions.
 
 ## Kotak WebSocket credentials
 

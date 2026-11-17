@@ -3,6 +3,9 @@ export const marketPriceDashboardStyles = `
       .market-price-header { padding: 25px 24px 18px; }
       .market-price-header h2 { margin: 0; font-size: 21px; font-weight: 650; letter-spacing: -.035em; }
       .market-price-description { margin: 8px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+      .market-price-header-actions { margin-top: 12px; }
+      .market-price-restart { min-height: 32px; padding: 0 10px; border-color: var(--line); color: #b7c3d5; background: transparent; font-size: 10px; }
+      .market-price-restart:hover:not(:disabled) { border-color: rgba(242, 140, 40, .45); color: var(--accent-hover); }
       .market-price-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; padding: 0 24px 18px; }
       .market-price-form label { grid-column: 1 / -1; margin: 0; }
       .market-price-input {
@@ -58,6 +61,9 @@ export const marketPricePanelMarkup = `
             <p class="eyebrow">Market data</p>
             <h2 id="market-price-title">Live stock prices</h2>
             <p class="market-price-description">Watch subscribed instruments and their live prices. Nifty 50 remains subscribed by default.</p>
+            <div class="market-price-header-actions">
+              <button class="market-price-restart" id="market-price-restart" type="button">Reconnect market feed</button>
+            </div>
           </header>
           <form class="market-price-form" id="market-price-form">
             <label for="market-instrument">Add an instrument</label>
@@ -85,6 +91,7 @@ export const marketPriceDashboardScript = String.raw`
   const rowsOutput = document.querySelector("#market-price-rows");
   const messageOutput = document.querySelector("#market-price-message");
   const submitButton = form.querySelector("button[type=submit]");
+  const restartButton = document.querySelector("#market-price-restart");
   const instruments = new Map();
   const removedInstruments = new Set();
   const rowsByToken = new Map();
@@ -388,6 +395,29 @@ export const marketPriceDashboardScript = String.raw`
       button.disabled = false;
     }
   }
+
+  async function restartMarketPrice() {
+    const token = controlTokenInput.value.trim();
+    if (!token) {
+      setMessage("Enter the Worker control token first.", true);
+      return;
+    }
+
+    restartButton.disabled = true;
+    restartButton.textContent = "Reconnecting...";
+    try {
+      const result = await requestJson("/internal/market-price/restart", token, "POST");
+      updateInstruments(result.instruments);
+      setMessage("Market-price WebSocket is reconnecting.");
+    } catch (error) {
+      setMessage(error.message, true);
+    } finally {
+      restartButton.disabled = false;
+      restartButton.textContent = "Reconnect market feed";
+    }
+  }
+
+  restartButton.addEventListener("click", () => void restartMarketPrice());
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();

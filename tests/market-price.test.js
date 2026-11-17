@@ -401,6 +401,50 @@ test("reconnects the background Nifty stream without SSE clients", async () => {
   assert.equal(stream.currentInstrument.inputToken, "nse_cm|Nifty 50");
 });
 
+test("manually restarts the market socket while preserving all desired instruments", async () => {
+  FakeWebSocket.instances = [];
+  const { stream, backgroundTasks } = createStream();
+  await stream.fetch(new Request(
+    "https://market-price.internal/subscribe?instrument=nse_fo%7C45318",
+    { method: "POST" },
+  ));
+  await Promise.all(backgroundTasks);
+  const firstSocket = FakeWebSocket.instances[0];
+  firstSocket.open();
+  firstSocket.receive(JSON.stringify({ message_code: 1117 }));
+
+  const response = await stream.fetch(new Request(
+    "https://market-price.internal/restart",
+    { method: "POST" },
+  ));
+  assert.equal(response.status, 200);
+  const result = await response.json();
+  assert.equal(result.state, "connecting");
+  assert.deepEqual(result.instruments.map(({ inputToken }) => inputToken), [
+    "nse_cm|Nifty 50",
+    "nse_fo|45318",
+  ]);
+  assert.deepEqual(firstSocket.closeArgs, [
+    1000,
+    "Manual market-data connection refresh",
+  ]);
+  assert.equal(FakeWebSocket.instances.length, 2);
+
+  const secondSocket = FakeWebSocket.instances[1];
+  secondSocket.open();
+  secondSocket.receive(JSON.stringify({ message_code: 1117 }));
+  assert.deepEqual(secondSocket.sent.slice(1).map((message) => {
+    const parsed = JSON.parse(message);
+    return [parsed.event, parsed.inputtoken];
+  }), [
+    ["subscribeIndices", "nse_cm|Nifty 50"],
+    ["snapshotIndices", "nse_cm|Nifty 50"],
+    ["subscribeScripsLite", "nse_fo|45318"],
+    ["snapshotScripsLite", "nse_fo|45318"],
+  ]);
+  await Promise.all(backgroundTasks);
+});
+
 test("uses a freshly configured feed URL when provided", async () => {
   FakeWebSocket.instances = [];
   const { stream, backgroundTasks } = createStream();

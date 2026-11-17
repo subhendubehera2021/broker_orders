@@ -237,7 +237,12 @@ test("serves the dashboard and protects the status endpoint", async () => {
   assert.match(dashboardHtml, /Order stream/);
   assert.match(dashboardHtml, /Live stock prices/);
   assert.match(dashboardHtml, /id="market-price-rows"/);
+  assert.match(dashboardHtml, /id="market-price-restart"/);
   assert.match(dashboardHtml, /Nifty 50 remains subscribed by default/);
+  assert.match(dashboardHtml, /id="connection-setup"/);
+  assert.match(dashboardHtml, /id="connected-badge"[^>]*hidden/);
+  assert.match(dashboardHtml, /id="refresh"[^>]*aria-label="Refresh status"/);
+  assert.doesNotMatch(dashboardHtml, /<span>Refresh status<\/span>/);
   assert.equal(unauthorized.status, 401);
   assert.equal(status.status, 200);
   assert.deepEqual(await status.json(), {
@@ -276,6 +281,7 @@ test("serves a standalone live-price page with its own control-token field", asy
   assert.match(html, /<title>Kotak Live Market Price<\/title>/);
   assert.match(html, /id="token"/);
   assert.match(html, /id="market-price-rows"/);
+  assert.match(html, /id="market-price-restart"/);
   assert.doesNotMatch(html, /id="order-table-body"/);
 });
 
@@ -410,11 +416,19 @@ test("protects and proxies market watchlist APIs and the shared event stream", a
     }),
     env,
   );
+  const restarted = await worker.fetch(
+    new Request("https://worker.example/internal/market-price/restart", {
+      method: "POST",
+      headers: { Authorization: "Bearer control-secret" },
+    }),
+    env,
+  );
 
   assert.equal(listed.status, 200);
   assert.equal(subscribed.status, 200);
   assert.equal(unsubscribed.status, 200);
   assert.equal(events.status, 200);
+  assert.equal(restarted.status, 200);
   assert.deepEqual(calls, [
     { name: "kotak-market-price-stream" },
     { id: "stable-market-price-id" },
@@ -434,5 +448,8 @@ test("protects and proxies market watchlist APIs and the shared event stream", a
     { name: "kotak-market-price-stream" },
     { id: "stable-market-price-id" },
     { url: "https://market-price.internal/events", options: { method: "GET" } },
+    { name: "kotak-market-price-stream" },
+    { id: "stable-market-price-id" },
+    { url: "https://market-price.internal/restart", options: { method: "POST" } },
   ]);
 });

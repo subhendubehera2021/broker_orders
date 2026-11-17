@@ -11,6 +11,7 @@ const marketPriceEventsPath = "/internal/market-price/events";
 const marketPriceInstrumentsPath = "/internal/market-price/instruments";
 const marketPriceSubscribePath = "/internal/market-price/subscribe";
 const marketPriceUnsubscribePath = "/internal/market-price/unsubscribe";
+const marketPriceRestartPath = "/internal/market-price/restart";
 const orderStreamCron = "*/1 * * * *";
 
 function isAuthorized(request, secret) {
@@ -128,6 +129,8 @@ export default {
       url.pathname === marketPriceSubscribePath && request.method === "POST";
     const isMarketPriceUnsubscribe =
       url.pathname === marketPriceUnsubscribePath && request.method === "POST";
+    const isMarketPriceRestart =
+      url.pathname === marketPriceRestartPath && request.method === "POST";
     if (
       !isStart &&
       !isStatus &&
@@ -135,7 +138,8 @@ export default {
       !isMarketPriceEvents &&
       !isMarketPriceInstruments &&
       !isMarketPriceSubscribe &&
-      !isMarketPriceUnsubscribe
+      !isMarketPriceUnsubscribe &&
+      !isMarketPriceRestart
     ) {
       return new Response("Not found", { status: 404 });
     }
@@ -149,6 +153,9 @@ export default {
     }
     if (isMarketPriceInstruments) {
       return callMarketPriceControl(env, "/instruments", "GET");
+    }
+    if (isMarketPriceRestart) {
+      return callMarketPriceControl(env, "/restart", "POST");
     }
     if (isMarketPriceSubscribe || isMarketPriceUnsubscribe) {
       const instrument = url.searchParams.get("instrument");

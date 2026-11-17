@@ -266,6 +266,17 @@ export class KotakMarketPriceStream {
         headers: { "Cache-Control": "no-store" },
       });
     }
+    if (request.method === "POST" && url.pathname === "/restart") {
+      try {
+        await this.restart();
+        return Response.json({ ...this.getStatus(), instruments: this.getInstruments() }, {
+          headers: { "Cache-Control": "no-store" },
+        });
+      } catch (error) {
+        console.error("[market-price] unable to restart market-data connection", error);
+        return Response.json({ error: error.message }, { status: 503 });
+      }
+    }
     if (request.method !== "GET" || url.pathname !== "/events") {
       return new Response("Not found", { status: 404 });
     }
@@ -908,6 +919,40 @@ export class KotakMarketPriceStream {
 
     await this.connect();
     this.publishInstruments();
+  }
+
+  async restart() {
+    await this.loadInstrumentSelections();
+    if (!this.backgroundMode) {
+      await this.ctx.storage.put("backgroundMode", true);
+      this.backgroundMode = true;
+    }
+    this.currentInstrument ??= DEFAULT_MARKET_INSTRUMENT;
+
+    const previousSocket = this.socket;
+    this.socket = null;
+    this.authenticated = false;
+    this.subscribedInstruments.clear();
+    this.acknowledgedInstruments.clear();
+    this.retryScheduled = false;
+    this.retryAttempt = 0;
+    this.connectionState = "disconnected";
+    this.lastError = null;
+    if (previousSocket && previousSocket.readyState < this.WebSocketImpl.CLOSING) {
+      previousSocket.close(1000, "Manual market-data connection refresh");
+    }
+    this.publishStatus();
+    this.publishInstruments();
+
+    try {
+      await this.connect();
+    } catch (error) {
+      this.connectionState = "error";
+      this.lastError = error.message;
+      this.publishStatus();
+      this.publishInstruments();
+      throw error;
+    }
   }
 
   async loadBackgroundMode() {
