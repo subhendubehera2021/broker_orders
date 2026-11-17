@@ -85,6 +85,7 @@ export async function fetchHighestVolumeNiftyOptions(
       exchange: "nse_fo",
       underlying: "NIFTY",
       instrument_type: "option",
+      expiry: "2026-11-23",
       count: String(optionChainCount),
     },
   );
