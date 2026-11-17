@@ -51,6 +51,22 @@ function getKotakCredentials(reply) {
   return { apiToken, baseUrl };
 }
 
+function formatIndiaTime(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+
+  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  return `${values.year}-${values.month}-${values.day} ${values.hour}:${values.minute}:${values.second} IST`;
+}
+
 function waitForRequestSlot() {
   return new Promise((resolve) => setTimeout(resolve, 1_000));
 }
@@ -113,6 +129,8 @@ export function registerSwingApiRoutes(
   });
 
   app.all("/api/liquidity-swing", async (request, reply) => {
+    console.log(`[liquidity-swing-api] Request received at ${formatIndiaTime()} IST`);
+
     if (request.method !== "GET") {
       return reply.header("Allow", "GET").code(405).send({ error: "Method not allowed" });
     }
