@@ -1,14 +1,12 @@
-import { randomBytes, timingSafeEqual } from "node:crypto";
-import { createRequire } from "node:module";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
-const require = createRequire(import.meta.url);
-const { fyersModel } = require("fyers-api-v3");
 const loginPage = await readFile(new URL("../public/fyers-login.html", import.meta.url), "utf8");
 const stateCookieName = "fyers_oauth_state";
 const stateCookieMaxAgeSeconds = 300;
+const fyersApiBaseUrl = "https://api-t1.fyers.in/api/v3";
 
-export function registerFyersAuthRoutes(app, { createFyersModel = createDefaultFyersModel } = {}) {
+export function registerFyersAuthRoutes(app) {
   let accessToken;
 
   app.get("/fyers-login", async (_request, reply) => {
@@ -36,18 +34,7 @@ export function registerFyersAuthRoutes(app, { createFyersModel = createDefaultF
     }
 
     const state = randomBytes(32).toString("hex");
-    const model = createConfiguredModel(createFyersModel, config);
-    const authorizationUrl = new URL(model.generateAuthCode({
-      client_id: config.appId,
-      redirect_uri: config.redirectUri,
-      state,
-    }));
-    if (
-      authorizationUrl.protocol !== "https:" ||
-      !(authorizationUrl.hostname === "fyers.in" || authorizationUrl.hostname.endsWith(".fyers.in"))
-    ) {
-      return reply.code(502).send({ error: "Fyers returned an invalid authorization URL" });
-    }
+    const authorizationUrl = new URL(`${fyersApiBaseUrl}/generate-authcode`);
     authorizationUrl.searchParams.set("client_id", config.appId);
     authorizationUrl.searchParams.set("redirect_uri", config.redirectUri);
     authorizationUrl.searchParams.set("response_type", "code");
@@ -84,11 +71,10 @@ export function registerFyersAuthRoutes(app, { createFyersModel = createDefaultF
     }
 
     try {
-      const model = createConfiguredModel(createFyersModel, config);
-      const result = await model.generate_access_token({
-        client_id: config.appId,
-        secret_key: config.appSecret,
-        auth_code: authCode,
+      const result = await exchangeFyersAuthCode({
+        appId: config.appId,
+        appSecret: config.appSecret,
+        authCode,
       });
       if (result?.s !== "ok" || typeof result.access_token !== "string" || !result.access_token) {
         console.error("[fyers-auth] Fyers rejected the authorization-code exchange");
@@ -106,15 +92,20 @@ export function registerFyersAuthRoutes(app, { createFyersModel = createDefaultF
   });
 }
 
-function createDefaultFyersModel() {
-  return new fyersModel({ enableLogging: false });
-}
-
-function createConfiguredModel(createFyersModel, config) {
-  const model = createFyersModel();
-  model.setAppId(config.appId);
-  model.setRedirectUrl(config.redirectUri);
-  return model;
+async function exchangeFyersAuthCode({ appId, appSecret, authCode }) {
+  const appIdHash = createHash("sha256")
+    .update(`${appId}:${appSecret}`)
+    .digest("hex");
+  const response = await fetch(`${fyersApiBaseUrl}/validate-authcode`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      grant_type: "authorization_code",
+      code: authCode,
+      appIdHash,
+    }),
+  });
+  return response.json();
 }
 
 function readFyersConfig() {

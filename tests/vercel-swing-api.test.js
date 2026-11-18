@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { after, test } from "node:test";
 import Fastify from "fastify";
 import { registerSwingApiRoutes } from "../src/swing-api-app.js";
@@ -20,22 +21,6 @@ registerSwingApiRoutes(app, {
   persistOptionChain: async (instruments) => {
     persistedOptionChain = instruments;
   },
-  createFyersModel: () => ({
-    setAppId() {},
-    setRedirectUrl() {},
-    generateAuthCode({ client_id, redirect_uri, state }) {
-      const url = new URL("https://api-t1.fyers.in/api/v3/generate-authcode");
-      url.searchParams.set("client_id", client_id);
-      url.searchParams.set("redirect_uri", redirect_uri);
-      url.searchParams.set("response_type", "code");
-      url.searchParams.set("state", state);
-      return url.toString();
-    },
-    async generate_access_token(input) {
-      fyersAuthRequest = input;
-      return { s: "ok", access_token: "private-fyers-access-token" };
-    },
-  }),
 });
 
 after(async () => {
@@ -293,6 +278,7 @@ test("Fyers login page serves OAuth controls without exposing credentials", asyn
 });
 
 test("Fyers OAuth validates state, exchanges the code, and keeps the token server-side", async () => {
+  const originalFetch = globalThis.fetch;
   const previousEnv = {
     FYERS_APP_ID: process.env.FYERS_APP_ID,
     FYERS_APP_SECRET: process.env.FYERS_APP_SECRET,
@@ -303,6 +289,10 @@ test("Fyers OAuth validates state, exchanges the code, and keeps the token serve
     FYERS_APP_SECRET: "test-app-secret",
     FYERS_REDIRECT_URI: "http://127.0.0.1:3000/auth/fyers/callback",
   });
+  globalThis.fetch = async (url, options) => {
+    fyersAuthRequest = { url: String(url), options };
+    return Response.json({ s: "ok", access_token: "private-fyers-access-token" });
+  };
 
   let login;
   try {
@@ -332,10 +322,13 @@ test("Fyers OAuth validates state, exchanges the code, and keeps the token serve
     });
     assert.equal(callback.statusCode, 302);
     assert.equal(callback.headers.location, "/fyers-login?status=connected");
-    assert.deepEqual(fyersAuthRequest, {
-      client_id: "test-app-id",
-      secret_key: "test-app-secret",
-      auth_code: "auth-code",
+    assert.equal(fyersAuthRequest.url, "https://api-t1.fyers.in/api/v3/validate-authcode");
+    assert.equal(fyersAuthRequest.options.method, "POST");
+    assert.equal(fyersAuthRequest.options.headers["Content-Type"], "application/json");
+    assert.deepEqual(JSON.parse(fyersAuthRequest.options.body), {
+      grant_type: "authorization_code",
+      code: "auth-code",
+      appIdHash: createHash("sha256").update("test-app-id:test-app-secret").digest("hex"),
     });
 
     const authenticatedSession = await app.inject({ method: "GET", url: "/api/fyers/session" });
@@ -347,6 +340,7 @@ test("Fyers OAuth validates state, exchanges the code, and keeps the token serve
     assert.deepEqual(logout.json(), { authenticated: false });
     assert.deepEqual(loggedOutSession.json(), { configured: true, authenticated: false });
   } finally {
+    globalThis.fetch = originalFetch;
     for (const [key, value] of Object.entries(previousEnv)) {
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;
