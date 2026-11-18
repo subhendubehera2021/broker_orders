@@ -101,6 +101,7 @@ let activeTool = "cursor";
 let pendingTrendStart;
 let drawings = [];
 let swingSeries = [];
+let swingMarkers = [];
 let quoteTimer;
 let countdownTimer;
 let quoteInFlight = false;
@@ -289,69 +290,87 @@ function clearDrawings() {
 function clearSwings() {
   for (const series of swingSeries) chart.removeSeries(series);
   swingSeries = [];
+  swingMarkers = [];
   candleSeries.setMarkers([]);
   barSeries.setMarkers([]);
 }
 
+function updateCurrentCandleVolumeMarker() {
+  const latest = candles.at(-1);
+  const volumeLabel = latest ? formatLiquidityVolume(latest.volume) : "";
+  const markers = [...swingMarkers];
+  if (latest && volumeLabel) {
+    markers.push({
+      time: latest.time,
+      position: "belowBar",
+      color: latest.close >= latest.open ? chartColors.up : chartColors.down,
+      shape: "circle",
+      text: volumeLabel,
+      size: 0,
+    });
+  }
+  activePriceSeries().setMarkers(markers);
+}
+
 function renderSwings() {
   clearSwings();
-  if (!swingToggle.checked || candles.length < Number(lookbackSelect.value) * 2 + 1) return;
-  const markers = [];
-  for (const swing of findLiquiditySwings(candles, Number(lookbackSelect.value))) {
-    const isHigh = swing.side === "high";
-    const color = isHigh ? chartColors.down : chartColors.up;
-    if (
-      Number.isFinite(swing.zoneEndTime) &&
-      swing.zoneEndTime > swing.startTime &&
-      swing.zoneTop > swing.zoneBottom
-    ) {
-      const zone = chart.addBaselineSeries({
-        baseValue: { type: "price", price: swing.zoneBottom },
-        topFillColor1: chartColors.liquidityZoneTop,
-        topFillColor2: chartColors.liquidityZoneBottom,
-        topLineColor: chartColors.liquidityZoneBottom,
-        bottomFillColor1: chartColors.liquidityZoneTop,
-        bottomFillColor2: chartColors.liquidityZoneBottom,
-        bottomLineColor: chartColors.liquidityZoneBottom,
-        lineVisible: false,
-        pointMarkersVisible: false,
+  if (swingToggle.checked && candles.length >= Number(lookbackSelect.value) * 2 + 1) {
+    for (const swing of findLiquiditySwings(candles, Number(lookbackSelect.value))) {
+      const isHigh = swing.side === "high";
+      const color = isHigh ? chartColors.down : chartColors.up;
+      if (
+        Number.isFinite(swing.zoneEndTime) &&
+        swing.zoneEndTime > swing.startTime &&
+        swing.zoneTop > swing.zoneBottom
+      ) {
+        const zone = chart.addBaselineSeries({
+          baseValue: { type: "price", price: swing.zoneBottom },
+          topFillColor1: chartColors.liquidityZoneTop,
+          topFillColor2: chartColors.liquidityZoneBottom,
+          topLineColor: chartColors.liquidityZoneBottom,
+          bottomFillColor1: chartColors.liquidityZoneTop,
+          bottomFillColor2: chartColors.liquidityZoneBottom,
+          bottomLineColor: chartColors.liquidityZoneBottom,
+          lineVisible: false,
+          pointMarkersVisible: false,
+          lastValueVisible: false,
+          priceLineVisible: false,
+          crosshairMarkerVisible: false,
+        });
+        zone.setData([
+          { time: swing.startTime, value: swing.zoneTop },
+          { time: swing.zoneEndTime, value: swing.zoneTop },
+        ]);
+        swingSeries.push(zone);
+      }
+
+      const series = chart.addLineSeries({
+        color,
+        lineWidth: 1,
+        lineStyle: LineStyle.Solid,
         lastValueVisible: false,
         priceLineVisible: false,
         crosshairMarkerVisible: false,
       });
-      zone.setData([
-        { time: swing.startTime, value: swing.zoneTop },
-        { time: swing.zoneEndTime, value: swing.zoneTop },
+      series.setData([
+        { time: swing.startTime, value: swing.level },
+        { time: swing.endTime, value: swing.level },
       ]);
-      swingSeries.push(zone);
-    }
-
-    const series = chart.addLineSeries({
-      color,
-      lineWidth: 1,
-      lineStyle: LineStyle.Solid,
-      lastValueVisible: false,
-      priceLineVisible: false,
-      crosshairMarkerVisible: false,
-    });
-    series.setData([
-      { time: swing.startTime, value: swing.level },
-      { time: swing.endTime, value: swing.level },
-    ]);
-    swingSeries.push(series);
-    const volumeLabel = formatLiquidityVolume(swing.volume);
-    if (volumeLabel) {
-      markers.push({
-        time: swing.startTime,
-        position: isHigh ? "aboveBar" : "belowBar",
-        color,
-        shape: "circle",
-        text: volumeLabel,
-        size: 0,
-      });
+      swingSeries.push(series);
+      const volumeLabel = formatLiquidityVolume(swing.volume);
+      if (volumeLabel) {
+        swingMarkers.push({
+          time: swing.startTime,
+          position: isHigh ? "aboveBar" : "belowBar",
+          color,
+          shape: "circle",
+          text: volumeLabel,
+          size: 0,
+        });
+      }
     }
   }
-  activePriceSeries().setMarkers(markers);
+  updateCurrentCandleVolumeMarker();
 }
 
 function clearLiveTimer() {
@@ -657,6 +676,7 @@ function applyLiveQuote(sequence, symbol, quote) {
   });
   document.querySelector("#last-price").textContent = formatPrice(quote.price);
   updateOhlc(next);
+  updateCurrentCandleVolumeMarker();
   updateLiveCountdown();
   setConnectionStatus(socketConnected ? "Fyers live" : "Fyers polling", "connected");
   feedStatus.textContent = socketConnected
