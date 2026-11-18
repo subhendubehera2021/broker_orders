@@ -298,3 +298,41 @@ test("streams status and broker frames over SSE and cleans up disconnected clien
   await reader.cancel();
   assert.equal(stream.sseClients.size, 0);
 });
+
+test("disconnect closes socket, clears alarm, sets state to disconnected, and prevents reconnect", async () => {
+  FakeWebSocket.instances = [];
+  let alarmDeleted = false;
+  const ctx = {
+    storage: {
+      async setAlarm() {},
+      async deleteAlarm() {
+        alarmDeleted = true;
+      },
+    },
+  };
+  const env = {
+    KOTAK_NEO_BASE_URL: "https://e21.kotaksecurities.com",
+    KOTAK_WS_SESSION_TOKEN: "session-token",
+    KOTAK_WS_SID: "session-id",
+  };
+  const stream = new KotakOrderStream(ctx, env, FakeWebSocket);
+  await stream.start();
+  const socket = FakeWebSocket.instances[0];
+  socket.open();
+  socket.receive(JSON.stringify({ type: "cn", ak: "ok" }));
+  assert.equal(stream.connectionState, "connected");
+
+  const response = await stream.fetch(new Request("https://order-stream.internal/disconnect", { method: "POST" }));
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { state: "disconnected" });
+  assert.equal(stream.connectionState, "disconnected");
+  assert.equal(stream.socket, null);
+  assert.equal(alarmDeleted, true);
+  assert.deepEqual(socket.closeArgs, [1000, "Manually disconnected"]);
+  assert.equal(stream.retryScheduled, false);
+
+  // Triggering close event on old socket shouldn't trigger reconnect
+  socket.dispatchEvent(Object.assign(new Event("close"), { code: 1000 }));
+  assert.equal(stream.connectionState, "disconnected");
+  assert.equal(stream.retryScheduled, false);
+});

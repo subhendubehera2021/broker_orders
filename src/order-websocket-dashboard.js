@@ -135,6 +135,16 @@ export const orderWebSocketDashboard = `<!doctype html>
         font-weight: 700;
       }
       .panel-header-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; }
+      .header-action-button {
+        width: 36px;
+        min-height: 36px;
+        padding: 0;
+        border-color: var(--line);
+        color: #b7c3d5;
+        background: rgba(255, 255, 255, .035);
+      }
+      .header-action-button:hover:not(:disabled) { color: var(--accent-hover); background: rgba(255, 255, 255, .08); }
+      .header-disconnect-button:hover:not(:disabled) { color: #ff8080; border-color: rgba(255, 128, 128, .3); background: rgba(255, 80, 80, .1); }
       .header-refresh-button {
         width: 36px;
         min-height: 36px;
@@ -144,7 +154,7 @@ export const orderWebSocketDashboard = `<!doctype html>
         background: rgba(255, 255, 255, .035);
       }
       .header-refresh-button:hover:not(:disabled) { color: var(--accent-hover); background: rgba(255, 255, 255, .08); }
-      .header-connected[hidden], .header-connection-controls[hidden] { display: none; }
+      .header-connected[hidden], .header-connection-controls[hidden], .header-disconnect-button[hidden] { display: none; }
 
       .connection {
         display: flex;
@@ -357,6 +367,9 @@ export const orderWebSocketDashboard = `<!doctype html>
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m3.5 8.2 3 3 6-6.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
               <span>Connected</span>
             </div>
+            <button class="secondary header-action-button header-disconnect-button" id="disconnect" type="button" aria-label="Disconnect stream" title="Disconnect stream" hidden>
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M12.5 3.5 3.5 12.5M3.5 3.5l9 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            </button>
             <button class="secondary header-refresh-button" id="refresh" type="button" aria-label="Refresh status" title="Refresh status">
               <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M13 5.5V2.8m0 2.7h-2.7M13 5.5A5.5 5.5 0 1 0 13.3 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
@@ -433,6 +446,7 @@ export const orderWebSocketDashboard = `<!doctype html>
       const indicator = document.querySelector("#indicator");
       const messageOutput = document.querySelector("#message");
       const connectButton = document.querySelector("#connect");
+      const disconnectButton = document.querySelector("#disconnect");
       const connectionSetup = document.querySelector("#connection-setup");
       const connectedBadge = document.querySelector("#connected-badge");
       const eventCount = document.querySelector("#event-count");
@@ -484,6 +498,7 @@ export const orderWebSocketDashboard = `<!doctype html>
         const connected = state === "connected" && status.authenticated === true;
         connectionSetup.hidden = connected;
         connectedBadge.hidden = !connected;
+        disconnectButton.hidden = state === "disconnected";
         stateOutput.textContent = state;
         stateOutput.dataset.state = state;
         indicator.dataset.state = state;
@@ -697,6 +712,23 @@ export const orderWebSocketDashboard = `<!doctype html>
         } finally {
           connectButton.disabled = false;
           connectButton.setAttribute("aria-busy", "false");
+        }
+      });
+
+      disconnectButton.addEventListener("click", async () => {
+        disconnectButton.disabled = true;
+        messageOutput.textContent = "Disconnecting stream...";
+        messageOutput.dataset.error = "false";
+        try {
+          await request("/internal/order-stream/disconnect", "POST");
+          streamController?.abort();
+          streamStatus.textContent = "Offline";
+          messageOutput.textContent = "Stream disconnected.";
+          await checkStatus();
+        } catch (error) {
+          showError(error);
+        } finally {
+          disconnectButton.disabled = false;
         }
       });
 

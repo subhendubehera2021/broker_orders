@@ -4,6 +4,7 @@ import { orderWebSocketDashboard } from "./order-websocket-dashboard.js";
 import { KotakOrderStream } from "./order-websocket.js";
 
 const orderStreamPath = "/internal/order-stream/start";
+const orderStreamDisconnectPath = "/internal/order-stream/disconnect";
 const orderStreamStatusPath = "/internal/order-stream/status";
 const orderStreamEventsPath = "/internal/order-stream/events";
 const marketPriceEventsPath = "/internal/market-price/events";
@@ -73,6 +74,17 @@ async function startOrderStream(env) {
   return response;
 }
 
+async function disconnectOrderStream(env) {
+  const response = await callOrderStream(env, "/disconnect", "POST");
+  if (!response.ok) {
+    const result = await response.json();
+    throw new Error(result.error ?? `Order stream disconnect failed with status ${response.status}`);
+  }
+  const { state } = await response.clone().json();
+  console.log(`[order-websocket] supervisor state=${state}`);
+  return response;
+}
+
 export { KotakMarketPriceStream, KotakOrderStream };
 
 export default {
@@ -102,6 +114,7 @@ export default {
     }
 
     const isStart = url.pathname === orderStreamPath && request.method === "POST";
+    const isDisconnect = url.pathname === orderStreamDisconnectPath && request.method === "POST";
     const isStatus = url.pathname === orderStreamStatusPath && request.method === "GET";
     const isEvents = url.pathname === orderStreamEventsPath && request.method === "GET";
     const isMarketPriceEvents = url.pathname === marketPriceEventsPath && request.method === "GET";
@@ -115,6 +128,7 @@ export default {
       url.pathname === marketPriceRestartPath && request.method === "POST";
     if (
       !isStart &&
+      !isDisconnect &&
       !isStatus &&
       !isEvents &&
       !isMarketPriceEvents &&
@@ -130,6 +144,7 @@ export default {
     }
 
     if (isStart) return startOrderStream(env);
+    if (isDisconnect) return disconnectOrderStream(env);
     if (isMarketPriceEvents) {
       return callMarketPriceStream(env, url.searchParams.get("instrument"));
     }

@@ -93,6 +93,7 @@ export class KotakOrderStream {
     this.sseClients = new Set();
     this.retryScheduled = false;
     this.retryAttempt = 0;
+    this.manuallyDisconnected = false;
     this.pendingMarketSubscriptions = new Set();
   }
 
@@ -105,6 +106,18 @@ export class KotakOrderStream {
     }
     if (request.method === "GET" && url.pathname === "/events") {
       return this.createEventStream();
+    }
+    if (request.method === "POST" && url.pathname === "/disconnect") {
+      try {
+        const state = await this.disconnect();
+        return Response.json(
+          { state },
+          { headers: { "Cache-Control": "no-store" } },
+        );
+      } catch (error) {
+        console.error("[order-websocket] unable to disconnect Kotak connection", error);
+        return Response.json({ error: "Unable to disconnect Kotak order stream" }, { status: 500 });
+      }
     }
     if (request.method !== "POST" || url.pathname !== "/start") {
       return new Response("Not found", { status: 404 });
@@ -123,6 +136,7 @@ export class KotakOrderStream {
   }
 
   async start() {
+    this.manuallyDisconnected = false;
     if (
       this.socket &&
       (this.socket.readyState === this.WebSocketImpl.CONNECTING ||
@@ -134,6 +148,28 @@ export class KotakOrderStream {
 
     await this.connect();
     return "connecting";
+  }
+
+  async disconnect() {
+    this.manuallyDisconnected = true;
+    this.retryScheduled = false;
+    this.retryAttempt = 0;
+    const socket = this.socket;
+    this.socket = null;
+    this.authenticated = false;
+    this.connectionState = "disconnected";
+    if (socket && socket.readyState < this.WebSocketImpl.CLOSING) {
+      socket.close(1000, "Manually disconnected");
+    }
+    if (this.ctx?.storage?.deleteAlarm) {
+      try {
+        await this.ctx.storage.deleteAlarm();
+      } catch (error) {
+        console.error("[order-websocket] unable to delete alarm on disconnect", error);
+      }
+    }
+    this.publishStatus();
+    return "disconnected";
   }
 
   getStatus() {
@@ -360,8 +396,13 @@ export class KotakOrderStream {
     if (this.socket !== socket) return;
     this.socket = null;
     this.authenticated = false;
-    this.connectionState = "reconnecting";
+    this.connectionState = "disconnected";
     console.warn(`[order-websocket] Kotak connection closed code=${event.code}`);
+    if (this.manuallyDisconnected) {
+      this.publishStatus();
+      return;
+    }
+    this.connectionState = "reconnecting";
     this.scheduleReconnect();
   }
 

@@ -133,6 +133,48 @@ test("start endpoint rejects unauthorized and non-POST requests", async () => {
   assert.equal(wrongMethod.status, 404);
 });
 
+test("authenticated disconnect endpoint disconnects the Durable Object stream", async () => {
+  const calls = [];
+  const stub = {
+    async fetch(url, options) {
+      calls.push({ url, options });
+      return Response.json({ state: "disconnected" });
+    },
+  };
+  const env = {
+    ORDER_STREAM_CONTROL_TOKEN: "control-secret",
+    ORDER_STREAM: {
+      idFromName(name) {
+        calls.push({ name });
+        return "stable-order-stream-id";
+      },
+      get(id) {
+        calls.push({ id });
+        return stub;
+      },
+    },
+  };
+
+  const response = await worker.fetch(
+    new Request("https://worker.example/internal/order-stream/disconnect", {
+      method: "POST",
+      headers: { Authorization: "Bearer control-secret" },
+    }),
+    env,
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { state: "disconnected" });
+  assert.deepEqual(calls, [
+    { name: "kotak-order-stream" },
+    { id: "stable-order-stream-id" },
+    {
+      url: "https://order-stream.internal/disconnect",
+      options: { method: "POST" },
+    },
+  ]);
+});
+
 test("serves the dashboard and protects the status endpoint", async () => {
   const calls = [];
   const env = {
@@ -191,6 +233,7 @@ test("serves the dashboard and protects the status endpoint", async () => {
   assert.match(dashboardHtml, /id="connected-badge"[^>]*hidden/);
   assert.match(dashboardHtml, /id="refresh"[^>]*aria-label="Refresh status"/);
   assert.doesNotMatch(dashboardHtml, /<span>Refresh status<\/span>/);
+  assert.match(dashboardHtml, /id="disconnect"[^>]*aria-label="Disconnect stream"/);
   assert.equal(unauthorized.status, 401);
   assert.equal(status.status, 200);
   assert.deepEqual(await status.json(), {
