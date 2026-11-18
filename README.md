@@ -28,9 +28,17 @@ FYERS_REDIRECT_URI=http://127.0.0.1:3000/auth/fyers/callback
 ```
 
 Open [http://127.0.0.1:3000/fyers-login](http://127.0.0.1:3000/fyers-login)
-and select **Login with Fyers**. The access token is kept in server memory and
-is never returned to the page; reconnect after restarting the server. For
-deployment, use an HTTPS redirect URL configured in the Fyers developer portal.
+and select **Login with Fyers**. The access token is held in an encrypted,
+HttpOnly session cookie, so the session works across Vercel function instances
+without exposing the token to page JavaScript. The cookie key is derived from
+the Fyers app credentials. Fyers tokens expire daily, so log in again when
+prompted. For deployment, use an HTTPS redirect URL configured in the Fyers
+developer portal.
+
+Open [http://127.0.0.1:3000/trading-view](http://127.0.0.1:3000/trading-view)
+for the chart. Sign in first, then enter a Fyers symbol such as
+`NSE:NIFTY50-INDEX` or `NSE:SBIN-EQ`. Historical candles and five-second quote
+polling require the Market Data permission in the Fyers API app.
 
 ## Vercel environment variables
 
@@ -65,7 +73,9 @@ Do not put credentials in source files or expose them in logs. The endpoint uses
 - `GET /api/liquidity-swing`: fetch the chain, analyze the highest-volume CALL and PUT, and save both results.
 - `GET /fyers-login`: Fyers OAuth login page.
 - `GET /auth/fyers/login` and `GET /auth/fyers/callback`: start and complete Fyers OAuth login.
-- `GET /api/fyers/session` and `POST /api/fyers/logout`: report or clear the local Fyers login state.
+- `GET /api/fyers/session` and `POST /api/fyers/logout`: report or clear the Fyers login state.
+- `GET /trading-view`: interactive Fyers candlestick/bar chart with volume, liquidity-swing levels, drawing tools, and periodic quote updates.
+- `GET /api/fyers/candles` and `GET /api/fyers/quote`: authenticated chart data endpoints.
 - `/swagger.html`: interactive Swagger UI.
 - `/openapi.json`: OpenAPI 3.1 definition.
 
@@ -74,5 +84,7 @@ Vercel detects the Fastify application from the root `app.js`. Deploy the `verce
 ## Swing algorithm attribution
 
 The swing-high calculation is adapted from Liquidity Swings by LuxAlgo, licensed under CC BY-NC-SA 4.0. The adaptation retains the same noncommercial restriction; commercial use requires permission from the rights holder.
+
+The chart uses TradingView Lightweight Charts under the Apache License 2.0 and includes its required attribution link in the chart footer.
 
 

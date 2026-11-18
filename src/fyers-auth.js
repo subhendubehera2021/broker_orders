@@ -1,32 +1,40 @@
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHash,
+  randomBytes,
+  timingSafeEqual,
+} from "node:crypto";
 import { readFile } from "node:fs/promises";
 
 const loginPage = await readFile(new URL("../public/fyers-login.html", import.meta.url), "utf8");
 const stateCookieName = "fyers_oauth_state";
 const stateCookieMaxAgeSeconds = 300;
+const sessionCookieName = "fyers_session";
+const sessionCookieMaxAgeSeconds = 12 * 60 * 60;
 const fyersApiBaseUrl = "https://api-t1.fyers.in/api/v3";
 
 export function registerFyersAuthRoutes(app) {
-  let accessToken;
-
   app.get("/fyers-login", async (_request, reply) => {
     return reply.type("text/html; charset=utf-8").send(loginPage);
   });
 
-  app.get("/api/fyers/session", async (_request, reply) => {
+  app.get("/api/fyers/session", async (request, reply) => {
+    const config = getFyersConfig();
     return reply.send({
-      configured: Boolean(readFyersConfig()),
-      authenticated: Boolean(accessToken),
+      configured: Boolean(config),
+      authenticated: Boolean(config && getFyersSessionToken(request, config)),
     });
   });
 
   app.post("/api/fyers/logout", async (_request, reply) => {
-    accessToken = undefined;
+    const config = getFyersConfig();
+    reply.header("Set-Cookie", clearFyersSessionCookie(config?.redirectUri));
     return reply.send({ authenticated: false });
   });
 
   app.get("/auth/fyers/login", async (_request, reply) => {
-    const config = readFyersConfig();
+    const config = getFyersConfig();
     if (!config) {
       return reply.code(503).send({
         error: "Set FYERS_APP_ID, FYERS_APP_SECRET, and FYERS_REDIRECT_URI to enable Fyers login",
@@ -49,7 +57,7 @@ export function registerFyersAuthRoutes(app) {
   });
 
   app.get("/auth/fyers/callback", async (request, reply) => {
-    const config = readFyersConfig();
+    const config = getFyersConfig();
     if (!config) {
       return reply.code(503).send({ error: "Fyers OAuth is not configured" });
     }
@@ -60,13 +68,14 @@ export function registerFyersAuthRoutes(app) {
       return reply.code(400).send({ error: "Fyers login state is invalid or expired" });
     }
 
-    clearStateCookie(reply, config.redirectUri);
     if (queryString(request.query.error)) {
+      reply.header("Set-Cookie", clearStateCookie(config.redirectUri));
       return reply.redirect("/fyers-login?status=denied");
     }
 
     const authCode = queryString(request.query.auth_code);
     if (!authCode) {
+      reply.header("Set-Cookie", clearStateCookie(config.redirectUri));
       return reply.code(400).send({ error: "Fyers did not return an authorization code" });
     }
 
@@ -78,37 +87,26 @@ export function registerFyersAuthRoutes(app) {
       });
       if (result?.s !== "ok" || typeof result.access_token !== "string" || !result.access_token) {
         console.error("[fyers-auth] Fyers rejected the authorization-code exchange");
+        reply.header("Set-Cookie", clearStateCookie(config.redirectUri));
         return reply.redirect("/fyers-login?status=failed");
       }
-      accessToken = result.access_token;
+      reply.header("Set-Cookie", [
+        clearStateCookie(config.redirectUri),
+        createFyersSessionCookie(result.access_token, config),
+      ]);
       return reply.redirect("/fyers-login?status=connected");
     } catch (error) {
       console.error(
         "[fyers-auth] Token exchange failed",
         error instanceof Error ? error.name : "UnknownError",
       );
+      reply.header("Set-Cookie", clearStateCookie(config.redirectUri));
       return reply.redirect("/fyers-login?status=failed");
     }
   });
 }
 
-async function exchangeFyersAuthCode({ appId, appSecret, authCode }) {
-  const appIdHash = createHash("sha256")
-    .update(`${appId}:${appSecret}`)
-    .digest("hex");
-  const response = await fetch(`${fyersApiBaseUrl}/validate-authcode`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      grant_type: "authorization_code",
-      code: authCode,
-      appIdHash,
-    }),
-  });
-  return response.json();
-}
-
-function readFyersConfig() {
+export function getFyersConfig() {
   const appId = process.env.FYERS_APP_ID?.trim();
   const appSecret = process.env.FYERS_APP_SECRET?.trim();
   const redirectUri = process.env.FYERS_REDIRECT_URI?.trim();
@@ -135,6 +133,87 @@ function readFyersConfig() {
   return { appId, appSecret, redirectUri: parsedRedirectUri.toString() };
 }
 
+export function getFyersSessionToken(request, config = getFyersConfig()) {
+  if (!config) return undefined;
+  const cookie = readCookie(request.headers.cookie, sessionCookieName);
+  if (!cookie) return undefined;
+  try {
+    const [ivValue, tagValue, encryptedValue, ...extra] = cookie.split(".");
+    if (
+      extra.length ||
+      !ivValue ||
+      !tagValue ||
+      !encryptedValue ||
+      !/^[\da-zA-Z_-]+$/.test(ivValue) ||
+      !/^[\da-zA-Z_-]+$/.test(tagValue) ||
+      !/^[\da-zA-Z_-]+$/.test(encryptedValue)
+    ) {
+      return undefined;
+    }
+
+    const decipher = createDecipheriv(
+      "aes-256-gcm",
+      createFyersSessionKey(config),
+      Buffer.from(ivValue, "base64url"),
+    );
+    decipher.setAuthTag(Buffer.from(tagValue, "base64url"));
+    const token = Buffer.concat([
+      decipher.update(Buffer.from(encryptedValue, "base64url")),
+      decipher.final(),
+    ]).toString("utf8");
+    return token || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function clearFyersSessionCookie(redirectUri) {
+  const secureCookie = redirectUri && new URL(redirectUri).protocol === "https:" ? "; Secure" : "";
+  return `${sessionCookieName}=; Path=/api; HttpOnly; SameSite=Lax; Max-Age=0${secureCookie}`;
+}
+
+function createFyersSessionCookie(token, config) {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", createFyersSessionKey(config), iv);
+  const encrypted = Buffer.concat([cipher.update(token, "utf8"), cipher.final()]);
+  const value = [
+    iv.toString("base64url"),
+    cipher.getAuthTag().toString("base64url"),
+    encrypted.toString("base64url"),
+  ].join(".");
+  const secureCookie = new URL(config.redirectUri).protocol === "https:" ? "; Secure" : "";
+  return `${sessionCookieName}=${value}; Path=/api; HttpOnly; SameSite=Lax; Max-Age=${sessionCookieMaxAgeSeconds}${secureCookie}`;
+}
+
+function createFyersSessionKey(config) {
+  return createHash("sha256")
+    .update("broker-orders:fyers-session:v1\0")
+    .update(config.appId)
+    .update("\0")
+    .update(config.appSecret)
+    .digest();
+}
+
+async function exchangeFyersAuthCode({ appId, appSecret, authCode }) {
+  const appIdHash = createHash("sha256")
+    .update(`${appId}:${appSecret}`)
+    .digest("hex");
+  const response = await fetch(`${fyersApiBaseUrl}/validate-authcode`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      grant_type: "authorization_code",
+      code: authCode,
+      appIdHash,
+    }),
+  });
+  const result = await response.json();
+  if (!response.ok) {
+    throw new Error(`Fyers authorization-code exchange failed with HTTP ${response.status}`);
+  }
+  return result;
+}
+
 function queryString(value) {
   return typeof value === "string" && value.trim() !== "" ? value.trim() : undefined;
 }
@@ -157,10 +236,7 @@ function constantTimeEqual(actual, expected) {
   return actualBytes.length === expectedBytes.length && timingSafeEqual(actualBytes, expectedBytes);
 }
 
-function clearStateCookie(reply, redirectUri) {
+function clearStateCookie(redirectUri) {
   const secureCookie = new URL(redirectUri).protocol === "https:" ? "; Secure" : "";
-  reply.header(
-    "Set-Cookie",
-    `${stateCookieName}=; Path=/auth/fyers/callback; HttpOnly; SameSite=Lax; Max-Age=0${secureCookie}`,
-  );
+  return `${stateCookieName}=; Path=/auth/fyers/callback; HttpOnly; SameSite=Lax; Max-Age=0${secureCookie}`;
 }

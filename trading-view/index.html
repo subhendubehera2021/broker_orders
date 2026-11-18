@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#111511">
+    <title>Market Chart</title>
+    <link rel="stylesheet" href="/trading-view/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/trading-view" aria-label="Market Chart home">
+        <span class="brand-mark" aria-hidden="true">M</span>
+        <span>MARKET<span class="brand-muted"> / CHART</span></span>
+      </a>
+      <div class="topbar-actions">
+        <span id="connection-status" class="connection-status" role="status">Checking Fyers…</span>
+        <a class="account-link" href="/fyers-login">Fyers account</a>
+      </div>
+    </header>
+
+    <main>
+      <section class="toolbar" aria-label="Chart controls">
+        <div class="symbol-control">
+          <label for="symbol">Symbol</label>
+          <div class="symbol-entry">
+            <input id="symbol" value="NSE:NIFTY50-INDEX" autocomplete="off" spellcheck="false" aria-describedby="symbol-help">
+            <button id="load-chart" class="icon-button" type="button" aria-label="Load symbol">↵</button>
+          </div>
+          <span id="symbol-help" class="visually-hidden">Enter a Fyers symbol, for example NSE:SBIN-EQ.</span>
+        </div>
+
+        <div class="control-group" role="group" aria-label="Candle interval">
+          <span class="control-label">Interval</span>
+          <div class="button-row" id="intervals">
+            <button type="button" data-resolution="1">1m</button>
+            <button type="button" data-resolution="5" class="selected">5m</button>
+            <button type="button" data-resolution="15">15m</button>
+            <button type="button" data-resolution="60">1h</button>
+            <button type="button" data-resolution="D">1D</button>
+          </div>
+        </div>
+
+        <div class="range-control">
+          <label for="range">History</label>
+          <select id="range">
+            <option value="1">1 day</option>
+            <option value="5" selected>5 days</option>
+            <option value="30">1 month</option>
+            <option value="90">3 months</option>
+          </select>
+        </div>
+
+        <div class="chart-type-control" role="group" aria-label="Chart type">
+          <span class="control-label">Style</span>
+          <div class="button-row">
+            <button id="candles-type" type="button" class="selected">Candles</button>
+            <button id="bars-type" type="button">Bars</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="toolbar secondary-toolbar" aria-label="Indicators and drawing tools">
+        <label class="toggle-control">
+          <input id="swing-toggle" type="checkbox" checked>
+          <span class="switch" aria-hidden="true"></span>
+          <span>Liquidity swings</span>
+        </label>
+        <label class="lookback-control" for="lookback">
+          <span>Pivot</span>
+          <select id="lookback">
+            <option value="5">5</option>
+            <option value="10">10</option>
+            <option value="14" selected>14</option>
+            <option value="20">20</option>
+          </select>
+        </label>
+        <span class="toolbar-divider" aria-hidden="true"></span>
+        <span class="control-label">Draw</span>
+        <div class="button-row" role="group" aria-label="Drawing tools">
+          <button type="button" data-tool="cursor" class="selected" aria-pressed="true">Cursor</button>
+          <button type="button" data-tool="horizontal" aria-pressed="false">Horizontal</button>
+          <button type="button" data-tool="trend" aria-pressed="false">Trend line</button>
+          <button id="clear-drawings" type="button">Clear</button>
+        </div>
+        <span id="draw-hint" class="draw-hint" aria-live="polite"></span>
+      </section>
+
+      <section class="chart-card" aria-label="Market chart">
+        <div class="instrument-summary">
+          <div>
+            <h1 id="instrument-name">NSE:NIFTY50-INDEX</h1>
+            <span id="chart-subtitle">Fyers market data · 5 minute</span>
+          </div>
+          <div class="ohlc-summary" aria-live="polite">
+            <span>O <b id="open-value">—</b></span>
+            <span>H <b id="high-value">—</b></span>
+            <span>L <b id="low-value">—</b></span>
+            <span>C <b id="close-value">—</b></span>
+            <span>V <b id="volume-value">—</b></span>
+          </div>
+          <div class="last-price">
+            <strong id="last-price">—</strong>
+            <span id="price-change">Waiting for data</span>
+          </div>
+        </div>
+
+        <div id="chart-wrap" class="chart-wrap">
+          <div id="chart" role="img" aria-label="Interactive price and volume chart"></div>
+          <div id="chart-message" class="chart-message" role="status">
+            <span class="spinner" aria-hidden="true"></span>
+            <span id="chart-message-text">Connect to Fyers to load chart data.</span>
+            <a id="chart-login" href="/fyers-login">Open Fyers login</a>
+          </div>
+        </div>
+        <div class="chart-footer">
+          <span id="feed-status">Live quote updates every 5 seconds</span>
+          <span>
+            <a href="https://www.tradingview.com/" target="_blank" rel="noreferrer">Charting by TradingView Lightweight Charts</a>
+            <span aria-hidden="true"> · </span>
+            <a href="/trading-view/lightweight-charts-license">Apache 2.0</a>
+          </span>
+        </div>
+      </section>
+    </main>
+
+    <script src="/trading-view/lightweight-charts.js"></script>
+    <script type="module" src="/trading-view/chart.js"></script>
+  </body>
+</html>

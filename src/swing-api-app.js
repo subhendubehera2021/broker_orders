@@ -1,6 +1,8 @@
 import { timingSafeEqual } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import { registerFyersChartRoutes } from "./fyers-chart-api.js";
 import { registerFyersAuthRoutes } from "./fyers-auth.js";
+import { registerTradingViewRoutes } from "./trading-view-routes.js";
 import { processNiftyOptionChain, processLiquiditySwing } from "./service/swing-service.js";
 import {
   getTursoClient,
@@ -79,6 +81,8 @@ export function registerSwingApiRoutes(
     reply.header("Cache-Control", "no-store");
   });
   registerFyersAuthRoutes(app);
+  registerFyersChartRoutes(app);
+  registerTradingViewRoutes(app);
 
   app.get("/swagger.html", async (_request, reply) => {
     return reply.type("text/html; charset=utf-8").send(swaggerHtml);

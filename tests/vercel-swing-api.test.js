@@ -277,7 +277,7 @@ test("Fyers login page serves OAuth controls without exposing credentials", asyn
   assert.doesNotMatch(response.body, /private-fyers-access-token/);
 });
 
-test("Fyers OAuth validates state, exchanges the code, and keeps the token server-side", async () => {
+test("Fyers OAuth validates state and issues an encrypted session cookie", async () => {
   const originalFetch = globalThis.fetch;
   const previousEnv = {
     FYERS_APP_ID: process.env.FYERS_APP_ID,
@@ -290,8 +290,26 @@ test("Fyers OAuth validates state, exchanges the code, and keeps the token serve
     FYERS_REDIRECT_URI: "http://127.0.0.1:3000/auth/fyers/callback",
   });
   globalThis.fetch = async (url, options) => {
-    fyersAuthRequest = { url: String(url), options };
-    return Response.json({ s: "ok", access_token: "private-fyers-access-token" });
+    const requestUrl = new URL(url);
+    if (requestUrl.pathname.endsWith("/validate-authcode")) {
+      fyersAuthRequest = { url: String(url), options };
+      return Response.json({ s: "ok", access_token: "private-fyers-access-token" });
+    }
+    if (requestUrl.pathname.endsWith("/history")) {
+      fyersAuthRequest = { url: String(url), options };
+      return Response.json({
+        s: "ok",
+        candles: [[1794307200, 100, 105, 99, 103, 1200]],
+      });
+    }
+    if (requestUrl.pathname.endsWith("/quotes")) {
+      fyersAuthRequest = { url: String(url), options };
+      return Response.json({
+        s: "ok",
+        d: [{ n: "NSE:SBIN-EQ", s: "ok", v: { lp: 104, volume: 1300, tt: "1794307500" } }],
+      });
+    }
+    throw new Error(`Unexpected Fyers API request: ${requestUrl.pathname}`);
   };
 
   let login;
@@ -322,6 +340,15 @@ test("Fyers OAuth validates state, exchanges the code, and keeps the token serve
     });
     assert.equal(callback.statusCode, 302);
     assert.equal(callback.headers.location, "/fyers-login?status=connected");
+    const callbackCookies = Array.isArray(callback.headers["set-cookie"])
+      ? callback.headers["set-cookie"]
+      : [callback.headers["set-cookie"]];
+    const sessionCookie = callbackCookies
+      .find((value) => value.startsWith("fyers_session="))
+      .split(";")[0];
+    assert.doesNotMatch(sessionCookie, /private-fyers-access-token/);
+    assert.ok(callbackCookies.some((value) => value.startsWith("fyers_oauth_state=;")));
+    assert.match(callbackCookies.find((value) => value.startsWith("fyers_session=")), /HttpOnly; SameSite=Lax/);
     assert.equal(fyersAuthRequest.url, "https://api-t1.fyers.in/api/v3/validate-authcode");
     assert.equal(fyersAuthRequest.options.method, "POST");
     assert.equal(fyersAuthRequest.options.headers["Content-Type"], "application/json");
@@ -331,11 +358,67 @@ test("Fyers OAuth validates state, exchanges the code, and keeps the token serve
       appIdHash: createHash("sha256").update("test-app-id:test-app-secret").digest("hex"),
     });
 
-    const authenticatedSession = await app.inject({ method: "GET", url: "/api/fyers/session" });
+    const authenticatedSession = await app.inject({
+      method: "GET",
+      url: "/api/fyers/session",
+      headers: { cookie: sessionCookie },
+    });
     assert.deepEqual(authenticatedSession.json(), { configured: true, authenticated: true });
     assert.doesNotMatch(authenticatedSession.body, /private-fyers-access-token/);
 
-    const logout = await app.inject({ method: "POST", url: "/api/fyers/logout" });
+    const anotherInstance = Fastify({ bodyLimit: 1_024 });
+    registerSwingApiRoutes(anotherInstance);
+    try {
+      const crossInstanceSession = await anotherInstance.inject({
+        method: "GET",
+        url: "/api/fyers/session",
+        headers: { cookie: sessionCookie },
+      });
+      assert.deepEqual(crossInstanceSession.json(), { configured: true, authenticated: true });
+    } finally {
+      await anotherInstance.close();
+    }
+
+    const unauthenticatedChart = await app.inject({
+      method: "GET",
+      url: "/api/fyers/candles?symbol=NSE%3ASBIN-EQ&resolution=5&from=2026-11-10&to=2026-11-18",
+    });
+    assert.equal(unauthenticatedChart.statusCode, 401);
+
+    const candles = await app.inject({
+      method: "GET",
+      url: "/api/fyers/candles?symbol=NSE%3ASBIN-EQ&resolution=5&from=2026-11-10&to=2026-11-18",
+      headers: { cookie: sessionCookie },
+    });
+    assert.equal(candles.statusCode, 200);
+    assert.deepEqual(candles.json().candles, [{
+      time: 1794307200,
+      open: 100,
+      high: 105,
+      low: 99,
+      close: 103,
+      volume: 1200,
+    }]);
+    assert.equal(fyersAuthRequest.options.headers.Authorization, "test-app-id:private-fyers-access-token");
+
+    const quote = await app.inject({
+      method: "GET",
+      url: "/api/fyers/quote?symbol=NSE%3ASBIN-EQ",
+      headers: { cookie: sessionCookie },
+    });
+    assert.equal(quote.statusCode, 200);
+    assert.deepEqual(quote.json(), {
+      symbol: "NSE:SBIN-EQ",
+      price: 104,
+      volume: 1300,
+      time: 1794307500,
+    });
+
+    const logout = await app.inject({
+      method: "POST",
+      url: "/api/fyers/logout",
+      headers: { cookie: sessionCookie },
+    });
     const loggedOutSession = await app.inject({ method: "GET", url: "/api/fyers/session" });
     assert.deepEqual(logout.json(), { authenticated: false });
     assert.deepEqual(loggedOutSession.json(), { configured: true, authenticated: false });
@@ -360,4 +443,22 @@ test("Fastify serves Swagger and OpenAPI documentation for the GET endpoint", as
   assert.equal(openApi.statusCode, 200);
   assert.ok(openApi.json().paths["/api/liquidity-swing"].get);
   assert.ok(openApi.json().paths["/api/nifty-option-chain"].get);
+});
+
+test("serves the TradingView-inspired chart and local charting assets", async () => {
+  const [page, client, chartingLibrary, license] = await Promise.all([
+    app.inject({ method: "GET", url: "/trading-view" }),
+    app.inject({ method: "GET", url: "/trading-view/chart.js" }),
+    app.inject({ method: "GET", url: "/trading-view/lightweight-charts.js" }),
+    app.inject({ method: "GET", url: "/trading-view/lightweight-charts-license" }),
+  ]);
+
+  assert.equal(page.statusCode, 200);
+  assert.match(page.body, /Liquidity swings/);
+  assert.match(page.body, /Fyers account/);
+  assert.match(client.headers["content-type"], /application\/javascript/);
+  assert.match(client.body, /findLiquiditySwings/);
+  assert.match(chartingLibrary.headers["content-type"], /application\/javascript/);
+  assert.match(chartingLibrary.body, /LightweightCharts/);
+  assert.match(license.body, /Apache License/);
 });

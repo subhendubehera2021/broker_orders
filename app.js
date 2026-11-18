@@ -22,6 +22,7 @@ app.listen({ port, host: "0.0.0.0" }).then(() => {
     console.log(`  Network: http://${address}:${listeningPort}`);
   }
   console.log(`  Fyers:   http://localhost:${listeningPort}/fyers-login`);
+  console.log(`  Chart:   http://localhost:${listeningPort}/trading-view`);
 }).catch((error) => {
   app.log.error(error);
   process.exit(1);
