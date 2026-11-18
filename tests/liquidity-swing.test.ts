@@ -57,6 +57,27 @@ test("returns every historical swing high rather than only the newest one", () =
   ]);
 });
 
+test("ends an unbroken swing line at the next same-side swing", () => {
+  const bars = [
+    { timestamp: "2025-01-01T00:00:00Z", open: 8, high: 9, low: 7, close: 8, volume: 1 },
+    { timestamp: "2025-01-02T00:00:00Z", open: 9, high: 10, low: 8, close: 9, volume: 2 },
+    { timestamp: "2025-01-03T00:00:00Z", open: 8, high: 9, low: 7, close: 8, volume: 3 },
+    { timestamp: "2025-01-04T00:00:00Z", open: 8, high: 9, low: 7, close: 8, volume: 4 },
+    { timestamp: "2025-01-05T00:00:00Z", open: 9, high: 12, low: 8, close: 9.5, volume: 5 },
+    { timestamp: "2025-01-06T00:00:00Z", open: 8, high: 9, low: 7, close: 8, volume: 6 },
+    { timestamp: "2025-01-07T00:00:00Z", open: 10, high: 11, low: 8, close: 10.5, volume: 7 },
+    { timestamp: "2025-01-08T00:00:00Z", open: 10, high: 13, low: 7, close: 10.5, volume: 8 },
+    { timestamp: "2025-01-09T00:00:00Z", open: 8, high: 9, low: 7, close: 8, volume: 9 },
+  ];
+
+  const firstSwing = findLiquiditySwings(bars, { pivotLookback: 1 }).highs[0];
+
+  assert.equal(firstSwing?.pivotIndex, 1);
+  assert.equal(firstSwing?.lineEndIndex, 4);
+  assert.equal(firstSwing?.status, "qualified");
+  assert.equal(firstSwing?.brokenAt, undefined);
+});
+
 test("finds low swings and applies the full-range area option", () => {
   const bars = [
     { timestamp: "2025-01-01T00:00:00Z", open: 12, high: 13, low: 11, close: 12, volume: 1 },

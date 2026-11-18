@@ -189,10 +189,30 @@ export function findLiquiditySwings(inputBars, options = {}) {
     .slice(-MAX_SWINGS)
     .map(({ pivotIndex, side }) =>
       makeSwing(bars, pivotIndex, resolved.pivotLookback, side, resolved, intrabarGroups));
+  const highs = visibleSwings.filter((swing) => swing.side === "high");
+  const lows = visibleSwings.filter((swing) => swing.side === "low");
+
+  for (const sideSwings of [highs, lows]) {
+    for (let index = 0; index + 1 < sideSwings.length; index += 1) {
+      const swing = sideSwings[index];
+      const nextSwing = sideSwings[index + 1];
+      const wasBrokenBeforeNextSwing = swing.brokenAt !== undefined &&
+        Date.parse(swing.brokenAt) <= Date.parse(nextSwing.pivotTime);
+
+      if (!wasBrokenBeforeNextSwing) {
+        swing.lineEndIndex = nextSwing.pivotIndex;
+        if (swing.brokenAt !== undefined) {
+          swing.status = swing.qualified ? "qualified" : "tracking";
+          delete swing.brokenAt;
+        }
+      }
+    }
+  }
+
   return {
     swings: visibleSwings,
-    highs: visibleSwings.filter((swing) => swing.side === "high"),
-    lows: visibleSwings.filter((swing) => swing.side === "low"),
+    highs,
+    lows,
   };
 }
 
