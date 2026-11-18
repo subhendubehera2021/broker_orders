@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import { registerFyersAuthRoutes } from "./fyers-auth.js";
 import { processNiftyOptionChain, processLiquiditySwing } from "./service/swing-service.js";
 import {
   getTursoClient,
@@ -72,11 +73,13 @@ export function registerSwingApiRoutes(
     createDbClient = getTursoClient,
     persistAnalyses = persistSwingAnalyses,
     persistOptionChain = persistNiftyOptionChain,
+    createFyersModel,
   } = {},
 ) {
   app.addHook("onRequest", async (_request, reply) => {
     reply.header("Cache-Control", "no-store");
   });
+  registerFyersAuthRoutes(app, { createFyersModel });
 
   app.get("/swagger.html", async (_request, reply) => {
     return reply.type("text/html; charset=utf-8").send(swaggerHtml);

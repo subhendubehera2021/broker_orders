@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#10120f">
+    <title>Fyers Login · NIFTY Liquidity Swing API</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #10120f;
+        color: #f3f4ee;
+      }
+      * { box-sizing: border-box; }
+      body { display: grid; min-height: 100vh; margin: 0; place-items: center; padding: 20px; }
+      main { width: min(100%, 400px); padding: 28px; border: 1px solid #30342c; border-radius: 12px; background: #171a15; }
+      h1 { margin: 0 0 8px; font-size: 22px; }
+      p { color: #a4aa9c; font-size: 14px; line-height: 1.5; }
+      #status { min-height: 42px; margin: 20px 0; }
+      #status[data-kind="success"] { color: #c8f169; }
+      #status[data-kind="error"] { color: #f07878; }
+      a, button { display: inline-flex; min-height: 42px; align-items: center; justify-content: center; padding: 0 16px; border: 0; border-radius: 6px; background: #c8f169; color: #171b11; font: inherit; font-weight: 700; text-decoration: none; cursor: pointer; }
+      button { background: #30342c; color: #f3f4ee; }
+      [hidden] { display: none !important; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Connect your Fyers account</h1>
+      <p>Sign in securely with Fyers. Your app secret and access token stay on the server.</p>
+      <p id="status" role="status" aria-live="polite">Checking Fyers login configuration…</p>
+      <a id="login" href="/auth/fyers/login" hidden>Login with Fyers</a>
+      <button id="logout" type="button" hidden>Disconnect</button>
+    </main>
+    <script type="module">
+      const status = document.querySelector("#status");
+      const login = document.querySelector("#login");
+      const logout = document.querySelector("#logout");
+      const result = new URLSearchParams(location.search).get("status");
+
+      async function refreshSession() {
+        try {
+          const response = await fetch("/api/fyers/session", {
+            headers: { Accept: "application/json" },
+          });
+          const session = await response.json();
+          if (!response.ok) throw new Error(session.error || "Could not check the Fyers session.");
+
+          login.hidden = !session.configured || session.authenticated;
+          logout.hidden = !session.authenticated;
+          if (!session.configured) {
+            status.dataset.kind = "error";
+            status.textContent = "Configure FYERS_APP_ID, FYERS_APP_SECRET, and FYERS_REDIRECT_URI on the server first.";
+          } else if (session.authenticated) {
+            status.dataset.kind = "success";
+            status.textContent = result === "connected"
+              ? "Fyers login successful. Your access token is stored on the server."
+              : "Fyers is connected. Your access token is stored on the server.";
+          } else if (result === "denied") {
+            status.dataset.kind = "error";
+            status.textContent = "Fyers login was cancelled.";
+          } else if (result === "failed") {
+            status.dataset.kind = "error";
+            status.textContent = "Fyers login could not be completed. Please try again.";
+          } else {
+            status.dataset.kind = "";
+            status.textContent = "Continue to Fyers to authorize this application.";
+          }
+        } catch (error) {
+          status.dataset.kind = "error";
+          status.textContent = error instanceof Error ? error.message : "Could not check the Fyers session.";
+          login.hidden = true;
+          logout.hidden = true;
+        }
+      }
+
+      logout.addEventListener("click", async function () {
+        logout.disabled = true;
+        try {
+          const response = await fetch("/api/fyers/logout", { method: "POST" });
+          if (!response.ok) throw new Error("Could not disconnect the Fyers session.");
+          status.dataset.kind = "";
+          status.textContent = "Fyers disconnected.";
+          await refreshSession();
+        } catch (error) {
+          status.dataset.kind = "error";
+          status.textContent = error instanceof Error ? error.message : "Could not disconnect Fyers.";
+        } finally {
+          logout.disabled = false;
+        }
+      });
+
+      void refreshSession();
+    </script>
+  </body>
+</html>

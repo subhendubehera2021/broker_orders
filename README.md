@@ -8,14 +8,29 @@ Use Node.js 26, install dependencies, and start Fastify:
 
 ```sh
 npm install
-npm run dev
+node --env-file=.env app.js
 ```
 
-The server listens on port `3000`. To run tests:
+The server listens on port `3000` and prints its localhost and network URLs
+when it starts. To run tests:
 
 ```sh
 npm test
 ```
+
+For Fyers login, configure these values in `.env` and register the exact
+redirect URL in your Fyers API application:
+
+```dotenv
+FYERS_APP_ID=your-app-id
+FYERS_APP_SECRET=your-app-secret
+FYERS_REDIRECT_URI=http://127.0.0.1:3000/auth/fyers/callback
+```
+
+Open [http://127.0.0.1:3000/fyers-login](http://127.0.0.1:3000/fyers-login)
+and select **Login with Fyers**. The access token is kept in server memory and
+is never returned to the page; reconnect after restarting the server. For
+deployment, use an HTTPS redirect URL configured in the Fyers developer portal.
 
 ## Vercel environment variables
 
@@ -27,6 +42,9 @@ Configure these variables for the Vercel environment:
 - `SWING_API_SECRET`: a strong random bearer-token secret. Set the same value in the Cloudflare Worker environment.
 - `TURSO_DATABASE_URL`: the database URL from Turso.
 - `TURSO_AUTH_TOKEN`: the database authentication token from Turso.
+- `FYERS_APP_ID`, `FYERS_APP_SECRET`, and `FYERS_REDIRECT_URI`: required for the
+  Fyers OAuth login page. Set the redirect URL to the deployed
+  `/auth/fyers/callback` endpoint.
 
 Run [`db.sql`](./db.sql) to create the required tables. `nifty_option_chain_ce` and `nifty_option_chain_pe` each hold one row; every option-chain request updates that side's existing row rather than adding history. The `liquidity_swing_results` table keeps its separate append-only analysis behavior: a unique index prevents duplicate rows for the same `symbol`, `token`, `pivot_lookback`, `interval`, and `pivot_time`. If those five values match, the insert is skipped—even if other metrics changed; existing rows are not updated. A different key creates a new row. `insertedRows` in the response tells you how many analysis rows were added.
 
@@ -45,6 +63,9 @@ Do not put credentials in source files or expose them in logs. The endpoint uses
 
 - `GET /api/nifty-option-chain`: return the highest-volume CALL and PUT from the current NIFTY option chain and update the latest CE/PE rows in Turso; does not analyze swings.
 - `GET /api/liquidity-swing`: fetch the chain, analyze the highest-volume CALL and PUT, and save both results.
+- `GET /fyers-login`: Fyers OAuth login page.
+- `GET /auth/fyers/login` and `GET /auth/fyers/callback`: start and complete Fyers OAuth login.
+- `GET /api/fyers/session` and `POST /api/fyers/logout`: report or clear the local Fyers login state.
 - `/swagger.html`: interactive Swagger UI.
 - `/openapi.json`: OpenAPI 3.1 definition.
 

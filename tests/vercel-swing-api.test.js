@@ -7,6 +7,7 @@ const app = Fastify({ bodyLimit: 1_024 });
 let persistedAnalyses;
 let persistedOptionChain;
 let dbClientCalls = 0;
+let fyersAuthRequest;
 registerSwingApiRoutes(app, {
   createDbClient: () => {
     dbClientCalls += 1;
@@ -19,6 +20,22 @@ registerSwingApiRoutes(app, {
   persistOptionChain: async (instruments) => {
     persistedOptionChain = instruments;
   },
+  createFyersModel: () => ({
+    setAppId() {},
+    setRedirectUrl() {},
+    generateAuthCode({ client_id, redirect_uri, state }) {
+      const url = new URL("https://api-t1.fyers.in/api/v3/generate-authcode");
+      url.searchParams.set("client_id", client_id);
+      url.searchParams.set("redirect_uri", redirect_uri);
+      url.searchParams.set("response_type", "code");
+      url.searchParams.set("state", state);
+      return url.toString();
+    },
+    async generate_access_token(input) {
+      fyersAuthRequest = input;
+      return { s: "ok", access_token: "private-fyers-access-token" };
+    },
+  }),
 });
 
 after(async () => {
@@ -262,6 +279,79 @@ test("GET swing API rejects other methods", async () => {
 
   assert.equal(response.statusCode, 405);
   assert.equal(response.headers.allow, "GET");
+});
+
+test("Fyers login page serves OAuth controls without exposing credentials", async () => {
+  const response = await app.inject({ method: "GET", url: "/fyers-login" });
+
+  assert.equal(response.statusCode, 200);
+  assert.match(response.headers["content-type"], /text\/html/);
+  assert.match(response.body, /Connect your Fyers account/);
+  assert.match(response.body, /href="\/auth\/fyers\/login"/);
+  assert.match(response.body, /api\/fyers\/session/);
+  assert.doesNotMatch(response.body, /private-fyers-access-token/);
+});
+
+test("Fyers OAuth validates state, exchanges the code, and keeps the token server-side", async () => {
+  const previousEnv = {
+    FYERS_APP_ID: process.env.FYERS_APP_ID,
+    FYERS_APP_SECRET: process.env.FYERS_APP_SECRET,
+    FYERS_REDIRECT_URI: process.env.FYERS_REDIRECT_URI,
+  };
+  Object.assign(process.env, {
+    FYERS_APP_ID: "test-app-id",
+    FYERS_APP_SECRET: "test-app-secret",
+    FYERS_REDIRECT_URI: "http://127.0.0.1:3000/auth/fyers/callback",
+  });
+
+  let login;
+  try {
+    const initialSession = await app.inject({ method: "GET", url: "/api/fyers/session" });
+    login = await app.inject({ method: "GET", url: "/auth/fyers/login" });
+    assert.deepEqual(initialSession.json(), { configured: true, authenticated: false });
+    assert.equal(login.statusCode, 302);
+
+    const authorizationUrl = new URL(login.headers.location);
+    const state = authorizationUrl.searchParams.get("state");
+    const cookie = login.headers["set-cookie"].split(";")[0];
+    assert.equal(authorizationUrl.searchParams.get("client_id"), "test-app-id");
+    assert.equal(authorizationUrl.searchParams.get("redirect_uri"), process.env.FYERS_REDIRECT_URI);
+    assert.match(login.headers["set-cookie"], /HttpOnly; SameSite=Lax/);
+
+    const invalidCallback = await app.inject({
+      method: "GET",
+      url: `/auth/fyers/callback?auth_code=auth-code&state=${"0".repeat(64)}`,
+      headers: { cookie },
+    });
+    assert.equal(invalidCallback.statusCode, 400);
+
+    const callback = await app.inject({
+      method: "GET",
+      url: `/auth/fyers/callback?auth_code=auth-code&state=${state}`,
+      headers: { cookie },
+    });
+    assert.equal(callback.statusCode, 302);
+    assert.equal(callback.headers.location, "/fyers-login?status=connected");
+    assert.deepEqual(fyersAuthRequest, {
+      client_id: "test-app-id",
+      secret_key: "test-app-secret",
+      auth_code: "auth-code",
+    });
+
+    const authenticatedSession = await app.inject({ method: "GET", url: "/api/fyers/session" });
+    assert.deepEqual(authenticatedSession.json(), { configured: true, authenticated: true });
+    assert.doesNotMatch(authenticatedSession.body, /private-fyers-access-token/);
+
+    const logout = await app.inject({ method: "POST", url: "/api/fyers/logout" });
+    const loggedOutSession = await app.inject({ method: "GET", url: "/api/fyers/session" });
+    assert.deepEqual(logout.json(), { authenticated: false });
+    assert.deepEqual(loggedOutSession.json(), { configured: true, authenticated: false });
+  } finally {
+    for (const [key, value] of Object.entries(previousEnv)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
 });
 
 test("Fastify serves Swagger and OpenAPI documentation for the GET endpoint", async () => {
