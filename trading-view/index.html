@@ -10,81 +10,83 @@
   <body>
     <main>
       <div class="controls-heading">
-        <span>Chart controls</span>
-        <button id="controls-toggle" type="button" aria-expanded="true" aria-controls="chart-controls">
-          Hide controls
-        </button>
-      </div>
-      <div id="chart-controls">
-        <section class="toolbar" aria-label="Chart controls">
-          <div class="symbol-control">
-            <label for="symbol">Symbol</label>
-            <div class="symbol-entry">
-              <input id="symbol" value="NSE:NIFTY50-INDEX" autocomplete="off" spellcheck="false" aria-describedby="symbol-help">
-              <button id="load-chart" class="icon-button" type="button" aria-label="Load symbol">↵</button>
-            </div>
-            <span id="symbol-help" class="visually-hidden">Enter a Fyers symbol, for example NSE:SBIN-EQ.</span>
-          </div>
-
-          <div class="control-group" role="group" aria-label="Candle interval">
-            <span class="control-label">Interval</span>
-            <div class="button-row" id="intervals">
-              <button type="button" data-resolution="1">1m</button>
-              <button type="button" data-resolution="5" class="selected">5m</button>
-              <button type="button" data-resolution="15">15m</button>
-              <button type="button" data-resolution="60">1h</button>
-              <button type="button" data-resolution="D">1D</button>
-            </div>
-          </div>
-
-          <div class="range-control">
-            <label for="range">History</label>
-            <select id="range">
-              <option value="1">1 day</option>
-              <option value="5" selected>5 days</option>
-              <option value="30">1 month</option>
-              <option value="90">3 months</option>
-            </select>
-          </div>
-
-          <button id="nifty-options-toggle" class="option-chain-toggle" type="button" aria-expanded="false">
-            NIFTY Options
+        <div class="controls-heading-bar">
+          <span>Chart controls</span>
+          <button id="controls-toggle" type="button" aria-expanded="true" aria-controls="chart-controls">
+            Hide controls
           </button>
-
-          <div class="chart-type-control" role="group" aria-label="Chart type">
-            <span class="control-label">Style</span>
-            <div class="button-row">
-              <button id="candles-type" type="button" class="selected">Candles</button>
-              <button id="bars-type" type="button">Bars</button>
+        </div>
+        <div id="chart-controls">
+          <section class="toolbar" aria-label="Chart controls">
+            <div class="symbol-control">
+              <label for="symbol">Symbol</label>
+              <div class="symbol-entry">
+                <input id="symbol" value="NSE:NIFTY50-INDEX" autocomplete="off" spellcheck="false" aria-describedby="symbol-help">
+                <button id="load-chart" class="icon-button" type="button" aria-label="Load symbol">↵</button>
+              </div>
+              <span id="symbol-help" class="visually-hidden">Enter a Fyers symbol, for example NSE:SBIN-EQ.</span>
             </div>
-          </div>
-        </section>
 
-        <section class="toolbar secondary-toolbar" aria-label="Indicators and drawing tools">
-          <label class="toggle-control">
-            <input id="swing-toggle" type="checkbox" checked>
-            <span class="switch" aria-hidden="true"></span>
-            <span>Liquidity swings</span>
-          </label>
-          <label class="lookback-control" for="lookback">
-            <span>Pivot</span>
-            <select id="lookback">
-              <option value="5">5</option>
-              <option value="10">10</option>
-              <option value="14" selected>14</option>
-              <option value="20">20</option>
-            </select>
-          </label>
-          <span class="toolbar-divider" aria-hidden="true"></span>
-          <span class="control-label">Draw</span>
-          <div class="button-row" role="group" aria-label="Drawing tools">
-            <button type="button" data-tool="cursor" class="selected" aria-pressed="true">Cursor</button>
-            <button type="button" data-tool="horizontal" aria-pressed="false">Horizontal</button>
-            <button type="button" data-tool="trend" aria-pressed="false">Trend line</button>
-            <button id="clear-drawings" type="button">Clear</button>
-          </div>
-          <span id="draw-hint" class="draw-hint" aria-live="polite"></span>
-        </section>
+            <div class="control-group" role="group" aria-label="Candle interval">
+              <span class="control-label">Interval</span>
+              <div class="button-row" id="intervals">
+                <button type="button" data-resolution="1">1m</button>
+                <button type="button" data-resolution="5" class="selected">5m</button>
+                <button type="button" data-resolution="15">15m</button>
+                <button type="button" data-resolution="60">1h</button>
+                <button type="button" data-resolution="D">1D</button>
+              </div>
+            </div>
+
+            <div class="range-control">
+              <label for="range">History</label>
+              <select id="range">
+                <option value="1">1 day</option>
+                <option value="5" selected>5 days</option>
+                <option value="30">1 month</option>
+                <option value="90">3 months</option>
+              </select>
+            </div>
+
+            <button id="nifty-options-toggle" class="option-chain-toggle" type="button" aria-expanded="false">
+              NIFTY Options
+            </button>
+
+            <div class="chart-type-control" role="group" aria-label="Chart type">
+              <span class="control-label">Style</span>
+              <div class="button-row">
+                <button id="candles-type" type="button" class="selected">Candles</button>
+                <button id="bars-type" type="button">Bars</button>
+              </div>
+            </div>
+          </section>
+
+          <section class="toolbar secondary-toolbar" aria-label="Indicators and drawing tools">
+            <label class="toggle-control">
+              <input id="swing-toggle" type="checkbox" checked>
+              <span class="switch" aria-hidden="true"></span>
+              <span>Liquidity swings</span>
+            </label>
+            <label class="lookback-control" for="lookback">
+              <span>Pivot</span>
+              <select id="lookback">
+                <option value="5">5</option>
+                <option value="10">10</option>
+                <option value="14" selected>14</option>
+                <option value="20">20</option>
+              </select>
+            </label>
+            <span class="toolbar-divider" aria-hidden="true"></span>
+            <span class="control-label">Draw</span>
+            <div class="button-row" role="group" aria-label="Drawing tools">
+              <button type="button" data-tool="cursor" class="selected" aria-pressed="true">Cursor</button>
+              <button type="button" data-tool="horizontal" aria-pressed="false">Horizontal</button>
+              <button type="button" data-tool="trend" aria-pressed="false">Trend line</button>
+              <button id="clear-drawings" type="button">Clear</button>
+            </div>
+            <span id="draw-hint" class="draw-hint" aria-live="polite"></span>
+          </section>
+        </div>
       </div>
 
       <section id="option-chain-panel" class="option-chain-panel" aria-label="NIFTY option chain" hidden>

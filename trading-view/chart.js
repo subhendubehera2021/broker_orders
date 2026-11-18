@@ -428,11 +428,16 @@ function renderSwings() {
         { time: swing.endTime, value: swing.level },
       ]);
       swingSeries.push(series);
-      const volumeLabel = formatLiquidityVolume(swing.volume);
+      const startVolumeLabel = formatLiquidityVolume(swing.startVolume);
+      const swingVolumeLabel = formatLiquidityVolume(swing.volume);
+      const volumeLabel = [
+        startVolumeLabel && `Start ${startVolumeLabel}`,
+        swingVolumeLabel && `Total ${swingVolumeLabel}`,
+      ].filter(Boolean).join(" · ");
       if (volumeLabel) {
         swingMarkers.push({
           time: swing.startTime,
-          position: isHigh ? "aboveBar" : "belowBar",
+          position: "aboveBar",
           color,
           shape: "circle",
           text: volumeLabel,

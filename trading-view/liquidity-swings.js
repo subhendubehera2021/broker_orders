@@ -82,6 +82,7 @@ export function findLiquiditySwings(inputBars, lookback = 14) {
       zoneEndTime: bars[zoneEndIndex]?.time,
       zoneTop,
       zoneBottom,
+      startVolume: Number.isFinite(pivotBar.volume) ? pivotBar.volume : undefined,
       volume,
       breakTime: breakBar?.time,
       breakVolume: Number.isFinite(Number(breakBar?.volume)) ? Number(breakBar.volume) : undefined,
