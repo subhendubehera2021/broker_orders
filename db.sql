@@ -54,8 +54,21 @@ CREATE TABLE IF NOT EXISTS nifty_option_chain_pe (
   updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
--- For an existing table created before symbol and option_volume were added,
--- run these once only if those columns are missing:
--- ALTER TABLE liquidity_swing_results ADD COLUMN symbol TEXT;
--- ALTER TABLE liquidity_swing_results ADD COLUMN option_volume REAL;
--- Then run the CREATE UNIQUE INDEX above. Remove existing duplicates first if needed.
+CREATE TABLE IF NOT EXISTS active_swing_orders (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  strategy_key TEXT NOT NULL,
+  option_side TEXT NOT NULL CHECK (option_side IN ('CALL', 'PUT')),
+  trading_symbol TEXT NOT NULL,
+  order_number TEXT NOT NULL UNIQUE,
+  trigger_price REAL NOT NULL,
+  pivot_time TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'CANCELLED', 'EXECUTED')),
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_active_swing_orders_sig
+  ON active_swing_orders (strategy_key, trading_symbol, trigger_price, pivot_time);
+
+CREATE INDEX IF NOT EXISTS idx_active_swing_orders_strategy_status
+  ON active_swing_orders (strategy_key, status);

@@ -60,6 +60,7 @@ export async function processLiquiditySwing({
       orderAccessToken,
       orderQuantity,
       placeOrder,
+      dbClient,
     });
 
     analyses.push({

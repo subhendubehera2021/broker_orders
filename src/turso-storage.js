@@ -109,3 +109,79 @@ export async function persistSwingAnalyses(analyses, dbClient) {
   const insertedRows = results.reduce((count, result) => count + result.rowsAffected, 0);
   return { scanId, insertedRows };
 }
+
+export async function isSwingOrderProcessedDb(
+  dbClient,
+  { tradingSymbol, triggerPrice, pivotTime, optionSide, strategyKey },
+) {
+  if (!dbClient || typeof dbClient.execute !== "function") return false;
+  const key = strategyKey || `nifty_5_1m_${(optionSide || "").toLowerCase()}`;
+  const result = await dbClient.execute({
+    sql: `
+      SELECT id FROM active_swing_orders
+      WHERE strategy_key = ? AND trading_symbol = ? AND trigger_price = ? AND pivot_time = ?
+      LIMIT 1
+    `,
+    args: [key, tradingSymbol || "", Number(triggerPrice) || 0, pivotTime || ""],
+  });
+  return result.rows.length > 0;
+}
+
+export async function getActiveSwingOrdersByStrategyKeyDb(dbClient, strategyKey) {
+  if (!dbClient || typeof dbClient.execute !== "function") return [];
+  const result = await dbClient.execute({
+    sql: `
+      SELECT strategy_key AS strategyKey, option_side AS optionSide, trading_symbol AS tradingSymbol, order_number AS nOrdNo,
+             trigger_price AS triggerPrice, pivot_time AS pivotTime, status
+      FROM active_swing_orders
+      WHERE strategy_key = ? AND status = 'ACTIVE'
+      ORDER BY id DESC
+    `,
+    args: [strategyKey],
+  });
+  return result.rows;
+}
+
+export async function getActiveSwingOrdersBySideDb(dbClient, optionSide) {
+  if (!dbClient || typeof dbClient.execute !== "function") return [];
+  const key = `nifty_5_1m_${(optionSide || "").toLowerCase()}`;
+  return getActiveSwingOrdersByStrategyKeyDb(dbClient, key);
+}
+
+export async function recordActiveSwingOrderDb(
+  dbClient,
+  { strategyKey, optionSide, tradingSymbol, triggerPrice, pivotTime, orderNumber },
+) {
+  if (!dbClient || typeof dbClient.execute !== "function") return;
+  const key = strategyKey || `nifty_5_1m_${(optionSide || "").toLowerCase()}`;
+  await dbClient.execute({
+    sql: `
+      INSERT INTO active_swing_orders (strategy_key, option_side, trading_symbol, order_number, trigger_price, pivot_time, status)
+      VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE')
+      ON CONFLICT(order_number) DO UPDATE SET
+        strategy_key = excluded.strategy_key,
+        status = 'ACTIVE',
+        updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+    `,
+    args: [
+      key,
+      optionSide,
+      tradingSymbol,
+      String(orderNumber),
+      Number(triggerPrice) || 0,
+      pivotTime || "",
+    ],
+  });
+}
+
+export async function markSwingOrderCancelledDb(dbClient, orderNumber) {
+  if (!dbClient || typeof dbClient.execute !== "function") return;
+  await dbClient.execute({
+    sql: `
+      UPDATE active_swing_orders
+      SET status = 'CANCELLED', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+      WHERE order_number = ?
+    `,
+    args: [String(orderNumber)],
+  });
+}
