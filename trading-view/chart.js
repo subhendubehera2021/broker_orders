@@ -2,6 +2,17 @@ import { findLiquiditySwings } from "/trading-view/liquidity-swings.js";
 import { formatIndiaAxisTick, formatIndiaTime } from "/trading-view/time-format.js";
 
 const { CrosshairMode, LineStyle, TickMarkType, createChart } = window.LightweightCharts;
+const chartColors = {
+  background: "#131722",
+  text: "#787b86",
+  grid: "#1e222d",
+  border: "#2a2e39",
+  up: "#089981",
+  down: "#f23645",
+  upVolume: "rgba(8, 153, 129, 0.35)",
+  downVolume: "rgba(242, 54, 69, 0.35)",
+  drawing: "#2962ff",
+};
 const chartElement = document.querySelector("#chart");
 const chartMessage = document.querySelector("#chart-message");
 const chartMessageText = document.querySelector("#chart-message-text");
@@ -24,22 +35,22 @@ const axisTickKinds = {
 const chart = createChart(chartElement, {
   autoSize: true,
   layout: {
-    background: { type: "solid", color: "#151a15" },
-    textColor: "#899487",
+    background: { type: "solid", color: chartColors.background },
+    textColor: chartColors.text,
     fontFamily: "Inter, system-ui, sans-serif",
   },
   grid: {
-    vertLines: { color: "#222a22" },
-    horzLines: { color: "#222a22" },
+    vertLines: { color: chartColors.grid },
+    horzLines: { color: chartColors.grid },
   },
   crosshair: { mode: CrosshairMode.Normal },
   rightPriceScale: {
-    borderColor: "#303830",
+    borderColor: chartColors.border,
     minimumWidth: 72,
     scaleMargins: { top: 0.1, bottom: 0.22 },
   },
   timeScale: {
-    borderColor: "#303830",
+    borderColor: chartColors.border,
     timeVisible: true,
     secondsVisible: false,
     rightOffset: 8,
@@ -53,16 +64,16 @@ const chart = createChart(chartElement, {
 });
 
 const candleSeries = chart.addCandlestickSeries({
-  upColor: "#26a986",
-  downColor: "#ef5964",
+  upColor: chartColors.up,
+  downColor: chartColors.down,
   borderVisible: false,
-  wickUpColor: "#26a986",
-  wickDownColor: "#ef5964",
+  wickUpColor: chartColors.up,
+  wickDownColor: chartColors.down,
   priceLineVisible: true,
 });
 const barSeries = chart.addBarSeries({
-  upColor: "#26a986",
-  downColor: "#ef5964",
+  upColor: chartColors.up,
+  downColor: chartColors.down,
   priceLineVisible: true,
   visible: false,
 });
@@ -170,7 +181,7 @@ function renderSwings() {
   for (const swing of findLiquiditySwings(candles, Number(lookbackSelect.value))) {
     const isHigh = swing.side === "high";
     const series = chart.addLineSeries({
-      color: isHigh ? "#ec6570" : "#31b68c",
+      color: isHigh ? chartColors.down : chartColors.up,
       lineWidth: 1,
       lineStyle: LineStyle.Dashed,
       lastValueVisible: false,
@@ -185,7 +196,7 @@ function renderSwings() {
     markers.push({
       time: swing.startTime,
       position: isHigh ? "aboveBar" : "belowBar",
-      color: isHigh ? "#ec6570" : "#31b68c",
+      color: isHigh ? chartColors.down : chartColors.up,
       shape: isHigh ? "arrowDown" : "arrowUp",
       text: isHigh ? "SH" : "SL",
       size: 1,
@@ -392,7 +403,7 @@ async function loadChart() {
     volumeSeries.setData(candles.map((bar) => ({
       time: bar.time,
       value: bar.volume,
-      color: bar.close >= bar.open ? "#266a58" : "#743d43",
+      color: bar.close >= bar.open ? chartColors.upVolume : chartColors.downVolume,
     })));
     chart.timeScale().fitContent();
     document.querySelector("#instrument-name").textContent = symbol;
@@ -493,7 +504,7 @@ function applyLiveQuote(sequence, symbol, quote) {
   volumeSeries.update({
     time: next.time,
     value: next.volume,
-    color: next.close >= next.open ? "#266a58" : "#743d43",
+    color: next.close >= next.open ? chartColors.upVolume : chartColors.downVolume,
   });
   document.querySelector("#last-price").textContent = formatPrice(quote.price);
   updateOhlc(next);
@@ -526,7 +537,7 @@ chart.subscribeClick((param) => {
   if (activeTool === "horizontal") {
     const line = activePriceSeries().createPriceLine({
       price,
-      color: "#e5bd63",
+      color: chartColors.drawing,
       lineWidth: 1,
       lineStyle: LineStyle.Dashed,
       axisLabelVisible: true,
@@ -544,7 +555,7 @@ chart.subscribeClick((param) => {
   }
 
   const series = chart.addLineSeries({
-    color: "#e5bd63",
+    color: chartColors.drawing,
     lineWidth: 2,
     lastValueVisible: false,
     priceLineVisible: false,
