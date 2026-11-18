@@ -309,6 +309,22 @@ test("Fyers OAuth validates state and issues an encrypted session cookie", async
         d: [{ n: "NSE:SBIN-EQ", s: "ok", v: { lp: 104, volume: 1300, tt: "1794307500" } }],
       });
     }
+    if (requestUrl.pathname.endsWith("/options-chain-v3")) {
+      fyersAuthRequest = { url: String(url), options };
+      return Response.json({
+        s: "ok",
+        data: {
+          callOi: 1200,
+          putOi: 1400,
+          expiryData: [{ date: "26-11-2026", expiry: "1795300000" }],
+          optionsChain: [
+            { symbol: "NSE:NIFTY50-INDEX", option_type: "", strike_price: -1, ltp: 24600 },
+            { symbol: "NSE:NIFTY26NOV24600CE", option_type: "CE", strike_price: 24600, ltp: 210, oi: 500 },
+            { symbol: "NSE:NIFTY26NOV24600PE", option_type: "PE", strike_price: 24600, ltp: 180, oi: 700 },
+          ],
+        },
+      });
+    }
     throw new Error(`Unexpected Fyers API request: ${requestUrl.pathname}`);
   };
 
@@ -432,6 +448,31 @@ test("Fyers OAuth validates state and issues an encrypted session cookie", async
       time: 1794307500,
     });
 
+    const unauthenticatedOptionChain = await app.inject({
+      method: "GET",
+      url: "/api/fyers/options-chain",
+    });
+    assert.equal(unauthenticatedOptionChain.statusCode, 401);
+
+    const optionChain = await app.inject({
+      method: "GET",
+      url: "/api/fyers/options-chain?strikecount=1&timestamp=1795300000",
+      headers: { cookie: sessionCookie },
+    });
+    assert.equal(optionChain.statusCode, 200);
+    assert.deepEqual(optionChain.json().options.map(({ symbol, optionType, strikePrice }) => ({
+      symbol,
+      optionType,
+      strikePrice,
+    })), [
+      { symbol: "NSE:NIFTY26NOV24600CE", optionType: "CE", strikePrice: 24600 },
+      { symbol: "NSE:NIFTY26NOV24600PE", optionType: "PE", strikePrice: 24600 },
+    ]);
+    assert.equal(fyersAuthRequest.options.headers.Authorization, "test-app-id:private-fyers-access-token");
+    const optionChainUrl = new URL(fyersAuthRequest.url);
+    assert.equal(optionChainUrl.pathname, "/data/options-chain-v3");
+    assert.equal(optionChainUrl.searchParams.get("timestamp"), "1795300000");
+
     const logout = await app.inject({
       method: "POST",
       url: "/api/fyers/logout",
@@ -474,6 +515,8 @@ test("serves the TradingView-inspired chart and local charting assets", async ()
 
   assert.equal(page.statusCode, 200);
   assert.match(page.body, /Liquidity swings/);
+  assert.match(page.body, /NIFTY Options/);
+  assert.match(page.body, /option-chain-panel/);
   assert.doesNotMatch(page.body, /class="topbar"/);
   assert.match(page.body, /Fyers account/);
   assert.match(page.body, /fyers-web-sdk-v3/);

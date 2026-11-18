@@ -3,6 +3,24 @@ const intradayResolutions = new Set(["1", "2", "3", "5", "10", "15", "20", "30",
 const dailyResolutions = new Set(["D", "1D", "1W", "1M"]);
 const validResolutions = new Set([...intradayResolutions, ...dailyResolutions]);
 
+function isRecord(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function optionalNumber(value) {
+  if (value === undefined || value === null || value === "") return undefined;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : undefined;
+}
+
+function isValidSymbol(symbol) {
+  return (
+    typeof symbol === "string" &&
+    symbol.length <= 80 &&
+    /^[A-Z0-9]+:[A-Z0-9][A-Z0-9_.&-]*$/.test(symbol)
+  );
+}
+
 export class FyersMarketDataError extends Error {
   constructor(statusCode, message) {
     super(message);
@@ -82,6 +100,94 @@ export async function fetchFyersQuote({ appId, accessToken, symbol }, fetchImpl 
   };
 }
 
+export async function fetchFyersNiftyOptionChain(
+  { appId, accessToken, strikeCount = 10, timestamp = "" },
+  fetchImpl = fetch,
+) {
+  if (!Number.isSafeInteger(strikeCount) || strikeCount < 1 || strikeCount > 50) {
+    throw new FyersMarketDataError(400, "Option-chain strike count must be between 1 and 50");
+  }
+  if (typeof timestamp !== "string" || (timestamp !== "" && !/^\d{1,12}$/.test(timestamp))) {
+    throw new FyersMarketDataError(400, "Option-chain expiry timestamp is invalid");
+  }
+
+  const url = new URL(`${fyersDataBaseUrl}/options-chain-v3`);
+  url.searchParams.set("symbol", "NSE:NIFTY50-INDEX");
+  url.searchParams.set("strikecount", String(strikeCount));
+  url.searchParams.set("timestamp", timestamp);
+  url.searchParams.set("greeks", "1");
+
+  const payload = await requestFyers(url, appId, accessToken, fetchImpl);
+  const data = payload.data;
+  if (payload.s !== "ok" || !isRecord(data) || !Array.isArray(data.optionsChain)) {
+    throw new FyersMarketDataError(502, "Fyers did not return a valid NIFTY option chain");
+  }
+
+  const options = [];
+  let underlyingPrice;
+  for (const entry of data.optionsChain) {
+    if (!isRecord(entry)) continue;
+    const optionType = typeof entry.option_type === "string" ? entry.option_type.toUpperCase() : "";
+    const symbol = entry.symbol;
+    if (optionType === "" && underlyingPrice === undefined) {
+      underlyingPrice = optionalNumber(entry.ltp);
+      continue;
+    }
+
+    const strikePrice = optionalNumber(entry.strike_price);
+    if (
+      (optionType !== "CE" && optionType !== "PE") ||
+      typeof symbol !== "string" ||
+      !Number.isFinite(strikePrice) ||
+      strikePrice <= 0
+    ) {
+      continue;
+    }
+
+    if (!isValidSymbol(symbol)) continue;
+    options.push({
+      symbol,
+      optionType,
+      strikePrice,
+      ltp: optionalNumber(entry.ltp),
+      ltpChange: optionalNumber(entry.ltpch),
+      ltpChangePercent: optionalNumber(entry.ltpchp),
+      openInterest: optionalNumber(entry.oi),
+      openInterestChange: optionalNumber(entry.oich),
+      volume: optionalNumber(entry.volume),
+      bid: optionalNumber(entry.bid),
+      ask: optionalNumber(entry.ask),
+    });
+  }
+
+  if (!options.length) {
+    throw new FyersMarketDataError(502, "Fyers returned no NIFTY call or put contracts");
+  }
+
+  const expiries = Array.isArray(data.expiryData)
+    ? data.expiryData.flatMap((expiry) => {
+        if (
+          !isRecord(expiry) ||
+          typeof expiry.date !== "string" ||
+          typeof expiry.expiry !== "string" ||
+          !/^\d{1,12}$/.test(expiry.expiry)
+        ) {
+          return [];
+        }
+        return [{ date: expiry.date, timestamp: expiry.expiry }];
+      })
+    : [];
+
+  return {
+    symbol: "NSE:NIFTY50-INDEX",
+    underlyingPrice,
+    callOpenInterest: optionalNumber(data.callOi),
+    putOpenInterest: optionalNumber(data.putOi),
+    expiries,
+    options,
+  };
+}
+
 async function requestFyers(url, appId, accessToken, fetchImpl) {
   const response = await fetchImpl(url, {
     method: "GET",
@@ -117,11 +223,7 @@ async function requestFyers(url, appId, accessToken, fetchImpl) {
 }
 
 function validateSymbol(symbol) {
-  if (
-    typeof symbol !== "string" ||
-    symbol.length > 80 ||
-    !/^[A-Z0-9]+:[A-Z0-9][A-Z0-9_.&-]*$/.test(symbol)
-  ) {
+  if (!isValidSymbol(symbol)) {
     throw new FyersMarketDataError(
       400,
       "Use a Fyers symbol such as NSE:SBIN-EQ or NSE:NIFTY50-INDEX",

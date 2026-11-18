@@ -19,6 +19,11 @@ const chartMessageText = document.querySelector("#chart-message-text");
 const chartLogin = document.querySelector("#chart-login");
 const symbolInput = document.querySelector("#symbol");
 const rangeSelect = document.querySelector("#range");
+const optionChainToggle = document.querySelector("#nifty-options-toggle");
+const optionChainPanel = document.querySelector("#option-chain-panel");
+const optionChainStatus = document.querySelector("#option-chain-status");
+const optionChainRows = document.querySelector("#option-chain-rows");
+const optionExpirySelect = document.querySelector("#option-expiry");
 const swingToggle = document.querySelector("#swing-toggle");
 const lookbackSelect = document.querySelector("#lookback");
 const connectionStatus = document.querySelector("#connection-status");
@@ -99,6 +104,7 @@ let liveSocket;
 let socketConnected = false;
 let lastQuoteVolume;
 let loadSequence = 0;
+let optionChainSequence = 0;
 
 function activePriceSeries() {
   return chartType === "candles" ? candleSeries : barSeries;
@@ -146,6 +152,107 @@ function formatPrice(value) {
 
 function formatVolume(value) {
   return Number.isFinite(value) ? new Intl.NumberFormat("en-IN", { notation: "compact" }).format(value) : "—";
+}
+
+function addOptionChainCell(row, value, className = "") {
+  const cell = document.createElement("td");
+  if (className) cell.className = className;
+  cell.textContent = value;
+  row.append(cell);
+  return cell;
+}
+
+function createOptionContractButton(option) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = `option-contract ${option.optionType === "PE" ? "put" : "call"}`;
+  button.dataset.optionSymbol = option.symbol;
+  button.title = option.symbol;
+  button.setAttribute(
+    "aria-label",
+    `Open ${option.optionType === "CE" ? "call" : "put"} ${formatPrice(option.strikePrice)} chart`,
+  );
+
+  const price = document.createElement("strong");
+  price.textContent = formatPrice(option.ltp);
+  const change = document.createElement("small");
+  change.textContent = Number.isFinite(option.ltpChangePercent)
+    ? `${option.ltpChangePercent > 0 ? "+" : ""}${option.ltpChangePercent.toFixed(2)}%`
+    : option.symbol;
+  button.append(price, change);
+  return button;
+}
+
+function renderOptionChain(optionChain, requestedTimestamp) {
+  optionExpirySelect.replaceChildren();
+  for (const expiry of optionChain.expiries) {
+    const option = document.createElement("option");
+    option.value = expiry.timestamp;
+    option.textContent = expiry.date;
+    optionExpirySelect.append(option);
+  }
+  optionExpirySelect.disabled = optionChain.expiries.length === 0;
+  if (optionChain.expiries.length) {
+    const selectedExpiry = optionChain.expiries.find(({ timestamp }) => timestamp === requestedTimestamp)
+      ?? optionChain.expiries[0];
+    optionExpirySelect.value = selectedExpiry.timestamp;
+  }
+
+  const strikes = new Map();
+  for (const option of optionChain.options) {
+    const row = strikes.get(option.strikePrice) ?? {};
+    row[option.optionType] = option;
+    strikes.set(option.strikePrice, row);
+  }
+  const orderedStrikes = [...strikes.entries()].sort(([left], [right]) => left - right);
+  const atmStrike = Number.isFinite(optionChain.underlyingPrice) && orderedStrikes.length
+    ? orderedStrikes.reduce((closest, [strike]) =>
+        Math.abs(strike - optionChain.underlyingPrice) < Math.abs(closest - optionChain.underlyingPrice)
+          ? strike
+          : closest,
+      orderedStrikes[0][0])
+    : undefined;
+
+  optionChainRows.replaceChildren();
+  for (const [strike, contracts] of orderedStrikes) {
+    const row = document.createElement("tr");
+    if (strike === atmStrike) row.className = "atm";
+
+    addOptionChainCell(row, formatVolume(contracts.CE?.openInterest), "call-oi");
+    const callCell = document.createElement("td");
+    if (contracts.CE) callCell.append(createOptionContractButton(contracts.CE));
+    else callCell.textContent = "—";
+    row.append(callCell);
+    addOptionChainCell(row, formatPrice(strike), "option-strike");
+    const putCell = document.createElement("td");
+    if (contracts.PE) putCell.append(createOptionContractButton(contracts.PE));
+    else putCell.textContent = "—";
+    row.append(putCell);
+    addOptionChainCell(row, formatVolume(contracts.PE?.openInterest), "put-oi");
+    optionChainRows.append(row);
+  }
+
+  const underlying = Number.isFinite(optionChain.underlyingPrice)
+    ? `NIFTY ${formatPrice(optionChain.underlyingPrice)}`
+    : "NIFTY";
+  optionChainStatus.textContent =
+    `${underlying} · Call OI ${formatVolume(optionChain.callOpenInterest)} · ` +
+    `Put OI ${formatVolume(optionChain.putOpenInterest)} · Click a contract to open its chart.`;
+}
+
+async function loadNiftyOptionChain(timestamp = optionExpirySelect.value) {
+  const sequence = ++optionChainSequence;
+  const query = new URLSearchParams({ strikecount: "10", timestamp });
+  optionChainStatus.textContent = "Loading NIFTY option chain…";
+  try {
+    const optionChain = await fetchJson(`/api/fyers/options-chain?${query}`);
+    if (sequence !== optionChainSequence) return;
+    renderOptionChain(optionChain, timestamp);
+  } catch (error) {
+    if (sequence !== optionChainSequence) return;
+    optionChainStatus.textContent = error.message;
+    optionChainRows.replaceChildren();
+  }
 }
 
 function updateOhlc(bar) {
@@ -596,6 +703,29 @@ symbolInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter") void loadChart();
 });
 rangeSelect.addEventListener("change", () => void loadChart());
+optionChainToggle.addEventListener("click", () => {
+  optionChainPanel.hidden = !optionChainPanel.hidden;
+  optionChainToggle.setAttribute("aria-expanded", String(!optionChainPanel.hidden));
+  if (!optionChainPanel.hidden) void loadNiftyOptionChain(optionExpirySelect.value);
+});
+document.querySelector("#refresh-option-chain").addEventListener("click", () => {
+  void loadNiftyOptionChain(optionExpirySelect.value);
+});
+optionExpirySelect.addEventListener("change", () => {
+  void loadNiftyOptionChain(optionExpirySelect.value);
+});
+document.querySelector("#close-option-chain").addEventListener("click", () => {
+  optionChainPanel.hidden = true;
+  optionChainToggle.setAttribute("aria-expanded", "false");
+});
+optionChainRows.addEventListener("click", (event) => {
+  const contract = event.target.closest("[data-option-symbol]");
+  if (!contract) return;
+  symbolInput.value = contract.dataset.optionSymbol;
+  optionChainPanel.hidden = true;
+  optionChainToggle.setAttribute("aria-expanded", "false");
+  void loadChart();
+});
 swingToggle.addEventListener("change", renderSwings);
 lookbackSelect.addEventListener("change", renderSwings);
 

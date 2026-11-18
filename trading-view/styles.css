@@ -92,6 +92,21 @@ main { width: min(100% - 32px, 1440px); margin: 12px auto 28px; }
   font-weight: 700;
 }
 
+.option-chain-toggle {
+  min-height: 32px;
+  padding: 0 11px;
+  border: 1px solid var(--tv-border-strong);
+  border-radius: 4px;
+  background: var(--tv-panel-raised);
+  color: var(--tv-text);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.option-chain-toggle:hover, .option-chain-toggle[aria-expanded="true"] {
+  border-color: var(--tv-blue);
+  color: var(--tv-blue);
+}
+
 .control-group, .chart-type-control, .range-control, .lookback-control { flex: 0 0 auto; }
 .control-label { margin: 0 0 5px; }
 .button-row { display: flex; align-items: center; gap: 3px; }
@@ -120,6 +135,75 @@ main { width: min(100% - 32px, 1440px); margin: 12px auto 28px; }
 .lookback-control select { height: 28px; padding: 0 7px; }
 .toolbar-divider { width: 1px; height: 24px; background: var(--tv-border); }
 .draw-hint { color: var(--tv-blue); font-size: 11px; }
+
+.option-chain-panel {
+  overflow: hidden;
+  border: 1px solid var(--tv-border);
+  border-top: 0;
+  background: var(--tv-panel);
+}
+.option-chain-panel[hidden] { display: none; }
+.option-chain-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--tv-border);
+}
+.option-chain-header h2 { margin: 0 0 3px; font-size: 13px; font-weight: 600; }
+.option-chain-header > div:first-child > span, .option-chain-status { color: var(--tv-muted); font-size: 11px; }
+.option-chain-actions { display: flex; align-items: center; gap: 8px; color: var(--tv-muted-light); font-size: 11px; }
+.option-chain-actions select, .option-chain-actions button {
+  min-height: 30px;
+  padding: 0 9px;
+  border: 1px solid var(--tv-border-strong);
+  border-radius: 4px;
+  background: var(--tv-background);
+  color: var(--tv-text);
+  font: inherit;
+}
+.option-chain-actions button:hover { border-color: var(--tv-blue); }
+.option-chain-actions #close-option-chain { width: 30px; padding: 0; font-size: 18px; }
+.option-chain-status { margin: 0; padding: 8px 14px; }
+.option-chain-table-wrap { max-height: 42vh; overflow: auto; }
+.option-chain-table { width: 100%; border-collapse: collapse; font-size: 11px; text-align: right; }
+.option-chain-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 8px 12px;
+  background: var(--tv-panel-raised);
+  color: var(--tv-muted-light);
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.option-chain-table th:nth-child(3), .option-chain-table td:nth-child(3) { text-align: center; }
+.option-chain-table td { min-width: 90px; padding: 4px 8px; border-top: 1px solid var(--tv-border); }
+.option-chain-table tbody tr:hover { background: var(--tv-panel-raised); }
+.option-chain-table tbody tr.atm { background: rgb(41 98 255 / 10%); }
+.option-chain-table .call-oi, .option-chain-table .put-oi { color: var(--tv-muted-light); }
+.option-contract {
+  display: inline-flex;
+  min-width: 92px;
+  flex-direction: column;
+  align-items: flex-end;
+  padding: 5px 7px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--tv-green);
+  text-align: right;
+  cursor: pointer;
+}
+.option-contract.put { color: var(--tv-red); }
+.option-contract:hover { border-color: currentColor; background: var(--tv-panel); }
+.option-contract strong { font-size: 11px; font-weight: 600; }
+.option-contract small { margin-top: 2px; color: var(--tv-muted); font-size: 10px; }
+.option-contract:disabled { color: var(--tv-muted); cursor: default; }
+.option-strike { font-weight: 600; }
+.atm .option-strike { color: var(--tv-blue); }
 
 .chart-card {
   overflow: hidden;
@@ -203,6 +287,10 @@ main { width: min(100% - 32px, 1440px); margin: 12px auto 28px; }
   .control-group { flex: 1 1 100%; }
   .button-row { flex-wrap: wrap; }
   .secondary-toolbar { gap: 10px; }
+  .option-chain-header { align-items: flex-start; flex-direction: column; }
+  .option-chain-actions { flex-wrap: wrap; }
+  .option-chain-table th, .option-chain-table td { padding-left: 6px; padding-right: 6px; }
+  .option-contract { min-width: 78px; }
   .instrument-summary { flex-wrap: wrap; gap: 8px 16px; padding: 11px; }
   .ohlc-summary { order: 3; width: 100%; gap: 8px; }
   .last-price { margin-left: auto; }

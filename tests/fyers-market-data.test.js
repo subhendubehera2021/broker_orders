@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   fetchFyersCandles,
+  fetchFyersNiftyOptionChain,
   fetchFyersQuote,
   FyersMarketDataError,
 } from "../src/fyers-market-data.js";
@@ -70,6 +71,91 @@ test("requests and normalizes a Fyers live quote", async () => {
   });
 });
 
+test("requests and normalizes the Fyers NIFTY option chain", async () => {
+  let requestUrl;
+  const optionChain = await fetchFyersNiftyOptionChain({
+    appId: "test-app-id",
+    accessToken: "test-access-token",
+    strikeCount: 1,
+    timestamp: "1795300000",
+  }, async (url, options) => {
+    requestUrl = url;
+    assert.equal(options.headers.Authorization, "test-app-id:test-access-token");
+    return Response.json({
+      s: "ok",
+      data: {
+        callOi: 1200,
+        putOi: 1400,
+        expiryData: [{ date: "26-11-2026", expiry: "1795300000" }],
+        optionsChain: [
+          { symbol: "NSE:NIFTY50-INDEX", option_type: "", strike_price: -1, ltp: 24600 },
+          {
+            symbol: "NSE:NIFTY26NOV24600CE",
+            option_type: "CE",
+            strike_price: 24600,
+            ltp: 210,
+            ltpch: 5,
+            ltpchp: 2.44,
+            oi: 500,
+            oich: 20,
+            volume: 1000,
+            bid: 209.5,
+            ask: 210.5,
+          },
+          {
+            symbol: "NSE:NIFTY26NOV24600PE",
+            option_type: "PE",
+            strike_price: 24600,
+            ltp: 180,
+            oi: 700,
+          },
+        ],
+      },
+    });
+  });
+
+  assert.equal(requestUrl.pathname, "/data/options-chain-v3");
+  assert.equal(requestUrl.searchParams.get("symbol"), "NSE:NIFTY50-INDEX");
+  assert.equal(requestUrl.searchParams.get("strikecount"), "1");
+  assert.equal(requestUrl.searchParams.get("timestamp"), "1795300000");
+  assert.equal(requestUrl.searchParams.get("greeks"), "1");
+  assert.deepEqual(optionChain, {
+    symbol: "NSE:NIFTY50-INDEX",
+    underlyingPrice: 24600,
+    callOpenInterest: 1200,
+    putOpenInterest: 1400,
+    expiries: [{ date: "26-11-2026", timestamp: "1795300000" }],
+    options: [
+      {
+        symbol: "NSE:NIFTY26NOV24600CE",
+        optionType: "CE",
+        strikePrice: 24600,
+        ltp: 210,
+        ltpChange: 5,
+        ltpChangePercent: 2.44,
+        openInterest: 500,
+        openInterestChange: 20,
+        volume: 1000,
+        bid: 209.5,
+        ask: 210.5,
+      },
+      {
+        symbol: "NSE:NIFTY26NOV24600PE",
+        optionType: "PE",
+        strikePrice: 24600,
+        ltp: 180,
+        ltpChange: undefined,
+        ltpChangePercent: undefined,
+        openInterest: 700,
+        openInterestChange: undefined,
+        volume: undefined,
+        bid: undefined,
+        ask: undefined,
+      },
+    ],
+  });
+});
+
 test("rejects malformed symbols and ranges before making a request", async () => {
   let requests = 0;
   const fetchImpl = async () => {
@@ -97,6 +183,14 @@ test("rejects malformed symbols and ranges before making a request", async () =>
       rangeTo: "2026-05-01",
     }, fetchImpl),
     /supports up to 100 days/,
+  );
+  await assert.rejects(
+    fetchFyersNiftyOptionChain({
+      appId: "test-app-id",
+      accessToken: "test-access-token",
+      strikeCount: 51,
+    }, fetchImpl),
+    (error) => error instanceof FyersMarketDataError && error.statusCode === 400,
   );
   assert.equal(requests, 0);
 });
