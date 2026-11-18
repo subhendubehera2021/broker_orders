@@ -8,17 +8,6 @@
     <link rel="stylesheet" href="/trading-view/styles.css">
   </head>
   <body>
-    <header class="topbar">
-      <a class="brand" href="/trading-view" aria-label="Market Chart home">
-        <span class="brand-mark" aria-hidden="true">M</span>
-        <span>MARKET<span class="brand-muted"> / CHART</span></span>
-      </a>
-      <div class="topbar-actions">
-        <span id="connection-status" class="connection-status" role="status">Checking Fyers…</span>
-        <a class="account-link" href="/fyers-login">Fyers account</a>
-      </div>
-    </header>
-
     <main>
       <section class="toolbar" aria-label="Chart controls">
         <div class="symbol-control">
@@ -115,8 +104,13 @@
           </div>
         </div>
         <div class="chart-footer">
-          <span id="feed-status">Connecting to Fyers market data…</span>
+          <div class="feed-status-group">
+            <span id="connection-status" class="connection-status" role="status">Checking Fyers…</span>
+            <span id="feed-status">Connecting to Fyers market data…</span>
+          </div>
           <span>
+            <a href="/fyers-login">Fyers account</a>
+            <span aria-hidden="true"> · </span>
             <a href="https://www.tradingview.com/" target="_blank" rel="noreferrer">Charting by TradingView Lightweight Charts</a>
             <span aria-hidden="true"> · </span>
             <a href="/trading-view/lightweight-charts-license">Apache 2.0</a>

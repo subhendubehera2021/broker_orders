@@ -474,6 +474,7 @@ test("serves the TradingView-inspired chart and local charting assets", async ()
 
   assert.equal(page.statusCode, 200);
   assert.match(page.body, /Liquidity swings/);
+  assert.doesNotMatch(page.body, /class="topbar"/);
   assert.match(page.body, /Fyers account/);
   assert.match(page.body, /fyers-web-sdk-v3/);
   assert.match(client.headers["content-type"], /application\/javascript/);
