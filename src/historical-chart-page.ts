@@ -168,6 +168,7 @@ export function renderHistoricalChartPage(): string {
       let olderCandlesExhausted = false;
       let chartPointerDown = false;
       let lastPointerRangeFrom;
+      let liquidityDrawFrame;
       let dataRequestVersion = 0;
 
       const requestDaysByInterval = {
@@ -566,6 +567,14 @@ export function renderHistoricalChartPage(): string {
         });
       }
 
+      function scheduleLiquiditySwingDraw() {
+        if (liquidityDrawFrame !== undefined) return;
+        liquidityDrawFrame = requestAnimationFrame(function () {
+          liquidityDrawFrame = undefined;
+          drawLiquiditySwings();
+        });
+      }
+
       function syncIndicatorSettingsControls() {
         intrabarIntervalInput.disabled = !intrabarInput.checked;
       }
@@ -696,13 +705,18 @@ export function renderHistoricalChartPage(): string {
           const range = chart.timeScale().getVisibleLogicalRange();
           lastPointerRangeFrom = range ? range.from : undefined;
         });
+        container.addEventListener("pointermove", function () {
+          if (chartPointerDown) scheduleLiquiditySwingDraw();
+        }, { passive: true });
         window.addEventListener("pointerup", function () {
           chartPointerDown = false;
           lastPointerRangeFrom = undefined;
+          scheduleLiquiditySwingDraw();
         });
         window.addEventListener("pointercancel", function () {
           chartPointerDown = false;
           lastPointerRangeFrom = undefined;
+          scheduleLiquiditySwingDraw();
         });
         chart.timeScale().subscribeVisibleLogicalRangeChange(function (range) {
           updateRangeCount(range);
