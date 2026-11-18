@@ -71,6 +71,28 @@ test("requests and normalizes a Fyers live quote", async () => {
   });
 });
 
+test("accepts a live quote without volume when the market is inactive", async () => {
+  const quote = await fetchFyersQuote({
+    appId: "test-app-id",
+    accessToken: "test-access-token",
+    symbol: "NSE:SBIN-EQ",
+  }, async () => Response.json({
+    s: "ok",
+    d: [{
+      n: "NSE:SBIN-EQ",
+      s: "ok",
+      v: { lp: 103.5, tt: "1794307200", volume: null },
+    }],
+  }));
+
+  assert.deepEqual(quote, {
+    symbol: "NSE:SBIN-EQ",
+    price: 103.5,
+    time: 1794307200,
+    volume: undefined,
+  });
+});
+
 test("rejects null candle and quote values instead of coercing them to zero", async () => {
   const fetchImpl = async (url) => new URL(url).pathname.endsWith("/history")
     ? Response.json({ s: "ok", candles: [[1794307200, null, 105, 99, 103, 1200]] })

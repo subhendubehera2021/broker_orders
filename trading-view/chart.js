@@ -520,10 +520,9 @@ function updateFromSocket(sequence, symbol, message) {
     const price = finiteNumber(update.ltp);
     const time = finiteNumber(update.exch_feed_time ?? update.last_traded_time);
     if (price === undefined || time === undefined) continue;
-    const volume = finiteNumber(update.vol_traded_today);
     quotes.push({
       price,
-      volume: volume ?? lastQuoteVolume ?? 0,
+      volume: finiteNumber(update.vol_traded_today),
       time,
     });
   }
@@ -721,8 +720,7 @@ function applyLiveQuote(sequence, symbol, quote) {
     price <= 0 ||
     time === undefined ||
     time <= 0 ||
-    volume === undefined ||
-    volume < 0
+    (volume !== undefined && volume < 0)
   ) {
     setConnectionStatus("Invalid Fyers quote", "error");
     feedStatus.textContent = "Ignored an invalid live quote; waiting for valid market data";
@@ -735,7 +733,7 @@ function applyLiveQuote(sequence, symbol, quote) {
   const isNewBar = currentResolution === "D"
     ? timeBucket(previous.time, currentResolution) !== timeBucket(time, currentResolution)
     : timeBucket(time, currentResolution) > previous.time;
-  const volumeDelta = lastQuoteVolume === undefined
+  const volumeDelta = volume === undefined || lastQuoteVolume === undefined
     ? 0
     : Math.max(0, volume - lastQuoteVolume);
 
@@ -761,7 +759,7 @@ function applyLiveQuote(sequence, symbol, quote) {
     return;
   }
 
-  lastQuoteVolume = volume;
+  if (volume !== undefined) lastQuoteVolume = volume;
   if (isNewBar) candles.push(next);
   else candles[candles.length - 1] = next;
   candleSeries.update(next);

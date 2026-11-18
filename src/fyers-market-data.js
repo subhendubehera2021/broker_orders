@@ -91,14 +91,13 @@ export async function fetchFyersQuote({ appId, accessToken, symbol }, fetchImpl 
     : undefined;
   const price = requiredNumber(quote?.lp);
   const time = requiredNumber(quote?.tt);
-  const volume = requiredNumber(quote?.volume);
+  const volume = optionalNumber(quote?.volume);
 
   if (
     payload.s !== "ok" ||
     !quote ||
     price === undefined ||
-    time === undefined ||
-    volume === undefined
+    time === undefined
   ) {
     throw new FyersMarketDataError(502, "Fyers did not return a valid quote for this symbol");
   }
