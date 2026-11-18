@@ -1,5 +1,10 @@
 import { placeBuySlLimitOrder } from "./buy-sl-limit-client.js";
-import { hasOrderBeenProcessed, markOrderProcessed } from "./order-engine.js";
+import { cancelOrder } from "./cancel-order-client.js";
+import {
+  hasOrderBeenProcessed,
+  markOrderProcessed,
+  getStoredOrdersBySide,
+} from "./order-engine.js";
 
 export async function processSwingOrder({
   optionSide,
@@ -23,22 +28,57 @@ export async function processSwingOrder({
       console.log(
         `[swing-order-executor] Order already processed for ${optionSide} (${instrument.symbol}) at pivotTime ${analysis.swing.pivotTime}`,
       );
-    } else {
+      return null;
+    }
+
+    const existingOrders = getStoredOrdersBySide(optionSide);
+    const previousOrder = existingOrders.find(
+      (order) => order && (order.nOrdNo || order.orderNumber),
+    );
+
+    if (previousOrder) {
+      const prevOrderNo = previousOrder.nOrdNo || previousOrder.orderNumber;
+      const prevSymbol =
+        previousOrder.orderSignature?.tradingSymbol ||
+        previousOrder.tradingSymbol ||
+        instrument.symbol;
+
       try {
-        orderResult = await placeBuySlLimitOrder({
+        console.log(
+          `[swing-order-executor] Cancelling previous ${optionSide} order ${prevOrderNo} (${prevSymbol})...`,
+        );
+        await cancelOrder({
           baseUrl: orderBaseUrl || "https://trade.brinto.in",
           accessToken: orderAccessToken,
-          tradingSymbol: instrument.symbol,
-          quantity: orderQuantity,
-          triggerPrice: String(analysis.swing.level),
+          orderNumber: prevOrderNo,
+          tradingSymbol: prevSymbol,
         });
-        markOrderProcessed(orderSignature, { ...orderResult, optionSide });
-      } catch (orderError) {
+      } catch (cancelError) {
         console.error(
-          `Failed to place BUY SL-Limit order for ${optionSide} (${instrument.symbol}):`,
-          orderError,
+          `Failed to cancel previous ${optionSide} order ${prevOrderNo}:`,
+          cancelError,
         );
       }
+    }
+
+    try {
+      orderResult = await placeBuySlLimitOrder({
+        baseUrl: orderBaseUrl || "https://trade.brinto.in",
+        accessToken: orderAccessToken,
+        tradingSymbol: instrument.symbol,
+        quantity: orderQuantity,
+        triggerPrice: String(analysis.swing.level),
+      });
+      markOrderProcessed(orderSignature, {
+        ...orderResult,
+        optionSide,
+        tradingSymbol: instrument.symbol,
+      });
+    } catch (orderError) {
+      console.error(
+        `Failed to place BUY SL-Limit order for ${optionSide} (${instrument.symbol}):`,
+        orderError,
+      );
     }
   }
   return orderResult;
