@@ -14,6 +14,7 @@ export interface KotakNeoConfig {
   modifyOrderPath?: string;
   positionsPath?: string;
   placeOrderPath?: string;
+  historicalDataPath?: string;
   orderSource?: string;
   quotesPath: string;
   niftyIndexToken?: string;
@@ -88,6 +89,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const modifyOrderPath = env.KOTAK_NEO_MODIFY_ORDER_PATH?.trim() || undefined;
   const positionsPath = env.KOTAK_NEO_POSITIONS_PATH?.trim() || undefined;
   const placeOrderPath = env.KOTAK_NEO_PLACE_ORDER_PATH?.trim() || undefined;
+  const historicalDataPath =
+    env.KOTAK_NEO_HISTORICAL_DATA_PATH?.trim() || "market-data/1.0/historical/details";
   const orderSource = env.KOTAK_NEO_ORDER_SOURCE?.trim() || undefined;
   const quotesPath = requiredValue(env.KOTAK_NEO_QUOTES_PATH, "KOTAK_NEO_QUOTES_PATH");
   validateRelativePath(totpLoginPath, "KOTAK_NEO_TOTP_LOGIN_PATH");
@@ -99,6 +102,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   if (modifyOrderPath) validateRelativePath(modifyOrderPath, "KOTAK_NEO_MODIFY_ORDER_PATH");
   if (positionsPath) validateRelativePath(positionsPath, "KOTAK_NEO_POSITIONS_PATH");
   if (placeOrderPath) validateRelativePath(placeOrderPath, "KOTAK_NEO_PLACE_ORDER_PATH");
+  if (historicalDataPath) validateRelativePath(historicalDataPath, "KOTAK_NEO_HISTORICAL_DATA_PATH");
   if (!quotesPath.includes("{neo_symbols}") || !quotesPath.includes("{quote_type}")) {
     throw new Error("KOTAK_NEO_QUOTES_PATH must contain {neo_symbols} and {quote_type}");
   }
@@ -132,6 +136,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       ...(modifyOrderPath ? { modifyOrderPath } : {}),
       ...(positionsPath ? { positionsPath } : {}),
       ...(placeOrderPath ? { placeOrderPath } : {}),
+      ...(historicalDataPath ? { historicalDataPath } : {}),
       ...(orderSource ? { orderSource } : {}),
       quotesPath,
       niftyIndexToken: env.KOTAK_NEO_NIFTY_INDEX_TOKEN || undefined,

@@ -46,6 +46,32 @@ export interface CancelOrderInput {
   tradingSymbol?: string;
 }
 
+export interface GetHistoricalDataInput {
+  neoSymbol: string;
+  fromDate: string;
+  toDate: string;
+  interval: "1min" | "3min" | "5min" | "10min" | "15min" | "30min" | "60min" | "D" | "W" | string;
+}
+
+export type CandleRow = [
+  timestamp: string,
+  open: number,
+  high: number,
+  low: number,
+  close: number,
+  volume: number,
+  oi: number | null,
+];
+
+export interface HistoricalDataResponse {
+  status: string;
+  interval?: string;
+  data: {
+    candles: CandleRow[];
+  };
+  [key: string]: unknown;
+}
+
 interface KotakResponse {
   data?: Record<string, unknown>;
   [key: string]: unknown;
@@ -276,6 +302,71 @@ export class KotakNeoClient {
     return response;
   }
 
+  async getHistoricalData(
+    session: AuthenticatedSession | undefined,
+    input: GetHistoricalDataInput,
+  ): Promise<HistoricalDataResponse> {
+    if (!this.config.historicalDataPath) {
+      throw new KotakNeoError(
+        "Kotak Neo historical data API is not configured; set KOTAK_NEO_HISTORICAL_DATA_PATH",
+        503,
+      );
+    }
+
+    const baseUrl = session?.baseUrl ?? this.config.apiBaseUrl;
+    const path = new URL(this.config.historicalDataPath, ensureTrailingSlash(baseUrl));
+    path.searchParams.set("neosymbol", input.neoSymbol);
+    path.searchParams.set("fromdate", input.fromDate);
+    path.searchParams.set("todate", input.toDate);
+    path.searchParams.set("interval", input.interval);
+
+    const headers: Record<string, string> = {
+      Authorization: this.config.consumerKey,
+      "Content-Type": "application/json",
+    };
+
+    const response = await this.requestJson(
+      path.toString(),
+      {
+        method: "GET",
+        headers,
+      },
+      baseUrl,
+    );
+
+    if (
+      !isRecord(response) ||
+      typeof response.status !== "string" ||
+      response.status.toLowerCase() !== "success"
+    ) {
+      const fault = isRecord(response) && isRecord(response.fault) ? response.fault : undefined;
+      const rawCode = fault?.code;
+      const upstreamCode =
+        typeof rawCode === "string" || typeof rawCode === "number" ? String(rawCode) : undefined;
+      const upstreamMessage = findErrorMessage(fault ?? response);
+      const sanitizedMessage = upstreamMessage
+        ? sanitizeUpstreamMessage(upstreamMessage)
+        : undefined;
+      const statusCode =
+        upstreamCode &&
+        /^\d{3}$/.test(upstreamCode) &&
+        Number(upstreamCode) >= 400 &&
+        Number(upstreamCode) <= 599
+          ? Number(upstreamCode)
+          : 400;
+      throw new KotakNeoError(
+        `Kotak Neo rejected historical data request${upstreamCode ? ` (code=${upstreamCode})` : ""}${sanitizedMessage ? `: ${sanitizedMessage}` : ""}`,
+        statusCode,
+        upstreamCode,
+        200,
+        sanitizedMessage,
+        isRecord(response) && typeof response.status === "string" ? response.status : "ERROR",
+      );
+    }
+
+    return response as HistoricalDataResponse;
+  }
+
   private async post(
     path: string,
     headers: Record<string, string>,
@@ -359,11 +450,19 @@ async function readUpstreamError(response: Response): Promise<UpstreamErrorDetai
   try {
     const parsed: unknown = JSON.parse(body);
     if (!isRecord(parsed)) return {};
+    const fault = isRecord(parsed.fault) ? parsed.fault : undefined;
     const rawCode =
       typeof parsed.stCode === "string" || typeof parsed.stCode === "number"
         ? String(parsed.stCode)
-        : undefined;
-    const rawStat = typeof parsed.stat === "string" ? parsed.stat : undefined;
+        : fault && (typeof fault.code === "string" || typeof fault.code === "number")
+          ? String(fault.code)
+          : undefined;
+    const rawStat =
+      typeof parsed.stat === "string"
+        ? parsed.stat
+        : typeof parsed.status === "string"
+          ? parsed.status
+          : undefined;
     const rawMessage = findErrorMessage(parsed);
     return {
       ...(rawCode ? { code: rawCode } : {}),

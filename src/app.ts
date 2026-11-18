@@ -9,9 +9,12 @@ import {
   KotakNeoError,
   type AuthenticatedSession,
   type CancelOrderInput,
+  type GetHistoricalDataInput,
+  type HistoricalDataResponse,
   type PlaceNiftyOptionOrderInput,
 } from "./kotak-neo-client.js";
 import { renderLoginPage } from "./login-page.js";
+import { renderHistoricalChartPage } from "./historical-chart-page.js";
 import {
   parseNiftyOptionContracts,
   type NiftyOptionContract,
@@ -68,6 +71,22 @@ interface CancelOrderBody {
   tradingSymbol?: string;
 }
 
+interface HistoricalDataQuery {
+  symbol?: string;
+  neoSymbol?: string;
+  neosymbol?: string;
+  exchangeSegment?: string;
+  es?: string;
+  instrumentToken?: string;
+  token?: string;
+  tradingSymbol?: string;
+  fromDate?: string;
+  fromdate?: string;
+  toDate?: string;
+  todate?: string;
+  interval?: string;
+}
+
 interface AuthClient {
   login(input: KotakLoginInput): Promise<AuthenticatedSession>;
   placeNiftyOptionOrder?(
@@ -78,6 +97,10 @@ interface AuthClient {
     session: AuthenticatedSession,
     input: CancelOrderInput,
   ): Promise<unknown>;
+  getHistoricalData?(
+    session: AuthenticatedSession | undefined,
+    input: GetHistoricalDataInput,
+  ): Promise<HistoricalDataResponse>;
 }
 
 interface AppOptions {
@@ -138,6 +161,7 @@ export function buildApp({
           { name: "Health", description: "Service health" },
           { name: "Authentication", description: "Kotak Neo session authentication" },
           { name: "Orders", description: "Kotak Neo order placement" },
+          { name: "Market Data", description: "Kotak Neo market data APIs" },
         ],
       },
     });
@@ -198,6 +222,51 @@ export function buildApp({
         authenticated: Boolean(session),
         orderReady: Boolean(session),
       }),
+    );
+
+    api.get(
+      "/historical-chart",
+      {
+        schema: {
+          tags: ["Market Data"],
+          summary: "View historical OHLCV candles",
+          response: {
+            200: { type: "string" },
+          },
+        },
+      },
+      async (_request, reply) => {
+        return reply
+          .header("Cache-Control", "no-store")
+          .type("text/html; charset=utf-8")
+          .send(renderHistoricalChartPage());
+      },
+    );
+
+    api.get(
+      "/assets/lightweight-charts.js",
+      {
+        schema: {
+          tags: ["Market Data"],
+          summary: "Serve the local Lightweight Charts browser bundle",
+          response: {
+            200: { type: "string" },
+          },
+        },
+      },
+      async (_request, reply) => {
+        const bundle = await readFile(
+          new URL(
+            "../node_modules/lightweight-charts/dist/lightweight-charts.standalone.production.js",
+            import.meta.url,
+          ),
+          "utf8",
+        );
+        return reply
+          .header("Cache-Control", "public, max-age=3600")
+          .type("application/javascript; charset=utf-8")
+          .send(bundle);
+      },
     );
 
     api.get(
@@ -821,6 +890,212 @@ export function buildApp({
         }
       },
     );
+
+    const defaultToDate = new Date().toISOString().slice(0, 10);
+    const defaultFromDateObj = new Date();
+    defaultFromDateObj.setUTCDate(defaultFromDateObj.getUTCDate() - 2);
+    const defaultFromDate = defaultFromDateObj.toISOString().slice(0, 10);
+
+    api.get<{ Querystring: HistoricalDataQuery }>(
+      "/api/market-data/historical",
+      {
+        schema: {
+          tags: ["Market Data"],
+          summary: "Get historical candle (OHLCV) data (defaults to Nifty 50)",
+          description:
+            "Returns historical candles (OHLCV) from Kotak Neo. Pre-filled in Swagger with Nifty 50 (nse_cm|26000), last 2 days, and 10min interval.",
+          querystring: {
+            type: "object",
+            additionalProperties: true,
+            properties: {
+              neosymbol: {
+                type: "string",
+                default: "nse_cm|26000",
+                description:
+                  "Exchange segment and instrument token (Nifty 50 = nse_cm|26000, HDFC Bank = nse_cm|1333)",
+              },
+              fromdate: {
+                type: "string",
+                pattern: "^\\d{4}-\\d{2}-\\d{2}$",
+                default: defaultFromDate,
+                description: "Start date (YYYY-MM-DD)",
+              },
+              todate: {
+                type: "string",
+                pattern: "^\\d{4}-\\d{2}-\\d{2}$",
+                default: defaultToDate,
+                description: "End date (YYYY-MM-DD)",
+              },
+              interval: {
+                type: "string",
+                enum: ["1min", "3min", "5min", "10min", "15min", "30min", "60min", "D", "W"],
+                default: "10min",
+                description: "Candle interval",
+              },
+            },
+          },
+          response: {
+            200: {
+              type: "object",
+              required: ["status", "interval", "data"],
+              additionalProperties: true,
+              properties: {
+                status: { type: "string" },
+                interval: { type: "string" },
+                data: {
+                  type: "object",
+                  required: ["candles"],
+                  additionalProperties: true,
+                  properties: {
+                    candles: {
+                      type: "array",
+                      items: {
+                        type: "array",
+                        items: {
+                          anyOf: [{ type: "string" }, { type: "number" }, { type: "null" }],
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            400: errorResponseSchema,
+            401: errorResponseSchema,
+            429: errorResponseSchema,
+            502: errorResponseSchema,
+            503: errorResponseSchema,
+            504: errorResponseSchema,
+          },
+        },
+      },
+      async (request, reply) => {
+        if (!session) {
+          return reply
+            .code(401)
+            .send({ error: "Authenticate with Kotak Neo before requesting historical data" });
+        }
+        if (!client?.getHistoricalData || !config.kotakNeo.historicalDataPath) {
+          return reply.code(503).send({
+            error:
+              "Kotak Neo historical data API is not configured; set KOTAK_NEO_HISTORICAL_DATA_PATH",
+          });
+        }
+
+        const q = request.query ?? {};
+        const todayStr = new Date().toISOString().slice(0, 10);
+        const twoDaysAgoObj = new Date();
+        twoDaysAgoObj.setUTCDate(twoDaysAgoObj.getUTCDate() - 2);
+        const twoDaysAgoStr = twoDaysAgoObj.toISOString().slice(0, 10);
+
+        const fromDate =
+          optionalString(q.fromDate) ?? optionalString(q.fromdate) ?? twoDaysAgoStr;
+        const toDate = optionalString(q.toDate) ?? optionalString(q.todate) ?? todayStr;
+        const interval = optionalString(q.interval) ?? "10min";
+
+        const maxDays = getIntervalMaxDays(interval);
+        if (maxDays === 0) {
+          return reply.code(400).send({ error: "Invalid interval value" });
+        }
+        const fromMs = Date.parse(`${fromDate}T00:00:00Z`);
+        const toMs = Date.parse(`${toDate}T00:00:00Z`);
+        if (!Number.isFinite(fromMs) || !Number.isFinite(toMs) || toMs < fromMs) {
+          return reply.code(400).send({
+            error: "fromdate must be a valid YYYY-MM-DD date on or before todate",
+          });
+        }
+        if ((toMs - fromMs) / 86_400_000 > maxDays) {
+          return reply.code(400).send({
+            error: `Date range exceeds maximum of ${maxDays} days for interval ${interval}`,
+          });
+        }
+
+        try {
+          const rawSymbol = optionalString(q.symbol ?? q.tradingSymbol);
+          const rawToken = optionalString(q.instrumentToken ?? q.token);
+          const rawSegment = optionalString(q.exchangeSegment ?? q.es);
+          const rawNeoSymbol =
+            optionalString(q.neoSymbol) ??
+            (!rawSymbol && !rawToken ? optionalString(q.neosymbol) : undefined);
+
+          let neoSymbol = "nse_cm|26000";
+          if (rawNeoSymbol) {
+            const [seg, tok] = rawNeoSymbol.split("|");
+            if (!seg || !tok) {
+              return reply.code(400).send({
+                error: "neosymbol must be formatted as <exchange_segment>|<instrument_token>",
+              });
+            }
+            const normalizedToken = /^nifty(?:\s*50)?$/i.test(tok.trim()) ? "26000" : tok.trim();
+            neoSymbol = `${seg.trim()}|${normalizedToken}`;
+          } else if (rawToken) {
+            const normalizedToken = /^nifty(?:\s*50)?$/i.test(rawToken) ? "26000" : rawToken;
+            neoSymbol = `${rawSegment ?? "nse_cm"}|${normalizedToken}`;
+          } else if (rawSymbol) {
+            if (rawSymbol.includes("|")) {
+              const [seg, tok] = rawSymbol.split("|");
+              const normalizedToken = /^nifty(?:\s*50)?$/i.test((tok ?? "").trim())
+                ? "26000"
+                : (tok ?? "").trim();
+              neoSymbol = `${seg!.trim()}|${normalizedToken}`;
+            } else if (/^nifty(?:\s*50)?$/i.test(rawSymbol)) {
+              neoSymbol = `${rawSegment ?? "nse_cm"}|26000`;
+            } else if (/^\d+$/.test(rawSymbol)) {
+              neoSymbol = `${rawSegment ?? "nse_cm"}|${rawSymbol}`;
+            } else {
+              const contract = (await getNiftyContracts()).find(
+                ({ tradingSymbol }) => tradingSymbol.toUpperCase() === rawSymbol.toUpperCase(),
+              );
+              if (!contract) {
+                return reply.code(400).send({
+                  error: `Instrument ${rawSymbol} was not found in the local Scrip Master`,
+                });
+              }
+              neoSymbol = `nse_fo|${contract.instrumentToken}`;
+            }
+          }
+
+          const historicalData = await client.getHistoricalData(session, {
+            neoSymbol,
+            fromDate,
+            toDate,
+            interval,
+          });
+          return {
+            ...historicalData,
+            interval: optionalString(historicalData.interval) ?? interval,
+          };
+        } catch (error) {
+          const statusCode = historicalDataRequestStatus(error);
+          request.log.error(
+            {
+              statusCode,
+              errorName: error instanceof Error ? error.name : "UnknownError",
+              ...(error instanceof Error ? { errorMessage: error.message } : {}),
+              ...(error instanceof KotakNeoError
+                ? {
+                    ...(error.upstreamMessage
+                      ? { upstreamErrorMessage: error.upstreamMessage }
+                      : {}),
+                    ...(error.upstreamHttpStatusCode !== undefined
+                      ? { upstreamStatusCode: error.upstreamHttpStatusCode }
+                      : {}),
+                    ...(error.upstreamCode ? { upstreamCode: error.upstreamCode } : {}),
+                    ...(error.upstreamStat ? { upstreamStat: error.upstreamStat } : {}),
+                  }
+                : {}),
+            },
+            "Kotak Neo historical data request failed",
+          );
+          return reply.code(statusCode).send({
+            error:
+              error instanceof KotakNeoError
+                ? error.message
+                : "Historical data request could not be prepared",
+          });
+        }
+      },
+    );
   });
 
   return app;
@@ -869,6 +1144,45 @@ function orderRequestStatus(error: unknown): 400 | 401 | 429 | 502 | 503 | 504 {
     return error.statusCode;
   }
   return 502;
+}
+
+function historicalDataRequestStatus(error: unknown): 400 | 401 | 429 | 502 | 503 | 504 {
+  if (!(error instanceof KotakNeoError)) return 502;
+  if (error.statusCode === 400) return 400;
+  if (error.statusCode === 401 || error.statusCode === 403) return 401;
+  if (
+    error.statusCode === 429 ||
+    error.statusCode === 502 ||
+    error.statusCode === 503 ||
+    error.statusCode === 504
+  ) {
+    return error.statusCode;
+  }
+  return 502;
+}
+
+function getIntervalMaxDays(interval: string): number {
+  switch (interval) {
+    case "1min":
+    case "3min":
+    case "5min":
+      return 30;
+    case "10min":
+    case "15min":
+      return 60;
+    case "30min":
+    case "60min":
+      return 90;
+    case "D":
+    case "W":
+      return 180;
+    default:
+      return 0;
+  }
+}
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
 }
 
 function validateApiKey(provided: string | undefined, expected: string): boolean {

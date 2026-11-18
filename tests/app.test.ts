@@ -29,6 +29,7 @@ const config: AppConfig = {
     marginPath: "quick/user/check-margin",
     placeOrderPath: "quick/order/rule/ms/place",
     cancelOrderPath: "quick/order/cancel",
+    historicalDataPath: "market-data/1.0/historical/details",
     orderSource: "NEOTRADEAPI",
     quotesPath: "script-details/1.0/quotes/neosymbol/{neo_symbols}/{quote_type}",
     niftyIndexToken: "Nifty 50",
@@ -79,6 +80,37 @@ describe("app routes", () => {
     const openapi = spec.json();
     assert.equal(openapi.openapi, "3.0.3");
     assert.equal(openapi.info.title, "Kotak Neo API");
+  });
+
+  it("serves the historical candlestick chart page", async () => {
+    const app = buildApp({ config });
+    apps.push(app);
+
+    const page = await app.inject("/historical-chart");
+
+    assert.equal(page.statusCode, 200);
+    assert.match(String(page.headers["content-type"] ?? ""), /text\/html/);
+    assert.doesNotMatch(page.body, /<header|<footer|page-heading|chart-help|class="hint"/);
+    assert.match(page.body, /\/api\/market-data\/historical/);
+    assert.match(page.body, /\/assets\/lightweight-charts\.js/);
+    assert.match(page.body, /id="chart-container"/);
+    assert.match(page.body, /aria-label="Symbol"/);
+    assert.match(page.body, /aria-label="Chart timeframe"/);
+    assert.match(page.body, /data-interval="1min"/);
+    assert.doesNotMatch(page.body, /type="date"|Load range/);
+    assert.match(page.body, /<form id="chart-form" hidden>/);
+    assert.match(page.body, /form\.requestSubmit\(\);\s*<\/script>/);
+  });
+
+  it("serves the local Lightweight Charts browser bundle", async () => {
+    const app = buildApp({ config });
+    apps.push(app);
+
+    const bundle = await app.inject("/assets/lightweight-charts.js");
+
+    assert.equal(bundle.statusCode, 200);
+    assert.match(String(bundle.headers["content-type"] ?? ""), /application\/javascript/);
+    assert.match(bundle.body, /CandlestickSeries/);
   });
 
   it("serves health status", async () => {
@@ -725,5 +757,149 @@ describe("app routes", () => {
       amo: "YES",
       tradingSymbol: "TCS-EQ",
     });
+  });
+
+  it("requires authentication before requesting historical data", async () => {
+    const app = buildApp({ config });
+    apps.push(app);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/market-data/historical?neoSymbol=nse_cm|1333&fromDate=2026-08-20&toDate=2026-09-01&interval=10min",
+    });
+
+    assert.equal(response.statusCode, 401);
+    assert.deepEqual(response.json(), {
+      error: "Authenticate with Kotak Neo before requesting historical data",
+    });
+  });
+
+  it("returns 503 when historical data API is unconfigured", async () => {
+    const { historicalDataPath: _path, ...kotakWithoutHistorical } = config.kotakNeo;
+    const customConfig = { ...config, kotakNeo: kotakWithoutHistorical };
+
+    const app = buildApp({
+      config: customConfig as any,
+      authClient: {
+        async login() {
+          return authenticatedSession;
+        },
+      },
+    });
+    apps.push(app);
+
+    await app.inject({ method: "POST", url: "/api/auth/login", payload: { totp: "123456" } });
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/market-data/historical?neoSymbol=nse_cm|1333&fromDate=2026-08-20&toDate=2026-09-01&interval=10min",
+    });
+
+    assert.equal(response.statusCode, 503);
+    assert.match(response.json().error, /Kotak Neo historical data API is not configured/);
+  });
+
+  it("successfully fetches static Nifty 50 historical candle data for the last 2 days with 10min interval", async () => {
+    let capturedInput: unknown;
+    const expectedResponse = {
+      status: "success",
+      interval: "10min",
+      data: {
+        candles: [
+          ["2026-08-20T09:15:00+0530", 12009.9, 12019.35, 12001.25, 12001.5, 163275, 13667775],
+        ],
+      },
+    };
+
+    const app = buildApp({
+      config,
+      authClient: {
+        async login() {
+          return authenticatedSession;
+        },
+        async getHistoricalData(_session, input) {
+          capturedInput = input;
+          return expectedResponse;
+        },
+      },
+    });
+    apps.push(app);
+
+    await app.inject({ method: "POST", url: "/api/auth/login", payload: { totp: "123456" } });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/market-data/historical",
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(response.json(), expectedResponse);
+    assert.equal((capturedInput as any).neoSymbol, "nse_cm|26000");
+    assert.equal((capturedInput as any).interval, "10min");
+    assert.equal(typeof (capturedInput as any).fromDate, "string");
+    assert.equal(typeof (capturedInput as any).toDate, "string");
+  });
+
+  it("supports compact request with just symbol and defaults dates and interval", async () => {
+    let capturedInput: unknown;
+    const expectedResponse = {
+      status: "success",
+      interval: "10min",
+      data: { candles: [] },
+    };
+
+    const app = buildApp({
+      config,
+      authClient: {
+        async login() {
+          return authenticatedSession;
+        },
+        async getHistoricalData(_session, input) {
+          capturedInput = input;
+          return expectedResponse;
+        },
+      },
+    });
+    apps.push(app);
+
+    await app.inject({ method: "POST", url: "/api/auth/login", payload: { totp: "123456" } });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/market-data/historical?symbol=Nifty%2050",
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.equal((capturedInput as any).neoSymbol, "nse_cm|26000");
+    assert.equal((capturedInput as any).interval, "10min");
+    assert.equal(typeof (capturedInput as any).fromDate, "string");
+    assert.equal(typeof (capturedInput as any).toDate, "string");
+  });
+
+  it("uses the requested interval when Kotak omits it from the historical response", async () => {
+    const app = buildApp({
+      config,
+      authClient: {
+        async login() {
+          return authenticatedSession;
+        },
+        async getHistoricalData() {
+          return {
+            status: "success",
+            data: { candles: [] },
+          };
+        },
+      },
+    });
+    apps.push(app);
+
+    await app.inject({ method: "POST", url: "/api/auth/login", payload: { totp: "123456" } });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/market-data/historical?interval=5min",
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.json().interval, "5min");
   });
 });

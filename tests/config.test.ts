@@ -55,6 +55,7 @@ describe("loadConfig", () => {
         modifyOrderPath: "quick/order/vr/modify",
         positionsPath: "quick/user/positions",
         placeOrderPath: "quick/order/rule/ms/place",
+        historicalDataPath: "market-data/1.0/historical/details",
         orderSource: "NEOTRADEAPI",
         quotesPath: "script-details/1.0/quotes/neosymbol/{neo_symbols}/{quote_type}",
         niftyIndexToken: "Nifty 50",
@@ -194,6 +195,16 @@ describe("loadConfig", () => {
     assert.throws(
       () => loadConfig({ ...validEnvironment, KOTAK_NEO_LOG_LOGIN_RESPONSES: "on" }),
       /KOTAK_NEO_LOG_LOGIN_RESPONSES must be true or false/,
+    );
+  });
+
+  it("validates historical data path setting when custom relative path or default is used", () => {
+    const config = loadConfig(validEnvironment);
+    assert.equal(config.kotakNeo.historicalDataPath, "market-data/1.0/historical/details");
+
+    assert.throws(
+      () => loadConfig({ ...validEnvironment, KOTAK_NEO_HISTORICAL_DATA_PATH: "/absolute/path" }),
+      /KOTAK_NEO_HISTORICAL_DATA_PATH must be a relative path/,
     );
   });
 

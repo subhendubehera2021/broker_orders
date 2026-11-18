@@ -416,4 +416,94 @@ describe("KotakNeoClient", () => {
       /Kotak Neo cancel order API is not configured/,
     );
   });
+
+  it("submits a request for historical candle data with expected parameters and headers", async () => {
+    let capturedUrl: URL | undefined;
+    let capturedInit: RequestInit | undefined;
+
+    const mockResponse = {
+      status: "success",
+      interval: "10min",
+      data: {
+        candles: [
+          ["2026-08-20T09:15:00+0530", 12009.9, 12019.35, 12001.25, 12001.5, 163275, 13667775],
+        ],
+      },
+    };
+
+    const client = new KotakNeoClient(
+      { ...prodConfig, historicalDataPath: "market-data/1.0/historical/details" },
+      async (input, init) => {
+        capturedUrl = new URL(input.toString());
+        capturedInit = init;
+        return Response.json(mockResponse);
+      },
+    );
+
+    const result = await client.getHistoricalData(testSession, {
+      neoSymbol: "nse_cm|1333",
+      fromDate: "2026-08-20",
+      toDate: "2026-09-01",
+      interval: "10min",
+    });
+
+    assert.equal(capturedUrl?.pathname, "/market-data/1.0/historical/details");
+    assert.equal(capturedUrl?.searchParams.get("neosymbol"), "nse_cm|1333");
+    assert.equal(capturedUrl?.searchParams.get("fromdate"), "2026-08-20");
+    assert.equal(capturedUrl?.searchParams.get("todate"), "2026-09-01");
+    assert.equal(capturedUrl?.searchParams.get("interval"), "10min");
+    assert.equal(capturedInit?.method, "GET");
+
+    const headers = new Headers(capturedInit?.headers);
+    assert.equal(headers.get("authorization"), "consumer-key");
+    assert.equal(headers.get("content-type"), "application/json");
+
+    assert.deepEqual(result, mockResponse);
+  });
+
+  it("handles Kotak Neo historical data error response", async () => {
+    const client = new KotakNeoClient(
+      { ...prodConfig, historicalDataPath: "market-data/1.0/historical/details" },
+      async () => {
+        return Response.json({
+          status: "ERROR",
+          fault: {
+            code: 400,
+            message: "Invalid interval value",
+          },
+        });
+      },
+    );
+
+    await assert.rejects(
+      client.getHistoricalData(testSession, {
+        neoSymbol: "nse_cm|1333",
+        fromDate: "2026-08-20",
+        toDate: "2026-09-01",
+        interval: "invalid",
+      }),
+      (error: unknown) => {
+        return (
+          error instanceof Error &&
+          error.message.includes("Invalid interval value") &&
+          (error as any).statusCode === 400
+        );
+      },
+    );
+  });
+
+  it("throws KotakNeoError when historicalDataPath is missing", async () => {
+    const { historicalDataPath: _path, ...configWithoutHistoricalPath } = prodConfig;
+    const client = new KotakNeoClient(configWithoutHistoricalPath as any);
+
+    await assert.rejects(
+      client.getHistoricalData(testSession, {
+        neoSymbol: "nse_cm|1333",
+        fromDate: "2026-08-20",
+        toDate: "2026-09-01",
+        interval: "10min",
+      }),
+      /Kotak Neo historical data API is not configured/,
+    );
+  });
 });
