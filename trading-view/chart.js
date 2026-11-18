@@ -264,17 +264,23 @@ async function fetchJson(url, options = {}) {
 
 function updateFromSocket(sequence, symbol, message) {
   const updates = Array.isArray(message) ? message : [message];
+  const quotes = [];
   for (const update of updates) {
     if (update?.symbol !== symbol || !Number.isFinite(Number(update.ltp))) continue;
     const time = Number(update.exch_feed_time ?? update.last_traded_time);
     if (!Number.isFinite(time)) continue;
     const volume = Number(update.vol_traded_today);
-    applyLiveQuote(sequence, symbol, {
+    quotes.push({
       price: Number(update.ltp),
       volume: Number.isFinite(volume) ? volume : lastQuoteVolume ?? 0,
       time,
     });
   }
+  if (!quotes.length) return;
+
+  socketConnected = true;
+  stopQuotePolling();
+  for (const quote of quotes) applyLiveQuote(sequence, symbol, quote);
 }
 
 async function connectLiveSocket(sequence, symbol) {
@@ -303,10 +309,8 @@ async function connectLiveSocket(sequence, symbol) {
           socket.mode(socket.FullMode);
         }
         socket.subscribe([symbol]);
-        socketConnected = true;
-        stopQuotePolling();
-        setConnectionStatus("Fyers live", "connected");
-        feedStatus.textContent = "Live updates via Fyers WebSocket";
+        setConnectionStatus("Fyers connected");
+        feedStatus.textContent = "Waiting for first Fyers price update; REST fallback is active";
       } catch (error) {
         socketConnected = false;
         setConnectionStatus("Fyers reconnecting");
