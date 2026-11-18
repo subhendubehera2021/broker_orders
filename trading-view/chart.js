@@ -19,6 +19,8 @@ const chartMessageText = document.querySelector("#chart-message-text");
 const chartLogin = document.querySelector("#chart-login");
 const symbolInput = document.querySelector("#symbol");
 const rangeSelect = document.querySelector("#range");
+const chartControls = document.querySelector("#chart-controls");
+const chartControlsToggle = document.querySelector("#controls-toggle");
 const optionChainToggle = document.querySelector("#nifty-options-toggle");
 const optionChainPanel = document.querySelector("#option-chain-panel");
 const optionChainStatus = document.querySelector("#option-chain-status");
@@ -703,6 +705,12 @@ symbolInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter") void loadChart();
 });
 rangeSelect.addEventListener("change", () => void loadChart());
+chartControlsToggle.addEventListener("click", () => {
+  chartControls.hidden = !chartControls.hidden;
+  const expanded = !chartControls.hidden;
+  chartControlsToggle.setAttribute("aria-expanded", String(expanded));
+  chartControlsToggle.textContent = expanded ? "Hide controls" : "Show controls";
+});
 optionChainToggle.addEventListener("click", () => {
   optionChainPanel.hidden = !optionChainPanel.hidden;
   optionChainToggle.setAttribute("aria-expanded", String(!optionChainPanel.hidden));

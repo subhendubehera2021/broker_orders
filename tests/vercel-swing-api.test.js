@@ -515,6 +515,8 @@ test("serves the TradingView-inspired chart and local charting assets", async ()
 
   assert.equal(page.statusCode, 200);
   assert.match(page.body, /Liquidity swings/);
+  assert.match(page.body, /id="chart-controls"/);
+  assert.match(page.body, /id="controls-toggle"/);
   assert.match(page.body, /NIFTY Options/);
   assert.match(page.body, /option-chain-panel/);
   assert.doesNotMatch(page.body, /class="topbar"/);

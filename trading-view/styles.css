@@ -38,6 +38,31 @@ button { cursor: pointer; }
 
 main { width: min(100% - 32px, 1440px); margin: 12px auto 28px; }
 
+.controls-heading {
+  display: flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  border: 1px solid var(--tv-border);
+  border-radius: 8px 8px 0 0;
+  background: var(--tv-panel);
+  color: var(--tv-muted-light);
+  font-size: 11px;
+}
+.controls-heading button {
+  padding: 5px 9px;
+  border: 1px solid var(--tv-border-strong);
+  border-radius: 4px;
+  background: var(--tv-panel-raised);
+  color: var(--tv-text);
+  font: inherit;
+}
+.controls-heading button:hover { border-color: var(--tv-blue); color: var(--tv-blue); }
+#chart-controls[hidden] { display: none; }
+#chart-controls > .toolbar:first-child { border-top: 0; border-radius: 0; }
+#chart-controls[hidden] + .option-chain-panel { border-top: 1px solid var(--tv-border); }
+
 .toolbar {
   display: flex;
   min-height: 68px;
