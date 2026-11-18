@@ -307,6 +307,9 @@ main { width: min(100% - 32px, 1440px); margin: 12px auto 28px; }
   .toolbar { flex-wrap: wrap; align-items: end; gap: 12px 18px; }
   .secondary-toolbar { align-items: center; }
   .draw-hint { width: 100%; }
+  .instrument-summary { flex-wrap: wrap; gap: 12px 18px; }
+  .ohlc-summary { order: 3; flex: 1 1 100%; }
+  .last-price { margin-left: auto; }
 }
 
 @media (max-width: 620px) {

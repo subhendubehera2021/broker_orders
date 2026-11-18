@@ -27,17 +27,6 @@
               <span id="symbol-help" class="visually-hidden">Enter a Fyers symbol, for example NSE:SBIN-EQ.</span>
             </div>
 
-            <div class="control-group" role="group" aria-label="Candle interval">
-              <span class="control-label">Interval</span>
-              <div class="button-row" id="intervals">
-                <button type="button" data-resolution="1">1m</button>
-                <button type="button" data-resolution="5" class="selected">5m</button>
-                <button type="button" data-resolution="15">15m</button>
-                <button type="button" data-resolution="60">1h</button>
-                <button type="button" data-resolution="D">1D</button>
-              </div>
-            </div>
-
             <div class="range-control">
               <label for="range">History</label>
               <select id="range">
@@ -126,6 +115,16 @@
           <div>
             <h1 id="instrument-name">NSE:NIFTY50-INDEX</h1>
             <span id="chart-subtitle">Fyers market data · 5 minute</span>
+          </div>
+          <div class="range-control chart-interval-control">
+            <label for="intervals">Interval</label>
+            <select id="intervals">
+              <option value="1">1m</option>
+              <option value="5" selected>5m</option>
+              <option value="15">15m</option>
+              <option value="60">1h</option>
+              <option value="D">1D</option>
+            </select>
           </div>
           <div class="ohlc-summary" aria-live="polite">
             <span>O <b id="open-value">—</b></span>

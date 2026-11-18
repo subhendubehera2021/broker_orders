@@ -855,14 +855,11 @@ chart.subscribeCrosshairMove((param) => {
   }
 });
 
-document.querySelector("#intervals").addEventListener("click", (event) => {
-  const button = event.target.closest("[data-resolution]");
-  if (!button || button.dataset.resolution === currentResolution) return;
-  currentResolution = button.dataset.resolution;
-  document.querySelectorAll("#intervals [data-resolution]").forEach((item) => {
-    item.classList.toggle("selected", item === button);
-  });
-  loadChart();
+document.querySelector("#intervals").addEventListener("change", (event) => {
+  const resolution = event.target.value;
+  if (resolution === currentResolution) return;
+  currentResolution = resolution;
+  void loadChart();
 });
 
 document.querySelector("#load-chart").addEventListener("click", () => void loadChart());
