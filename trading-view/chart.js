@@ -84,6 +84,8 @@ let swingSeries = [];
 let quoteTimer;
 let countdownTimer;
 let quoteInFlight = false;
+let liveSocket;
+let socketConnected = false;
 let lastQuoteVolume;
 let loadSequence = 0;
 
@@ -193,11 +195,25 @@ function renderSwings() {
 }
 
 function clearLiveTimer() {
-  if (quoteTimer) clearInterval(quoteTimer);
+  stopQuotePolling();
   if (countdownTimer) clearInterval(countdownTimer);
-  quoteTimer = undefined;
   countdownTimer = undefined;
   document.querySelector("#live-countdown").hidden = true;
+  const socket = liveSocket;
+  liveSocket = undefined;
+  socketConnected = false;
+  if (typeof socket?.close === "function") socket.close();
+}
+
+function stopQuotePolling() {
+  if (quoteTimer) clearInterval(quoteTimer);
+  quoteTimer = undefined;
+}
+
+function startQuotePolling(sequence, symbol) {
+  if (sequence !== loadSequence || quoteTimer) return;
+  quoteTimer = setInterval(() => void pollQuote(sequence, symbol), 5000);
+  void pollQuote(sequence, symbol);
 }
 
 function updateLiveCountdown() {
@@ -231,8 +247,12 @@ function updateLiveCountdown() {
   timer.hidden = false;
 }
 
-async function fetchJson(url) {
-  const response = await fetch(url, { credentials: "same-origin", headers: { Accept: "application/json" } });
+async function fetchJson(url, options = {}) {
+  const response = await fetch(url, {
+    credentials: "same-origin",
+    headers: { Accept: "application/json" },
+    ...options,
+  });
   const payload = await response.json();
   if (!response.ok) {
     const error = new Error(payload.error || `Request failed with HTTP ${response.status}`);
@@ -240,6 +260,97 @@ async function fetchJson(url) {
     throw error;
   }
   return payload;
+}
+
+function updateFromSocket(sequence, symbol, message) {
+  const updates = Array.isArray(message) ? message : [message];
+  for (const update of updates) {
+    if (update?.symbol !== symbol || !Number.isFinite(Number(update.ltp))) continue;
+    const time = Number(update.exch_feed_time ?? update.last_traded_time);
+    if (!Number.isFinite(time)) continue;
+    const volume = Number(update.vol_traded_today);
+    applyLiveQuote(sequence, symbol, {
+      price: Number(update.ltp),
+      volume: Number.isFinite(volume) ? volume : lastQuoteVolume ?? 0,
+      time,
+    });
+  }
+}
+
+async function connectLiveSocket(sequence, symbol) {
+  if (typeof window.fyersDataSocket !== "function") {
+    feedStatus.textContent = "Fyers WebSocket SDK unavailable; using REST quote fallback";
+    setConnectionStatus("Starting fallback");
+    startQuotePolling(sequence, symbol);
+    return;
+  }
+
+  try {
+    const credentials = await fetchJson("/api/fyers/ws-token", { method: "POST" });
+    if (sequence !== loadSequence) return;
+
+    const token = `${credentials.appId}:${credentials.accessToken}`;
+    const Socket = window.fyersDataSocket;
+    const socket = typeof Socket.getInstance === "function"
+      ? Socket.getInstance(token, "", true)
+      : new Socket(token, "", true);
+    liveSocket = socket;
+    socketConnected = false;
+    socket.on("connect", () => {
+      if (sequence !== loadSequence || liveSocket !== socket) return;
+      try {
+        if (typeof socket.mode === "function" && socket.FullMode !== undefined) {
+          socket.mode(socket.FullMode);
+        }
+        socket.subscribe([symbol]);
+        socketConnected = true;
+        stopQuotePolling();
+        setConnectionStatus("Fyers live", "connected");
+        feedStatus.textContent = "Live updates via Fyers WebSocket";
+      } catch (error) {
+        socketConnected = false;
+        setConnectionStatus("Fyers reconnecting");
+        feedStatus.textContent = `WebSocket subscription failed: ${error.message}`;
+        startQuotePolling(sequence, symbol);
+      }
+    });
+    socket.on("message", (message) => {
+      if (sequence === loadSequence && liveSocket === socket) updateFromSocket(sequence, symbol, message);
+    });
+    socket.on("error", () => {
+      if (sequence !== loadSequence || liveSocket !== socket) return;
+      socketConnected = false;
+      setConnectionStatus("Fyers reconnecting");
+      feedStatus.textContent = "WebSocket interrupted; using REST quote fallback";
+      startQuotePolling(sequence, symbol);
+    });
+    socket.on("close", () => {
+      if (sequence !== loadSequence || liveSocket !== socket) return;
+      socketConnected = false;
+      setConnectionStatus("Fyers reconnecting");
+      feedStatus.textContent = "WebSocket disconnected; using REST quote fallback";
+      startQuotePolling(sequence, symbol);
+    });
+    if (typeof socket.autoreconnect === "function") socket.autoreconnect(10);
+    else if (typeof socket.autoReconnect === "function") socket.autoReconnect(10);
+    socket.connect();
+  } catch (error) {
+    if (sequence !== loadSequence) return;
+    const failedSocket = liveSocket;
+    liveSocket = undefined;
+    socketConnected = false;
+    if (typeof failedSocket?.close === "function") failedSocket.close();
+    if (error.status === 401) {
+      clearLiveTimer();
+      showMessage(error.message, { login: true });
+      setConnectionStatus("Login required", "error");
+      feedStatus.textContent = "Your Fyers session is missing or expired";
+      return;
+    }
+    feedStatus.textContent = `Fyers WebSocket unavailable: ${error.message}`;
+    setConnectionStatus("Starting fallback");
+    startQuotePolling(sequence, symbol);
+  }
 }
 
 async function loadChart() {
@@ -289,10 +400,11 @@ async function loadChart() {
     renderSwings();
     updateLiveCountdown();
     hideMessage();
-    setConnectionStatus("Fyers connected", "connected");
-    feedStatus.textContent = "Live quote polling every 5 seconds";
+    setConnectionStatus("Connecting", "");
+    feedStatus.textContent = "Connecting to Fyers market-data WebSocket";
     lastQuoteVolume = undefined;
-    quoteTimer = setInterval(() => void pollQuote(sequence, symbol), 5000);
+    startQuotePolling(sequence, symbol);
+    void connectLiveSocket(sequence, symbol);
     countdownTimer = setInterval(updateLiveCountdown, 1000);
   } catch (error) {
     if (sequence !== loadSequence) return;
@@ -319,53 +431,12 @@ function timeBucket(time, resolution) {
 }
 
 async function pollQuote(sequence, symbol) {
-  if (quoteInFlight) return;
+  if (quoteInFlight || socketConnected) return;
   quoteInFlight = true;
   try {
     const result = await fetchJson(`/api/fyers/quote?${new URLSearchParams({ symbol })}`);
-    if (sequence !== loadSequence || symbol !== symbolInput.value.trim().toUpperCase()) return;
-    const previous = candles.at(-1);
-    if (!previous || result.time < previous.time) return;
-
-    const isNewBar = currentResolution === "D"
-      ? timeBucket(previous.time, currentResolution) !== timeBucket(result.time, currentResolution)
-      : timeBucket(result.time, currentResolution) > previous.time;
-    const volumeDelta = lastQuoteVolume === undefined
-      ? 0
-      : Math.max(0, result.volume - lastQuoteVolume);
-    lastQuoteVolume = result.volume;
-
-    const next = isNewBar
-      ? {
-          time: currentResolution === "D" ? result.time : timeBucket(result.time, currentResolution),
-          open: result.price,
-          high: result.price,
-          low: result.price,
-          close: result.price,
-          volume: volumeDelta,
-        }
-      : {
-          ...previous,
-          high: Math.max(previous.high, result.price),
-          low: Math.min(previous.low, result.price),
-          close: result.price,
-          volume: previous.volume + volumeDelta,
-        };
-    if (isNewBar) candles.push(next);
-    else candles[candles.length - 1] = next;
-    candleSeries.update(next);
-    barSeries.update(next);
-    volumeSeries.update({
-      time: next.time,
-      value: next.volume,
-      color: next.close >= next.open ? "#266a58" : "#743d43",
-    });
-    document.querySelector("#last-price").textContent = formatPrice(result.price);
-    updateOhlc(next);
-    updateLiveCountdown();
-    setConnectionStatus("Fyers connected", "connected");
-    feedStatus.textContent = `Quote updated ${formatIndiaTime(result.time)} IST`;
-    if (isNewBar) renderSwings();
+    if (sequence !== loadSequence || symbol !== symbolInput.value.trim().toUpperCase() || socketConnected) return;
+    applyLiveQuote(sequence, symbol, result);
   } catch (error) {
     if (sequence !== loadSequence) return;
     if (error.status === 401) {
@@ -375,10 +446,59 @@ async function pollQuote(sequence, symbol) {
       feedStatus.textContent = "Your Fyers session is missing or expired";
     } else {
       feedStatus.textContent = error.message;
+      setConnectionStatus("Fyers polling error", "error");
     }
   } finally {
     quoteInFlight = false;
   }
+}
+
+function applyLiveQuote(sequence, symbol, quote) {
+  if (sequence !== loadSequence || symbol !== symbolInput.value.trim().toUpperCase()) return;
+  const previous = candles.at(-1);
+  if (!previous || quote.time < previous.time) return;
+
+  const isNewBar = currentResolution === "D"
+    ? timeBucket(previous.time, currentResolution) !== timeBucket(quote.time, currentResolution)
+    : timeBucket(quote.time, currentResolution) > previous.time;
+  const volumeDelta = lastQuoteVolume === undefined
+    ? 0
+    : Math.max(0, quote.volume - lastQuoteVolume);
+  lastQuoteVolume = quote.volume;
+
+  const next = isNewBar
+    ? {
+        time: currentResolution === "D" ? quote.time : timeBucket(quote.time, currentResolution),
+        open: quote.price,
+        high: quote.price,
+        low: quote.price,
+        close: quote.price,
+        volume: volumeDelta,
+      }
+    : {
+        ...previous,
+        high: Math.max(previous.high, quote.price),
+        low: Math.min(previous.low, quote.price),
+        close: quote.price,
+        volume: previous.volume + volumeDelta,
+      };
+  if (isNewBar) candles.push(next);
+  else candles[candles.length - 1] = next;
+  candleSeries.update(next);
+  barSeries.update(next);
+  volumeSeries.update({
+    time: next.time,
+    value: next.volume,
+    color: next.close >= next.open ? "#266a58" : "#743d43",
+  });
+  document.querySelector("#last-price").textContent = formatPrice(quote.price);
+  updateOhlc(next);
+  updateLiveCountdown();
+  setConnectionStatus(socketConnected ? "Fyers live" : "Fyers polling", "connected");
+  feedStatus.textContent = socketConnected
+    ? `Fyers WebSocket update ${formatIndiaTime(quote.time)} IST`
+    : `REST quote update ${formatIndiaTime(quote.time)} IST`;
+  if (isNewBar) renderSwings();
 }
 
 function selectTool(tool) {

@@ -27,6 +27,22 @@ export function registerFyersAuthRoutes(app) {
     });
   });
 
+  app.post("/api/fyers/ws-token", async (request, reply) => {
+    const config = getFyersConfig();
+    if (!config) {
+      return reply.code(503).send({ error: "Fyers is not configured on the server" });
+    }
+
+    const accessToken = getFyersSessionToken(request, config);
+    if (!accessToken) {
+      return reply.code(401).send({ error: "Log in with Fyers to connect the market-data WebSocket" });
+    }
+
+    reply.header("Cache-Control", "private, no-store");
+    reply.header("Pragma", "no-cache");
+    return reply.send({ appId: config.appId, accessToken });
+  });
+
   app.post("/api/fyers/logout", async (_request, reply) => {
     const config = getFyersConfig();
     reply.header("Set-Cookie", clearFyersSessionCookie(config?.redirectUri));

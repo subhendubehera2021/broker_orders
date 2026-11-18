@@ -366,6 +366,24 @@ test("Fyers OAuth validates state and issues an encrypted session cookie", async
     assert.deepEqual(authenticatedSession.json(), { configured: true, authenticated: true });
     assert.doesNotMatch(authenticatedSession.body, /private-fyers-access-token/);
 
+    const unauthenticatedSocketToken = await app.inject({
+      method: "POST",
+      url: "/api/fyers/ws-token",
+    });
+    assert.equal(unauthenticatedSocketToken.statusCode, 401);
+
+    const socketToken = await app.inject({
+      method: "POST",
+      url: "/api/fyers/ws-token",
+      headers: { cookie: sessionCookie },
+    });
+    assert.equal(socketToken.statusCode, 200);
+    assert.deepEqual(socketToken.json(), {
+      appId: "test-app-id",
+      accessToken: "private-fyers-access-token",
+    });
+    assert.match(socketToken.headers["cache-control"], /no-store/);
+
     const anotherInstance = Fastify({ bodyLimit: 1_024 });
     registerSwingApiRoutes(anotherInstance);
     try {
@@ -457,6 +475,7 @@ test("serves the TradingView-inspired chart and local charting assets", async ()
   assert.equal(page.statusCode, 200);
   assert.match(page.body, /Liquidity swings/);
   assert.match(page.body, /Fyers account/);
+  assert.match(page.body, /fyers-web-sdk-v3/);
   assert.match(client.headers["content-type"], /application\/javascript/);
   assert.match(client.body, /findLiquiditySwings/);
   assert.match(client.body, /tickMarkFormatter/);

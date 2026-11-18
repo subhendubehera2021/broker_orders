@@ -29,17 +29,21 @@ FYERS_REDIRECT_URI=http://127.0.0.1:3000/auth/fyers/callback
 
 Open [http://127.0.0.1:3000/fyers-login](http://127.0.0.1:3000/fyers-login)
 and select **Login with Fyers**. The access token is held in an encrypted,
-HttpOnly session cookie, so the session works across Vercel function instances
-without exposing the token to page JavaScript. The cookie key is derived from
-the Fyers app credentials. Fyers tokens expire daily, so log in again when
-prompted. For deployment, use an HTTPS redirect URL configured in the Fyers
-developer portal.
+HttpOnly session cookie, so the session works across Vercel function instances.
+The chart requests the token only when opening a direct Fyers WebSocket; it is
+then available to browser JavaScript in memory and is not saved in browser
+storage. Use the chart only on a trusted device. The app secret remains on the
+server. The cookie key is derived from the Fyers app credentials. Fyers tokens
+expire daily, so log in again when prompted. For deployment, use an HTTPS
+redirect URL configured in the Fyers developer portal.
 
 Open [http://127.0.0.1:3000/trading-view](http://127.0.0.1:3000/trading-view)
 for the chart. Sign in first, then enter a Fyers symbol such as
-`NSE:NIFTY50-INDEX` or `NSE:SBIN-EQ`. Historical candles and five-second quote
-polling require the Market Data permission in the Fyers API app. Chart-axis,
-crosshair, and quote-update times are displayed in India Standard Time (IST).
+`NSE:NIFTY50-INDEX` or `NSE:SBIN-EQ`. Historical candles and live WebSocket
+updates require the Market Data permission in the Fyers API app. The chart
+falls back to five-second quote polling if the WebSocket is unavailable.
+Chart-axis, crosshair, and quote-update times are displayed in India Standard
+Time (IST).
 
 ## Vercel environment variables
 

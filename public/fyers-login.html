@@ -29,7 +29,7 @@
   <body>
     <main>
       <h1>Connect your Fyers account</h1>
-      <p>Sign in securely with Fyers. Your app secret and access token stay on the server.</p>
+      <p>Your app secret stays on the server. The chart sends your access token to this browser in memory for its direct Fyers WebSocket connection. Use only on a trusted device.</p>
       <p id="status" role="status" aria-live="polite">Checking Fyers login configuration…</p>
       <a id="login" href="/auth/fyers/login" hidden>Login with Fyers</a>
       <a id="chart-link" class="chart-link" href="/trading-view" hidden>Open chart</a>
@@ -59,8 +59,8 @@
           } else if (session.authenticated) {
             status.dataset.kind = "success";
             status.textContent = result === "connected"
-              ? "Fyers login successful. Your access token is protected in your encrypted session."
-              : "Fyers is connected. Your access token is protected in your encrypted session.";
+              ? "Fyers login successful. The chart uses your encrypted session to connect to live market data."
+              : "Fyers is connected. The chart uses your encrypted session to connect to live market data.";
           } else if (result === "denied") {
             status.dataset.kind = "error";
             status.textContent = "Fyers login was cancelled.";
