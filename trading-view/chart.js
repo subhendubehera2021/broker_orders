@@ -184,9 +184,11 @@ function formatVolume(value) {
 
 function formatLiquidityVolume(value) {
   if (!Number.isFinite(value) || value <= 0) return "";
-  const suffix = value >= 1_000_000 ? "M" : value >= 1_000 ? "K" : "";
-  const scaled = value / (value >= 1_000_000 ? 1_000_000 : value >= 1_000 ? 1_000 : 1);
-  const formatted = new Intl.NumberFormat("en-US", { maximumFractionDigits: 3 }).format(scaled);
+  const suffix = value >= 10_000_000 ? "Cr" : value >= 100_000 ? "L" : "";
+  const divisor = value >= 10_000_000 ? 10_000_000 : value >= 100_000 ? 100_000 : 1;
+  const formatted = new Intl.NumberFormat("en-IN", {
+    maximumFractionDigits: 2,
+  }).format(value / divisor);
   return `${formatted}${suffix}`;
 }
 
