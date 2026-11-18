@@ -61,7 +61,7 @@ export async function fetchFyersCandles(
     throw new FyersMarketDataError(502, "Fyers did not return historical candles for this request");
   }
 
-  return payload.candles.map((candle, index) => {
+  const candles = payload.candles.map((candle, index) => {
     if (!Array.isArray(candle) || candle.length < 6) {
       throw new FyersMarketDataError(502, `Fyers returned an invalid candle at row ${index}`);
     }
@@ -79,6 +79,17 @@ export async function fetchFyersCandles(
     }
     return { time, open, high, low, close, volume };
   });
+  candles.sort((left, right) => left.time - right.time);
+
+  const uniqueCandles = [];
+  for (const candle of candles) {
+    if (uniqueCandles.at(-1)?.time === candle.time) {
+      uniqueCandles[uniqueCandles.length - 1] = candle;
+    } else {
+      uniqueCandles.push(candle);
+    }
+  }
+  return uniqueCandles;
 }
 
 export async function fetchFyersQuote({ appId, accessToken, symbol }, fetchImpl = fetch) {

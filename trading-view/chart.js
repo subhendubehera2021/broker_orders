@@ -636,8 +636,13 @@ async function loadChart() {
     const result = await fetchJson(`/api/fyers/candles?${query}`);
     if (sequence !== loadSequence) return;
     candles = result.candles;
-    if (!Array.isArray(candles) || candles.some((bar) => !isValidCandle(bar))) {
-      throw new Error("Fyers returned invalid candle data. Check the symbol and try again.");
+    if (
+      !Array.isArray(candles) ||
+      candles.some((bar, index) =>
+        !isValidCandle(bar) || (index > 0 && bar.time <= candles[index - 1].time)
+      )
+    ) {
+      throw new Error("Fyers returned invalid or out-of-order candle data. Check the symbol and try again.");
     }
     if (!candles.length) throw new Error("No candles returned for this symbol and date range.");
     candleSeries.setData(candles);

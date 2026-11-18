@@ -42,6 +42,29 @@ test("requests and normalizes Fyers historical candles", async () => {
   }]);
 });
 
+test("sorts historical candles and keeps one value per timestamp", async () => {
+  const candles = await fetchFyersCandles({
+    appId: "test-app-id",
+    accessToken: "test-access-token",
+    symbol: "NSE:SBIN-EQ",
+    resolution: "5",
+    rangeFrom: "2026-11-10",
+    rangeTo: "2026-11-18",
+  }, async () => Response.json({
+    s: "ok",
+    candles: [
+      [1794307500, 103, 107, 102, 106, 1500],
+      [1794307200, 100, 105, 99, 103, 1200],
+      [1794307500, 103, 108, 102, 107, 1600],
+    ],
+  }));
+
+  assert.deepEqual(candles, [
+    { time: 1794307200, open: 100, high: 105, low: 99, close: 103, volume: 1200 },
+    { time: 1794307500, open: 103, high: 108, low: 102, close: 107, volume: 1600 },
+  ]);
+});
+
 test("requests and normalizes a Fyers live quote", async () => {
   let requestUrl;
   const quote = await fetchFyersQuote({
