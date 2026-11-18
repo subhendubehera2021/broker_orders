@@ -25,7 +25,11 @@ const chart = createChart(chartElement, {
     horzLines: { color: "#222a22" },
   },
   crosshair: { mode: CrosshairMode.Normal },
-  rightPriceScale: { borderColor: "#303830", scaleMargins: { top: 0.1, bottom: 0.22 } },
+  rightPriceScale: {
+    borderColor: "#303830",
+    minimumWidth: 72,
+    scaleMargins: { top: 0.1, bottom: 0.22 },
+  },
   timeScale: {
     borderColor: "#303830",
     timeVisible: true,
@@ -68,6 +72,7 @@ let pendingTrendStart;
 let drawings = [];
 let swingSeries = [];
 let quoteTimer;
+let countdownTimer;
 let quoteInFlight = false;
 let lastQuoteVolume;
 let loadSequence = 0;
@@ -190,7 +195,41 @@ function renderSwings() {
 
 function clearLiveTimer() {
   if (quoteTimer) clearInterval(quoteTimer);
+  if (countdownTimer) clearInterval(countdownTimer);
   quoteTimer = undefined;
+  countdownTimer = undefined;
+  document.querySelector("#live-countdown").hidden = true;
+}
+
+function updateLiveCountdown() {
+  const timer = document.querySelector("#live-countdown");
+  const latest = candles.at(-1);
+  const duration = intervalSeconds[currentResolution];
+  if (!latest || currentResolution === "D" || !duration) {
+    timer.hidden = true;
+    return;
+  }
+
+  const now = Date.now() / 1000;
+  const today = indiaDate(new Date());
+  if (indiaDate(new Date(latest.time * 1000)) !== today) {
+    timer.hidden = true;
+    return;
+  }
+
+  const remaining = Math.ceil(latest.time + duration - now);
+  const y = activePriceSeries().priceToCoordinate(latest.close);
+  if (remaining <= 0 || !Number.isFinite(y) || y < 0 || y + 28 > chartElement.clientHeight) {
+    timer.hidden = true;
+    return;
+  }
+
+  const minutes = Math.floor(remaining / 60).toString().padStart(2, "0");
+  const seconds = (remaining % 60).toString().padStart(2, "0");
+  timer.textContent = `${minutes}:${seconds}`;
+  timer.dataset.direction = latest.close >= latest.open ? "up" : "down";
+  timer.style.top = `${Math.round(y + 10)}px`;
+  timer.hidden = false;
 }
 
 async function fetchJson(url) {
@@ -249,11 +288,13 @@ async function loadChart() {
     document.querySelector("#price-change").textContent = "Last traded price";
     updateOhlc(candles.at(-1));
     renderSwings();
+    updateLiveCountdown();
     hideMessage();
     setConnectionStatus("Fyers connected", "connected");
     feedStatus.textContent = "Live quote polling every 5 seconds";
     lastQuoteVolume = undefined;
     quoteTimer = setInterval(() => void pollQuote(sequence, symbol), 5000);
+    countdownTimer = setInterval(updateLiveCountdown, 1000);
   } catch (error) {
     if (sequence !== loadSequence) return;
     candles = [];
@@ -322,6 +363,7 @@ async function pollQuote(sequence, symbol) {
     });
     document.querySelector("#last-price").textContent = formatPrice(result.price);
     updateOhlc(next);
+    updateLiveCountdown();
     setConnectionStatus("Fyers connected", "connected");
     feedStatus.textContent = `Quote updated ${formatIndiaTime(result.time)} IST`;
     if (isNewBar) renderSwings();
@@ -431,6 +473,7 @@ document.querySelector("#candles-type").addEventListener("click", () => {
   document.querySelector("#bars-type").classList.remove("selected");
   clearDrawings();
   renderSwings();
+  updateLiveCountdown();
 });
 
 document.querySelector("#bars-type").addEventListener("click", () => {
@@ -441,6 +484,7 @@ document.querySelector("#bars-type").addEventListener("click", () => {
   document.querySelector("#candles-type").classList.remove("selected");
   clearDrawings();
   renderSwings();
+  updateLiveCountdown();
 });
 
 document.querySelectorAll("[data-tool]").forEach((button) => {

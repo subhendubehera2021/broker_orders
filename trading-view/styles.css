@@ -175,6 +175,22 @@ main { width: min(100% - 32px, 1440px); margin: 20px auto 28px; }
 
 .chart-wrap { position: relative; min-height: 520px; height: min(70vh, 780px); }
 #chart { position: absolute; inset: 0; }
+.live-countdown {
+  position: absolute;
+  z-index: 1;
+  right: 0;
+  width: 72px;
+  padding: 2px 3px;
+  border-radius: 0 0 3px 3px;
+  color: #fff;
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
+  pointer-events: none;
+}
+.live-countdown[hidden] { display: none; }
+.live-countdown[data-direction="up"] { background: #26a986; }
+.live-countdown[data-direction="down"] { background: #ef5964; }
 .chart-message {
   position: absolute;
   inset: 0;
