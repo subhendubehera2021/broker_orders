@@ -40,10 +40,11 @@ redirect URL configured in the Fyers developer portal.
 Open [http://127.0.0.1:3000/trading-view](http://127.0.0.1:3000/trading-view)
 for the chart. Sign in first, then enter a Fyers symbol such as
 `NSE:NIFTY50-INDEX` or `NSE:SBIN-EQ`. Historical candles and live WebSocket
-updates require the Market Data permission in the Fyers API app. The chart
-falls back to five-second quote polling if the WebSocket is unavailable.
-Chart-axis, crosshair, and quote-update times are displayed in India Standard
-Time (IST).
+updates require the Market Data permission in the Fyers API app. The browser
+connects directly to Fyers using its official Web SDK, so Vercel does not host
+the market-data socket. The chart falls back to five-second quote polling if
+the WebSocket or Fyers CDN is unavailable. Chart-axis, crosshair, and
+quote-update times are displayed in India Standard Time (IST).
 
 ## Vercel environment variables
 
