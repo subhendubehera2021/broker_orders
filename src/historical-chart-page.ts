@@ -308,11 +308,43 @@ export function renderHistoricalChartPage(): string {
         return formatNumber(value);
       }
 
+      function chartTimeToDate(time) {
+        if (typeof time === "number") return new Date(time * 1000);
+        if (typeof time === "string") return new Date(time + "T00:00:00Z");
+        return new Date(Date.UTC(time.year, time.month - 1, time.day));
+      }
+
+      function formatIndiaTime(time, includeDate) {
+        return new Intl.DateTimeFormat("en-IN", {
+          timeZone: "Asia/Kolkata",
+          ...(includeDate
+            ? { day: "2-digit", month: "short", year: "numeric" }
+            : {}),
+          hour: "2-digit",
+          minute: "2-digit",
+          hourCycle: "h23",
+        }).format(chartTimeToDate(time));
+      }
+
+      function formatIndiaTickMark(time, tickMarkType, library) {
+        const date = chartTimeToDate(time);
+        const options = tickMarkType === library.TickMarkType.Year
+          ? { year: "numeric" }
+          : tickMarkType === library.TickMarkType.Month
+            ? { month: "short", year: "2-digit" }
+            : tickMarkType === library.TickMarkType.DayOfMonth
+              ? { day: "2-digit", month: "short" }
+              : tickMarkType === library.TickMarkType.TimeWithSeconds
+                ? { hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" }
+                : { hour: "2-digit", minute: "2-digit", hourCycle: "h23" };
+        return new Intl.DateTimeFormat("en-IN", {
+          timeZone: "Asia/Kolkata",
+          ...options,
+        }).format(date);
+      }
+
       function formatTime(value, includeDate) {
-        const date = new Date(value * 1000);
-        return new Intl.DateTimeFormat(undefined, includeDate
-          ? { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }
-          : { hour: "2-digit", minute: "2-digit" }).format(date);
+        return formatIndiaTime(value, includeDate);
       }
 
       function shiftDate(dateValue, dayOffset) {
@@ -641,6 +673,12 @@ export function renderHistoricalChartPage(): string {
             fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif",
             attributionLogo: true,
           },
+          localization: {
+            locale: "en-IN",
+            timeFormatter: function (time) {
+              return formatIndiaTime(time, true);
+            },
+          },
           grid: {
             vertLines: { color: "#20241d" },
             horzLines: { color: "#20241d" },
@@ -660,6 +698,9 @@ export function renderHistoricalChartPage(): string {
             secondsVisible: false,
             rightOffset: 8,
             barSpacing: 8,
+            tickMarkFormatter: function (time, tickMarkType) {
+              return formatIndiaTickMark(time, tickMarkType, library);
+            },
           },
           handleScroll: {
             mouseWheel: false,
