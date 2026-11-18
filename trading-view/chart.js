@@ -168,8 +168,14 @@ function finiteNumber(value) {
 }
 
 function isValidCandle(bar) {
-  return bar && ["time", "open", "high", "low", "close", "volume"]
-    .every((key) => Number.isFinite(bar[key]));
+  return Boolean(
+    bar &&
+    ["time", "open", "high", "low", "close", "volume"].every((key) => Number.isFinite(bar[key])) &&
+    bar.time > 0 &&
+    bar.low <= Math.min(bar.open, bar.close) &&
+    bar.high >= Math.max(bar.open, bar.close) &&
+    bar.volume >= 0
+  );
 }
 
 function formatVolume(value) {
@@ -707,33 +713,55 @@ async function pollQuote(sequence, symbol) {
 
 function applyLiveQuote(sequence, symbol, quote) {
   if (sequence !== loadSequence || symbol !== symbolInput.value.trim().toUpperCase()) return;
+  const price = finiteNumber(quote?.price);
+  const time = finiteNumber(quote?.time);
+  const volume = finiteNumber(quote?.volume);
+  if (
+    price === undefined ||
+    price <= 0 ||
+    time === undefined ||
+    time <= 0 ||
+    volume === undefined ||
+    volume < 0
+  ) {
+    setConnectionStatus("Invalid Fyers quote", "error");
+    feedStatus.textContent = "Ignored an invalid live quote; waiting for valid market data";
+    return;
+  }
+
   const previous = candles.at(-1);
-  if (!previous || quote.time < previous.time) return;
+  if (!previous || time < previous.time) return;
 
   const isNewBar = currentResolution === "D"
-    ? timeBucket(previous.time, currentResolution) !== timeBucket(quote.time, currentResolution)
-    : timeBucket(quote.time, currentResolution) > previous.time;
+    ? timeBucket(previous.time, currentResolution) !== timeBucket(time, currentResolution)
+    : timeBucket(time, currentResolution) > previous.time;
   const volumeDelta = lastQuoteVolume === undefined
     ? 0
-    : Math.max(0, quote.volume - lastQuoteVolume);
-  lastQuoteVolume = quote.volume;
+    : Math.max(0, volume - lastQuoteVolume);
 
   const next = isNewBar
     ? {
-        time: currentResolution === "D" ? quote.time : timeBucket(quote.time, currentResolution),
-        open: quote.price,
-        high: quote.price,
-        low: quote.price,
-        close: quote.price,
+        time: currentResolution === "D" ? time : timeBucket(time, currentResolution),
+        open: price,
+        high: price,
+        low: price,
+        close: price,
         volume: volumeDelta,
       }
     : {
         ...previous,
-        high: Math.max(previous.high, quote.price),
-        low: Math.min(previous.low, quote.price),
-        close: quote.price,
+        high: Math.max(previous.high, price),
+        low: Math.min(previous.low, price),
+        close: price,
         volume: previous.volume + volumeDelta,
       };
+  if (!isValidCandle(next)) {
+    setConnectionStatus("Invalid Fyers candle update", "error");
+    feedStatus.textContent = "Ignored an invalid live candle update; waiting for valid market data";
+    return;
+  }
+
+  lastQuoteVolume = volume;
   if (isNewBar) candles.push(next);
   else candles[candles.length - 1] = next;
   candleSeries.update(next);
@@ -743,7 +771,7 @@ function applyLiveQuote(sequence, symbol, quote) {
     value: next.volume,
     color: next.close >= next.open ? chartColors.upVolume : chartColors.downVolume,
   });
-  document.querySelector("#last-price").textContent = formatPrice(quote.price);
+  document.querySelector("#last-price").textContent = formatPrice(price);
   updateOhlc(next);
   updateCurrentCandleVolumeMarker();
   updateLiveCountdown();
