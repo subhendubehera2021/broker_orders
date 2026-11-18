@@ -64,8 +64,8 @@ async function ensureDefaultMarketPriceStream(env) {
   return response;
 }
 
-async function startOrderStream(env) {
-  const response = await callOrderStream(env, "/start", "POST");
+async function startOrderStream(env, { automatic = false } = {}) {
+  const response = await callOrderStream(env, automatic ? "/start?automatic=1" : "/start", "POST");
   if (!response.ok) {
     const result = await response.json();
     throw new Error(result.error ?? `Order stream start failed with status ${response.status}`);
@@ -171,9 +171,11 @@ export default {
       const instrument = url.searchParams.get("instrument");
       if (!instrument) return new Response("Missing instrument", { status: 400 });
       const path = isMarketPriceSubscribe ? "/subscribe" : "/unsubscribe";
+      // A dashboard "Add" is an explicit user action, so it may resume a manually disconnected feed.
+      const resume = isMarketPriceSubscribe ? "&resume=1" : "";
       return callMarketPriceControl(
         env,
-        `${path}?instrument=${encodeURIComponent(instrument)}`,
+        `${path}?instrument=${encodeURIComponent(instrument)}${resume}`,
         "POST",
       );
     }
@@ -182,7 +184,7 @@ export default {
 
   async scheduled(_controller, env) {
     await Promise.all([
-      startOrderStream(env),
+      startOrderStream(env, { automatic: true }),
       ensureDefaultMarketPriceStream(env),
     ]);
   },

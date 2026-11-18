@@ -449,15 +449,8 @@ test("disconnects the market feed and clears active state and alarms", async () 
   FakeWebSocket.instances = [];
   const { stream, backgroundTasks } = createStream();
   let deletedAlarm = false;
-  let deletedBackgroundMode = false;
-  const originalDeleteAlarm = stream.ctx.storage.deleteAlarm;
-  const originalDelete = stream.ctx.storage.delete;
   stream.ctx.storage.deleteAlarm = async () => {
     deletedAlarm = true;
-  };
-  stream.ctx.storage.delete = async (key) => {
-    if (key === "backgroundMode") deletedBackgroundMode = true;
-    if (originalDelete) await originalDelete(key);
   };
 
   await stream.fetch(new Request(
@@ -476,11 +469,38 @@ test("disconnects the market feed and clears active state and alarms", async () 
   assert.equal(response.status, 200);
   const result = await response.json();
   assert.equal(result.state, "disconnected");
+  assert.equal(result.manuallyDisconnected, true);
   assert.equal(deletedAlarm, true);
-  assert.equal(deletedBackgroundMode, true);
+  assert.equal(await stream.ctx.storage.get("backgroundMode"), false);
+  assert.equal(await stream.ctx.storage.get("manuallyDisconnected"), true);
   assert.equal(stream.socket, null);
   assert.deepEqual(socket.closeArgs, [1000, "Manually disconnected"]);
   assert.equal(stream.connectionState, "disconnected");
+
+  // Cron / page-load ensure-default, order-driven subscribe and dashboard SSE must not reconnect.
+  await stream.fetch(new Request("https://market-price.internal/ensure-default", { method: "POST" }));
+  await stream.fetch(new Request(
+    "https://market-price.internal/subscribe?instrument=nse_fo%7C99999",
+    { method: "POST" },
+  ));
+  const events = await stream.fetch(new Request("https://market-price.internal/events"));
+  await Promise.all(backgroundTasks);
+  await stream.alarm();
+  assert.equal(FakeWebSocket.instances.length, 1);
+  await events.body.cancel();
+
+  // A fresh Durable Object instance (after eviction) still remembers the manual disconnect.
+  const revived = new KotakMarketPriceStream(stream.ctx, stream.env, FakeWebSocket);
+  await revived.fetch(new Request("https://market-price.internal/ensure-default", { method: "POST" }));
+  assert.equal(FakeWebSocket.instances.length, 1);
+
+  // Explicit restart resumes.
+  const restarted = await revived.fetch(new Request(
+    "https://market-price.internal/restart",
+    { method: "POST" },
+  ));
+  assert.equal((await restarted.json()).manuallyDisconnected, false);
+  assert.equal(FakeWebSocket.instances.length, 2);
 });
 
 test("uses a freshly configured feed URL when provided", async () => {

@@ -284,6 +284,12 @@ export const marketPriceDashboardScript = String.raw`
       return;
     }
     if (name === "status") {
+      if (data.manuallyDisconnected) {
+        // Feed is parked: drop the SSE connection so the Durable Object can go idle.
+        stopMonitor();
+        showDisconnected();
+        return;
+      }
       if (disconnectButton) {
         disconnectButton.hidden = data.state === "disconnected";
       }
@@ -437,6 +443,7 @@ export const marketPriceDashboardScript = String.raw`
       const result = await requestJson("/internal/market-price/restart", token, "POST");
       updateInstruments(result.instruments);
       setMessage("Market-price WebSocket is reconnecting.");
+      await startMonitor(token);
     } catch (error) {
       setMessage(error.message, true);
     } finally {
@@ -447,6 +454,23 @@ export const marketPriceDashboardScript = String.raw`
 
   restartButton.addEventListener("click", () => void restartMarketPrice());
 
+  function stopMonitor() {
+    streamController?.abort();
+    streamController = null;
+    activeToken = "";
+  }
+
+  function showDisconnected() {
+    if (disconnectButton) disconnectButton.hidden = true;
+    for (const item of instruments.values()) {
+      item.price = null;
+      item.state = "disconnected";
+      const row = rowsByToken.get(item.inputToken);
+      if (row) updateRow(item, row);
+    }
+    setMessage("Market feed disconnected. Use Reconnect market feed to resume.");
+  }
+
   async function disconnectMarketPrice() {
     const token = controlTokenInput.value.trim();
     if (!token) {
@@ -456,20 +480,15 @@ export const marketPriceDashboardScript = String.raw`
 
     if (disconnectButton) disconnectButton.disabled = true;
     setMessage("Disconnecting market feed...");
+    // Stop the SSE loop first; otherwise the server closing it makes the loop
+    // retry /events, which reconnects the feed.
+    stopMonitor();
     try {
       await requestJson("/internal/market-price/disconnect", token, "POST");
-      streamController?.abort();
-      streamController = null;
-      activeToken = "";
-      if (disconnectButton) disconnectButton.hidden = true;
-      for (const item of instruments.values()) {
-        item.state = "disconnected";
-        const row = rowsByToken.get(item.inputToken);
-        if (row) updateRow(item, row);
-      }
-      setMessage("Market feed disconnected.");
+      showDisconnected();
     } catch (error) {
       setMessage(error.message, true);
+      void startMonitor(token);
     } finally {
       if (disconnectButton) disconnectButton.disabled = false;
     }

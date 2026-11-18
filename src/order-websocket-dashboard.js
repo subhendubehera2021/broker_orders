@@ -720,9 +720,9 @@ export const orderWebSocketDashboard = `<!doctype html>
         messageOutput.textContent = "Disconnecting stream...";
         messageOutput.dataset.error = "false";
         try {
-          await request("/internal/order-stream/disconnect", "POST");
           streamController?.abort();
           streamStatus.textContent = "Offline";
+          await request("/internal/order-stream/disconnect", "POST");
           messageOutput.textContent = "Stream disconnected.";
           await checkStatus();
         } catch (error) {

@@ -50,7 +50,7 @@ test("scheduled trigger starts both streams with a normalized cron expression", 
     { name: "kotak-order-stream" },
     { id: "stable-order-stream-id" },
     {
-      url: "https://order-stream.internal/start",
+      url: "https://order-stream.internal/start?automatic=1",
       options: { method: "POST" },
     },
     { name: "kotak-market-price-stream" },
@@ -435,7 +435,7 @@ test("protects and proxies market watchlist APIs and the shared event stream", a
     { name: "kotak-market-price-stream" },
     { id: "stable-market-price-id" },
     {
-      url: "https://market-price.internal/subscribe?instrument=nse_cm%7C1333",
+      url: "https://market-price.internal/subscribe?instrument=nse_cm%7C1333&resume=1",
       options: { method: "POST" },
     },
     { name: "kotak-market-price-stream" },

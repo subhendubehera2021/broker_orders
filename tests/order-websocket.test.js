@@ -336,3 +336,33 @@ test("disconnect closes socket, clears alarm, sets state to disconnected, and pr
   assert.equal(stream.connectionState, "disconnected");
   assert.equal(stream.retryScheduled, false);
 });
+
+test("cron start does not undo a manual disconnect, even after eviction", async () => {
+  FakeWebSocket.instances = [];
+  const stored = new Map();
+  const ctx = {
+    storage: {
+      async setAlarm() {},
+      async deleteAlarm() {},
+      async get(key) { return stored.get(key); },
+      async put(key, value) { stored.set(key, value); },
+    },
+  };
+  const env = {
+    KOTAK_NEO_BASE_URL: "https://e21.kotaksecurities.com",
+    KOTAK_WS_SESSION_TOKEN: "session-token",
+    KOTAK_WS_SID: "session-id",
+  };
+  const stream = new KotakOrderStream(ctx, env, FakeWebSocket);
+  await stream.start();
+  await stream.disconnect();
+
+  const cron = await stream.fetch(new Request("https://order-stream.internal/start?automatic=1", { method: "POST" }));
+  assert.deepEqual(await cron.json(), { state: "disconnected" });
+  const revived = new KotakOrderStream(ctx, env, FakeWebSocket);
+  assert.equal(await revived.start({ automatic: true }), "disconnected");
+  assert.equal(FakeWebSocket.instances.length, 1);
+
+  assert.equal(await revived.start(), "connecting");
+  assert.equal(FakeWebSocket.instances.length, 2);
+});

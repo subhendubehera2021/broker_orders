@@ -124,7 +124,7 @@ export class KotakOrderStream {
     }
 
     try {
-      const state = await this.start();
+      const state = await this.start({ automatic: url.searchParams.get("automatic") === "1" });
       return Response.json(
         { state },
         { headers: { "Cache-Control": "no-store" } },
@@ -135,8 +135,29 @@ export class KotakOrderStream {
     }
   }
 
-  async start() {
-    this.manuallyDisconnected = false;
+  async loadManualDisconnect() {
+    if (this.manualDisconnectLoaded) return;
+    if (typeof this.ctx.storage?.get === "function") {
+      this.manuallyDisconnected = await this.ctx.storage.get("manuallyDisconnected") === true;
+    }
+    this.manualDisconnectLoaded = true;
+  }
+
+  async setManuallyDisconnected(value) {
+    this.manuallyDisconnected = value;
+    this.manualDisconnectLoaded = true;
+    if (typeof this.ctx.storage?.put === "function") {
+      await this.ctx.storage.put("manuallyDisconnected", value);
+    }
+  }
+
+  async start({ automatic = false } = {}) {
+    await this.loadManualDisconnect();
+    if (this.manuallyDisconnected) {
+      // The every-minute cron must not undo a manual disconnect; only the Connect button resumes.
+      if (automatic) return "disconnected";
+      await this.setManuallyDisconnected(false);
+    }
     if (
       this.socket &&
       (this.socket.readyState === this.WebSocketImpl.CONNECTING ||
@@ -151,7 +172,7 @@ export class KotakOrderStream {
   }
 
   async disconnect() {
-    this.manuallyDisconnected = true;
+    await this.setManuallyDisconnected(true);
     this.retryScheduled = false;
     this.retryAttempt = 0;
     const socket = this.socket;
@@ -434,6 +455,7 @@ export class KotakOrderStream {
 
   async alarm() {
     this.retryScheduled = false;
+    await this.loadManualDisconnect();
     if (this.manuallyDisconnected) {
       this.connectionState = "disconnected";
       this.publishStatus();

@@ -229,7 +229,7 @@ export class KotakMarketPriceStream {
         return Response.json({ error: error.message }, { status: 400 });
       }
       try {
-        await this.subscribe(instrument);
+        await this.subscribe(instrument, { resume: url.searchParams.get("resume") === "1" });
         return Response.json({ instruments: this.getInstruments() }, {
           headers: { "Cache-Control": "no-store" },
         });
@@ -312,7 +312,7 @@ export class KotakMarketPriceStream {
     }
 
     if (instrument) {
-      this.manuallyDisconnected = false;
+      await this.setManuallyDisconnected(false);
       const selection = this.selectInstrument(instrument).catch((error) => {
         this.authenticated = false;
         this.connectionState = "error";
@@ -419,20 +419,21 @@ export class KotakMarketPriceStream {
         }
       }
     }
-    if (this.explicitInstruments.size) {
+    if (this.explicitInstruments.size && !this.manuallyDisconnected) {
       this.backgroundMode = true;
       this.currentInstrument ??= DEFAULT_MARKET_INSTRUMENT;
     }
     this.instrumentsLoaded = true;
   }
 
-  async subscribe(instrument) {
+  async subscribe(instrument, { resume = false } = {}) {
     await this.loadInstrumentSelections();
     if (instrument.inputToken === DEFAULT_MARKET_INSTRUMENT.inputToken) {
-      await this.ensureDefault();
+      await this.ensureDefault({ resume });
       return;
     }
     if (this.explicitInstruments.has(instrument.inputToken)) {
+      if (resume && this.manuallyDisconnected) await this.ensureDefault({ resume });
       if (this.socket?.readyState === this.WebSocketImpl.OPEN && this.authenticated) {
         this.subscribeInstrument(instrument);
       }
@@ -441,7 +442,7 @@ export class KotakMarketPriceStream {
     this.explicitInstruments.set(instrument.inputToken, instrument);
     await this.ctx.storage.put("marketPriceInstruments", [...this.explicitInstruments.keys()]);
     this.currentInstrument ??= DEFAULT_MARKET_INSTRUMENT;
-    await this.ensureDefault();
+    await this.ensureDefault({ resume });
     if (this.socket?.readyState === this.WebSocketImpl.OPEN && this.authenticated) {
       this.subscribeInstrument(instrument);
     }
@@ -487,7 +488,13 @@ export class KotakMarketPriceStream {
       symbol: this.tradingSymbol,
       error: this.lastError,
       receivedAt: this.lastPrice?.receivedAt ?? null,
+      manuallyDisconnected: this.manuallyDisconnected,
     };
+  }
+
+  async setManuallyDisconnected(value) {
+    this.manuallyDisconnected = value;
+    await this.ctx.storage.put("manuallyDisconnected", value);
   }
 
   async selectInstrument(instrument) {
@@ -821,13 +828,13 @@ export class KotakMarketPriceStream {
 
   async alarm() {
     this.retryScheduled = false;
+    await this.loadInstrumentSelections();
     if (this.manuallyDisconnected) {
       this.connectionState = "disconnected";
       this.publishStatus();
       this.publishInstruments();
       return;
     }
-    await this.loadInstrumentSelections();
     if (!this.currentInstrument && this.backgroundMode) {
       this.currentInstrument = DEFAULT_MARKET_INSTRUMENT;
     }
@@ -912,9 +919,13 @@ export class KotakMarketPriceStream {
     await this.ctx.storage.deleteAlarm();
   }
 
-  async ensureDefault() {
-    this.manuallyDisconnected = false;
+  async ensureDefault({ resume = false } = {}) {
     await this.loadInstrumentSelections();
+    if (this.manuallyDisconnected) {
+      // Cron, page loads and order-driven subscriptions must not undo a manual disconnect.
+      if (!resume) return;
+      await this.setManuallyDisconnected(false);
+    }
     if (!this.backgroundMode) {
       await this.ctx.storage.put("backgroundMode", true);
       this.backgroundMode = true;
@@ -944,9 +955,10 @@ export class KotakMarketPriceStream {
   }
 
   async disconnect() {
-    this.manuallyDisconnected = true;
+    await this.loadInstrumentSelections();
+    await this.setManuallyDisconnected(true);
     this.backgroundMode = false;
-    await this.ctx.storage.delete("backgroundMode");
+    await this.ctx.storage.put("backgroundMode", false);
     const socket = this.socket;
     this.socket = null;
     this.currentInstrument = null;
@@ -981,8 +993,8 @@ export class KotakMarketPriceStream {
   }
 
   async restart() {
-    this.manuallyDisconnected = false;
     await this.loadInstrumentSelections();
+    await this.setManuallyDisconnected(false);
     if (!this.backgroundMode) {
       await this.ctx.storage.put("backgroundMode", true);
       this.backgroundMode = true;
@@ -1018,6 +1030,7 @@ export class KotakMarketPriceStream {
   async loadBackgroundMode() {
     if (this.backgroundModeLoaded) return;
     this.backgroundMode = await this.ctx.storage.get("backgroundMode") === true;
+    this.manuallyDisconnected = await this.ctx.storage.get("manuallyDisconnected") === true;
     this.backgroundModeLoaded = true;
   }
 
