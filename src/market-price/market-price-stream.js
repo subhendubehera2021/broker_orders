@@ -208,6 +208,7 @@ export class KotakMarketPriceStream {
     this.sseClients = new Set();
     this.retryScheduled = false;
     this.retryAttempt = 0;
+    this.manuallyDisconnected = false;
     this.backgroundMode = false;
     this.backgroundModeLoaded = false;
   }
@@ -277,6 +278,17 @@ export class KotakMarketPriceStream {
         return Response.json({ error: error.message }, { status: 503 });
       }
     }
+    if (request.method === "POST" && url.pathname === "/disconnect") {
+      try {
+        await this.disconnect();
+        return Response.json({ ...this.getStatus(), instruments: this.getInstruments() }, {
+          headers: { "Cache-Control": "no-store" },
+        });
+      } catch (error) {
+        console.error("[market-price] unable to disconnect market-data connection", error);
+        return Response.json({ error: error.message }, { status: 500 });
+      }
+    }
     if (request.method !== "GET" || url.pathname !== "/events") {
       return new Response("Not found", { status: 404 });
     }
@@ -300,6 +312,7 @@ export class KotakMarketPriceStream {
     }
 
     if (instrument) {
+      this.manuallyDisconnected = false;
       const selection = this.selectInstrument(instrument).catch((error) => {
         this.authenticated = false;
         this.connectionState = "error";
@@ -777,7 +790,7 @@ export class KotakMarketPriceStream {
     this.authenticated = false;
     this.subscribedInstruments.clear();
     this.acknowledgedInstruments.clear();
-    if ((this.sseClients.size === 0 && !this.backgroundMode) || !this.currentInstrument) {
+    if (this.manuallyDisconnected || (this.sseClients.size === 0 && !this.backgroundMode) || !this.currentInstrument) {
       this.connectionState = "disconnected";
       this.publishStatus();
       this.publishInstruments();
@@ -792,6 +805,7 @@ export class KotakMarketPriceStream {
 
   scheduleReconnect() {
     if (
+      this.manuallyDisconnected ||
       this.retryScheduled ||
       (this.sseClients.size === 0 && !this.backgroundMode) ||
       !this.currentInstrument
@@ -806,6 +820,13 @@ export class KotakMarketPriceStream {
   }
 
   async alarm() {
+    this.retryScheduled = false;
+    if (this.manuallyDisconnected) {
+      this.connectionState = "disconnected";
+      this.publishStatus();
+      this.publishInstruments();
+      return;
+    }
     await this.loadInstrumentSelections();
     if (!this.currentInstrument && this.backgroundMode) {
       this.currentInstrument = DEFAULT_MARKET_INSTRUMENT;
@@ -892,6 +913,7 @@ export class KotakMarketPriceStream {
   }
 
   async ensureDefault() {
+    this.manuallyDisconnected = false;
     await this.loadInstrumentSelections();
     if (!this.backgroundMode) {
       await this.ctx.storage.put("backgroundMode", true);
@@ -921,7 +943,45 @@ export class KotakMarketPriceStream {
     this.publishInstruments();
   }
 
+  async disconnect() {
+    this.manuallyDisconnected = true;
+    this.backgroundMode = false;
+    await this.ctx.storage.delete("backgroundMode");
+    const socket = this.socket;
+    this.socket = null;
+    this.currentInstrument = null;
+    this.authenticated = false;
+    this.connectionState = "disconnected";
+    this.lastError = null;
+    this.lastPrice = null;
+    this.tradingSymbol = null;
+    this.lastPrices.clear();
+    this.tradingSymbols.clear();
+    this.subscribedInstruments.clear();
+    this.acknowledgedInstruments.clear();
+    this.retryScheduled = false;
+    this.retryAttempt = 0;
+    if (socket && socket.readyState < this.WebSocketImpl.CLOSING) {
+      socket.close(1000, "Manually disconnected");
+    }
+    await this.ctx.storage.deleteAlarm();
+
+    for (const client of this.sseClients) {
+      this.sendToEventClient(client, encodeSseEvent("status", this.getStatus()));
+      if (client.heartbeat !== null) clearInterval(client.heartbeat);
+      try {
+        client.controller.close();
+      } catch {
+        // controller may already be closed
+      }
+    }
+    this.sseClients.clear();
+
+    return "disconnected";
+  }
+
   async restart() {
+    this.manuallyDisconnected = false;
     await this.loadInstrumentSelections();
     if (!this.backgroundMode) {
       await this.ctx.storage.put("backgroundMode", true);

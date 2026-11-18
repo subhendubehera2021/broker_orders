@@ -3,9 +3,30 @@ export const marketPriceDashboardStyles = `
       .market-price-header { padding: 25px 24px 18px; }
       .market-price-header h2 { margin: 0; font-size: 21px; font-weight: 650; letter-spacing: -.035em; }
       .market-price-description { margin: 8px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
-      .market-price-header-actions { margin-top: 12px; }
+      .market-price-header-actions { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
       .market-price-restart { min-height: 32px; padding: 0 10px; border-color: var(--line); color: #b7c3d5; background: transparent; font-size: 10px; }
       .market-price-restart:hover:not(:disabled) { border-color: rgba(242, 140, 40, .45); color: var(--accent-hover); }
+      .market-price-disconnect {
+        width: 32px;
+        min-height: 32px;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        color: #b7c3d5;
+        background: transparent;
+        cursor: pointer;
+        transition: transform .16s ease, background .16s ease, border-color .16s ease, color .16s ease;
+      }
+      .market-price-disconnect:hover:not(:disabled) {
+        color: #ff8080;
+        border-color: rgba(255, 128, 128, .35);
+        background: rgba(255, 80, 80, .1);
+        transform: translateY(-1px);
+      }
+      .market-price-disconnect[hidden] { display: none; }
       .market-price-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; padding: 0 24px 18px; }
       .market-price-form label { grid-column: 1 / -1; margin: 0; }
       .market-price-input {
@@ -63,6 +84,9 @@ export const marketPricePanelMarkup = `
             <p class="market-price-description">Watch subscribed instruments and their live prices. Nifty 50 remains subscribed by default.</p>
             <div class="market-price-header-actions">
               <button class="market-price-restart" id="market-price-restart" type="button">Reconnect market feed</button>
+              <button class="market-price-disconnect" id="market-price-disconnect" type="button" aria-label="Disconnect market feed" title="Disconnect market feed" hidden>
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M12.5 3.5 3.5 12.5M3.5 3.5l9 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+              </button>
             </div>
           </header>
           <form class="market-price-form" id="market-price-form">
@@ -92,6 +116,7 @@ export const marketPriceDashboardScript = String.raw`
   const messageOutput = document.querySelector("#market-price-message");
   const submitButton = form.querySelector("button[type=submit]");
   const restartButton = document.querySelector("#market-price-restart");
+  const disconnectButton = document.querySelector("#market-price-disconnect");
   const instruments = new Map();
   const removedInstruments = new Set();
   const rowsByToken = new Map();
@@ -259,6 +284,9 @@ export const marketPriceDashboardScript = String.raw`
       return;
     }
     if (name === "status") {
+      if (disconnectButton) {
+        disconnectButton.hidden = data.state === "disconnected";
+      }
       for (const item of instruments.values()) {
         if (!item.price) {
           item.state = data.state || "connecting";
@@ -418,6 +446,38 @@ export const marketPriceDashboardScript = String.raw`
   }
 
   restartButton.addEventListener("click", () => void restartMarketPrice());
+
+  async function disconnectMarketPrice() {
+    const token = controlTokenInput.value.trim();
+    if (!token) {
+      setMessage("Enter the Worker control token first.", true);
+      return;
+    }
+
+    if (disconnectButton) disconnectButton.disabled = true;
+    setMessage("Disconnecting market feed...");
+    try {
+      await requestJson("/internal/market-price/disconnect", token, "POST");
+      streamController?.abort();
+      streamController = null;
+      activeToken = "";
+      if (disconnectButton) disconnectButton.hidden = true;
+      for (const item of instruments.values()) {
+        item.state = "disconnected";
+        const row = rowsByToken.get(item.inputToken);
+        if (row) updateRow(item, row);
+      }
+      setMessage("Market feed disconnected.");
+    } catch (error) {
+      setMessage(error.message, true);
+    } finally {
+      if (disconnectButton) disconnectButton.disabled = false;
+    }
+  }
+
+  if (disconnectButton) {
+    disconnectButton.addEventListener("click", () => void disconnectMarketPrice());
+  }
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();

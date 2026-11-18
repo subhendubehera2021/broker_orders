@@ -445,6 +445,44 @@ test("manually restarts the market socket while preserving all desired instrumen
   await Promise.all(backgroundTasks);
 });
 
+test("disconnects the market feed and clears active state and alarms", async () => {
+  FakeWebSocket.instances = [];
+  const { stream, backgroundTasks } = createStream();
+  let deletedAlarm = false;
+  let deletedBackgroundMode = false;
+  const originalDeleteAlarm = stream.ctx.storage.deleteAlarm;
+  const originalDelete = stream.ctx.storage.delete;
+  stream.ctx.storage.deleteAlarm = async () => {
+    deletedAlarm = true;
+  };
+  stream.ctx.storage.delete = async (key) => {
+    if (key === "backgroundMode") deletedBackgroundMode = true;
+    if (originalDelete) await originalDelete(key);
+  };
+
+  await stream.fetch(new Request(
+    "https://market-price.internal/subscribe?instrument=nse_fo%7C45318",
+    { method: "POST" },
+  ));
+  await Promise.all(backgroundTasks);
+  const socket = FakeWebSocket.instances[0];
+  socket.open();
+  socket.receive(JSON.stringify({ message_code: 1117 }));
+
+  const response = await stream.fetch(new Request(
+    "https://market-price.internal/disconnect",
+    { method: "POST" },
+  ));
+  assert.equal(response.status, 200);
+  const result = await response.json();
+  assert.equal(result.state, "disconnected");
+  assert.equal(deletedAlarm, true);
+  assert.equal(deletedBackgroundMode, true);
+  assert.equal(stream.socket, null);
+  assert.deepEqual(socket.closeArgs, [1000, "Manually disconnected"]);
+  assert.equal(stream.connectionState, "disconnected");
+});
+
 test("uses a freshly configured feed URL when provided", async () => {
   FakeWebSocket.instances = [];
   const { stream, backgroundTasks } = createStream();

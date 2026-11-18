@@ -414,12 +414,20 @@ test("protects and proxies market watchlist APIs and the shared event stream", a
     }),
     env,
   );
+  const disconnected = await worker.fetch(
+    new Request("https://worker.example/internal/market-price/disconnect", {
+      method: "POST",
+      headers: { Authorization: "Bearer control-secret" },
+    }),
+    env,
+  );
 
   assert.equal(listed.status, 200);
   assert.equal(subscribed.status, 200);
   assert.equal(unsubscribed.status, 200);
   assert.equal(events.status, 200);
   assert.equal(restarted.status, 200);
+  assert.equal(disconnected.status, 200);
   assert.deepEqual(calls, [
     { name: "kotak-market-price-stream" },
     { id: "stable-market-price-id" },
@@ -442,5 +450,8 @@ test("protects and proxies market watchlist APIs and the shared event stream", a
     { name: "kotak-market-price-stream" },
     { id: "stable-market-price-id" },
     { url: "https://market-price.internal/restart", options: { method: "POST" } },
+    { name: "kotak-market-price-stream" },
+    { id: "stable-market-price-id" },
+    { url: "https://market-price.internal/disconnect", options: { method: "POST" } },
   ]);
 });
