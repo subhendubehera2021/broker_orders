@@ -38,7 +38,8 @@ developer portal.
 Open [http://127.0.0.1:3000/trading-view](http://127.0.0.1:3000/trading-view)
 for the chart. Sign in first, then enter a Fyers symbol such as
 `NSE:NIFTY50-INDEX` or `NSE:SBIN-EQ`. Historical candles and five-second quote
-polling require the Market Data permission in the Fyers API app.
+polling require the Market Data permission in the Fyers API app. Chart-axis,
+crosshair, and quote-update times are displayed in India Standard Time (IST).
 
 ## Vercel environment variables
 

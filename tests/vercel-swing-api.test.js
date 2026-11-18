@@ -446,9 +446,10 @@ test("Fastify serves Swagger and OpenAPI documentation for the GET endpoint", as
 });
 
 test("serves the TradingView-inspired chart and local charting assets", async () => {
-  const [page, client, chartingLibrary, license] = await Promise.all([
+  const [page, client, timeFormat, chartingLibrary, license] = await Promise.all([
     app.inject({ method: "GET", url: "/trading-view" }),
     app.inject({ method: "GET", url: "/trading-view/chart.js" }),
+    app.inject({ method: "GET", url: "/trading-view/time-format.js" }),
     app.inject({ method: "GET", url: "/trading-view/lightweight-charts.js" }),
     app.inject({ method: "GET", url: "/trading-view/lightweight-charts-license" }),
   ]);
@@ -458,6 +459,9 @@ test("serves the TradingView-inspired chart and local charting assets", async ()
   assert.match(page.body, /Fyers account/);
   assert.match(client.headers["content-type"], /application\/javascript/);
   assert.match(client.body, /findLiquiditySwings/);
+  assert.match(client.body, /tickMarkFormatter/);
+  assert.match(timeFormat.headers["content-type"], /application\/javascript/);
+  assert.match(timeFormat.body, /Asia\/Kolkata/);
   assert.match(chartingLibrary.headers["content-type"], /application\/javascript/);
   assert.match(chartingLibrary.body, /LightweightCharts/);
   assert.match(license.body, /Apache License/);

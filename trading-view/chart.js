@@ -1,6 +1,7 @@
 import { findLiquiditySwings } from "/trading-view/liquidity-swings.js";
+import { formatIndiaAxisTick, formatIndiaTime } from "/trading-view/time-format.js";
 
-const { CrosshairMode, LineStyle, createChart } = window.LightweightCharts;
+const { CrosshairMode, LineStyle, TickMarkType, createChart } = window.LightweightCharts;
 const chartElement = document.querySelector("#chart");
 const chartMessage = document.querySelector("#chart-message");
 const chartMessageText = document.querySelector("#chart-message-text");
@@ -12,6 +13,13 @@ const lookbackSelect = document.querySelector("#lookback");
 const connectionStatus = document.querySelector("#connection-status");
 const feedStatus = document.querySelector("#feed-status");
 const intervalSeconds = { "1": 60, "5": 300, "15": 900, "60": 3600, D: 86400 };
+const axisTickKinds = {
+  [TickMarkType.Year]: "year",
+  [TickMarkType.Month]: "month",
+  [TickMarkType.DayOfMonth]: "day",
+  [TickMarkType.Time]: "time",
+  [TickMarkType.TimeWithSeconds]: "timeWithSeconds",
+};
 
 const chart = createChart(chartElement, {
   autoSize: true,
@@ -36,6 +44,8 @@ const chart = createChart(chartElement, {
     secondsVisible: false,
     rightOffset: 8,
     barSpacing: 8,
+    tickMarkFormatter: (time, tickMarkType) =>
+      formatIndiaAxisTick(time, axisTickKinds[tickMarkType] ?? "time"),
   },
   localization: {
     timeFormatter: (time) => formatIndiaTime(time, true),
@@ -113,17 +123,6 @@ function rangeDates(days) {
   const from = new Date(`${to}T00:00:00.000Z`);
   from.setUTCDate(from.getUTCDate() - Number(days) + 1);
   return { from: from.toISOString().slice(0, 10), to };
-}
-
-function formatIndiaTime(value, includeDate = false) {
-  if (typeof value !== "number") return "";
-  return new Intl.DateTimeFormat("en-IN", {
-    timeZone: "Asia/Kolkata",
-    ...(includeDate ? { day: "2-digit", month: "short" } : {}),
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(new Date(value * 1000));
 }
 
 function formatPrice(value) {
