@@ -46,6 +46,19 @@ export function findLiquiditySwings(inputBars, lookback = 14) {
     const endTime = nextPivot ? bars[nextPivot.index].time : bars.at(-1)?.time;
     if (!Number.isFinite(endTime) || endTime <= startTime) return [];
 
+    let breakBar;
+    const breakLimit = nextPivot?.index ?? bars.length - 1;
+    for (let candidateIndex = pivot.index + 1; candidateIndex <= breakLimit; candidateIndex += 1) {
+      const candidate = bars[candidateIndex];
+      const brokeLevel = pivot.side === "high"
+        ? candidate.high > pivot.level
+        : candidate.low < pivot.level;
+      if (brokeLevel) {
+        breakBar = candidate;
+        break;
+      }
+    }
+
     const hasBody = Number.isFinite(pivotBar.open) && Number.isFinite(pivotBar.close);
     const bodyHigh = hasBody ? Math.max(pivotBar.open, pivotBar.close) : pivot.level;
     const bodyLow = hasBody ? Math.min(pivotBar.open, pivotBar.close) : pivot.level;
@@ -70,6 +83,8 @@ export function findLiquiditySwings(inputBars, lookback = 14) {
       zoneTop,
       zoneBottom,
       volume,
+      breakTime: breakBar?.time,
+      breakVolume: Number.isFinite(Number(breakBar?.volume)) ? Number(breakBar.volume) : undefined,
     }];
   });
 }

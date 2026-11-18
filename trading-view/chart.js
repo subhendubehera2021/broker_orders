@@ -102,6 +102,7 @@ let pendingTrendStart;
 let drawings = [];
 let swingSeries = [];
 let swingMarkers = [];
+let activeSwings = [];
 let quoteTimer;
 let countdownTimer;
 let quoteInFlight = false;
@@ -291,6 +292,7 @@ function clearSwings() {
   for (const series of swingSeries) chart.removeSeries(series);
   swingSeries = [];
   swingMarkers = [];
+  activeSwings = [];
   candleSeries.setMarkers([]);
   barSeries.setMarkers([]);
 }
@@ -299,6 +301,50 @@ function updateCurrentCandleVolumeMarker() {
   const latest = candles.at(-1);
   const volumeLabel = latest ? formatLiquidityVolume(latest.volume) : "";
   const markers = [...swingMarkers];
+  const breaksByTime = new Map();
+  const addBreak = (time, side, volume) => {
+    const breakout = breaksByTime.get(time) ?? { sides: new Set(), volume };
+    breakout.sides.add(side);
+    if (!Number.isFinite(breakout.volume) && Number.isFinite(volume)) {
+      breakout.volume = volume;
+    }
+    breaksByTime.set(time, breakout);
+  };
+
+  for (const swing of activeSwings) {
+    if (Number.isFinite(swing.breakTime)) {
+      addBreak(swing.breakTime, swing.side, swing.breakVolume);
+    }
+    if (
+      latest &&
+      !Number.isFinite(swing.breakTime) &&
+      latest.time > swing.startTime &&
+      latest.time <= swing.endTime &&
+      (swing.side === "high" ? latest.high > swing.level : latest.low < swing.level)
+    ) {
+      addBreak(latest.time, swing.side, latest.volume);
+    }
+  }
+
+  for (const [time, breakout] of breaksByTime) {
+    const breaksHigh = breakout.sides.has("high");
+    const breaksLow = breakout.sides.has("low");
+    const label = breaksHigh && breaksLow ? "B" : breaksHigh ? "H" : "L";
+    const breakoutVolume = formatLiquidityVolume(breakout.volume);
+    markers.push({
+      time,
+      position: "aboveBar",
+      color: breaksHigh && breaksLow
+        ? chartColors.text
+        : breaksHigh
+          ? chartColors.down
+          : chartColors.up,
+      shape: "circle",
+      text: breakoutVolume ? `${label} ${breakoutVolume}` : label,
+      size: 0,
+    });
+  }
+
   if (latest && volumeLabel) {
     markers.push({
       time: latest.time,
@@ -309,13 +355,15 @@ function updateCurrentCandleVolumeMarker() {
       size: 0,
     });
   }
+  markers.sort((left, right) => left.time - right.time);
   activePriceSeries().setMarkers(markers);
 }
 
 function renderSwings() {
   clearSwings();
   if (swingToggle.checked && candles.length >= Number(lookbackSelect.value) * 2 + 1) {
-    for (const swing of findLiquiditySwings(candles, Number(lookbackSelect.value))) {
+    activeSwings = findLiquiditySwings(candles, Number(lookbackSelect.value));
+    for (const swing of activeSwings) {
       const isHigh = swing.side === "high";
       const color = isHigh ? chartColors.down : chartColors.up;
       if (

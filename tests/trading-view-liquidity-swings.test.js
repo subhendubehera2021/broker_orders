@@ -49,6 +49,8 @@ test("builds a short pivot wick zone and totals volume until the next same-side 
     zoneTop: firstHigh.zoneTop,
     zoneBottom: firstHigh.zoneBottom,
     volume: firstHigh.volume,
+    breakTime: firstHigh.breakTime,
+    breakVolume: firstHigh.breakVolume,
   }, {
     startTime: 2,
     endTime: 4,
@@ -56,5 +58,23 @@ test("builds a short pivot wick zone and totals volume until the next same-side 
     zoneTop: 10,
     zoneBottom: 9,
     volume: 300,
+    breakTime: 4,
+    breakVolume: 300,
   });
+});
+
+test("detects the first candle that wicks below a swing low", () => {
+  const bars = [
+    { time: 1, high: 10, low: 5, volume: 10 },
+    { time: 2, high: 9, low: 3, volume: 20 },
+    { time: 3, high: 8, low: 4, volume: 30 },
+    { time: 4, high: 9, low: 2, volume: 40 },
+    { time: 5, high: 8, low: 3, volume: 50 },
+  ];
+
+  const firstLow = findLiquiditySwings(bars, 1).find((swing) => swing.side === "low");
+
+  assert.equal(firstLow.startTime, 2);
+  assert.equal(firstLow.breakTime, 4);
+  assert.equal(firstLow.breakVolume, 40);
 });
