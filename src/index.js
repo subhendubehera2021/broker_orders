@@ -77,8 +77,14 @@ async function startOrderStream(env) {
 async function disconnectOrderStream(env) {
   const response = await callOrderStream(env, "/disconnect", "POST");
   if (!response.ok) {
-    const result = await response.json();
-    throw new Error(result.error ?? `Order stream disconnect failed with status ${response.status}`);
+    let errorMessage = `Order stream disconnect failed with status ${response.status}`;
+    try {
+      const result = await response.json();
+      if (result?.error) errorMessage = result.error;
+    } catch {
+      // response body was not JSON or empty
+    }
+    throw new Error(errorMessage);
   }
   const { state } = await response.clone().json();
   console.log(`[order-websocket] supervisor state=${state}`);

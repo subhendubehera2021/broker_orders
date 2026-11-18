@@ -168,7 +168,17 @@ export class KotakOrderStream {
         console.error("[order-websocket] unable to delete alarm on disconnect", error);
       }
     }
-    this.publishStatus();
+    // Close active SSE client connections so the Durable Object can hibernate / terminate immediately
+    for (const client of this.sseClients) {
+      this.sendToEventClient(client, encodeSseEvent("status", this.getStatus()));
+      if (client.heartbeat !== null) clearInterval(client.heartbeat);
+      try {
+        client.controller.close();
+      } catch {
+        // client controller might already be closed or errored
+      }
+    }
+    this.sseClients.clear();
     return "disconnected";
   }
 
@@ -424,6 +434,11 @@ export class KotakOrderStream {
 
   async alarm() {
     this.retryScheduled = false;
+    if (this.manuallyDisconnected) {
+      this.connectionState = "disconnected";
+      this.publishStatus();
+      return;
+    }
     const previousSocket = this.socket;
     this.socket = null;
     this.authenticated = false;
