@@ -13,6 +13,17 @@ function optionalNumber(value) {
   return Number.isFinite(number) ? number : undefined;
 }
 
+function requiredNumber(value) {
+  if (
+    (typeof value !== "number" && typeof value !== "string") ||
+    (typeof value === "string" && value.trim() === "")
+  ) {
+    return undefined;
+  }
+  const number = Number(value);
+  return Number.isFinite(number) ? number : undefined;
+}
+
 function isValidSymbol(symbol) {
   return (
     typeof symbol === "string" &&
@@ -51,16 +62,13 @@ export async function fetchFyersCandles(
   }
 
   return payload.candles.map((candle, index) => {
-    if (
-      !Array.isArray(candle) ||
-      candle.length < 6 ||
-      !candle.slice(0, 6).every((value) => Number.isFinite(Number(value)))
-    ) {
+    if (!Array.isArray(candle) || candle.length < 6) {
       throw new FyersMarketDataError(502, `Fyers returned an invalid candle at row ${index}`);
     }
 
-    const [time, open, high, low, close, volume] = candle.map(Number);
+    const [time, open, high, low, close, volume] = candle.slice(0, 6).map(requiredNumber);
     if (
+      [time, open, high, low, close, volume].some((value) => value === undefined) ||
       time <= 0 ||
       low > high ||
       low > Math.min(open, close) ||
@@ -81,22 +89,25 @@ export async function fetchFyersQuote({ appId, accessToken, symbol }, fetchImpl 
   const quote = Array.isArray(payload.d)
     ? payload.d.find((item) => item?.n === symbol && item.s === "ok")?.v
     : undefined;
+  const price = requiredNumber(quote?.lp);
+  const time = requiredNumber(quote?.tt);
+  const volume = requiredNumber(quote?.volume);
 
   if (
     payload.s !== "ok" ||
     !quote ||
-    !Number.isFinite(Number(quote.lp)) ||
-    !Number.isFinite(Number(quote.tt)) ||
-    !Number.isFinite(Number(quote.volume))
+    price === undefined ||
+    time === undefined ||
+    volume === undefined
   ) {
     throw new FyersMarketDataError(502, "Fyers did not return a valid quote for this symbol");
   }
 
   return {
     symbol,
-    price: Number(quote.lp),
-    volume: Number(quote.volume),
-    time: Number(quote.tt),
+    price,
+    volume,
+    time,
   };
 }
 

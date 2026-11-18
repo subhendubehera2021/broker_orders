@@ -156,6 +156,22 @@ function formatPrice(value) {
     : "—";
 }
 
+function finiteNumber(value) {
+  if (
+    (typeof value !== "number" && typeof value !== "string") ||
+    (typeof value === "string" && value.trim() === "")
+  ) {
+    return undefined;
+  }
+  const number = Number(value);
+  return Number.isFinite(number) ? number : undefined;
+}
+
+function isValidCandle(bar) {
+  return bar && ["time", "open", "high", "low", "close", "volume"]
+    .every((key) => Number.isFinite(bar[key]));
+}
+
 function formatVolume(value) {
   return Number.isFinite(value) ? new Intl.NumberFormat("en-IN", { notation: "compact" }).format(value) : "—";
 }
@@ -356,7 +372,8 @@ function updateCurrentCandleVolumeMarker() {
     });
   }
   markers.sort((left, right) => left.time - right.time);
-  activePriceSeries().setMarkers(markers);
+  const candleTimes = new Set(candles.map((bar) => bar.time));
+  activePriceSeries().setMarkers(markers.filter((marker) => candleTimes.has(marker.time)));
 }
 
 function renderSwings() {
@@ -493,13 +510,14 @@ function updateFromSocket(sequence, symbol, message) {
   const updates = Array.isArray(message) ? message : [message];
   const quotes = [];
   for (const update of updates) {
-    if (update?.symbol !== symbol || !Number.isFinite(Number(update.ltp))) continue;
-    const time = Number(update.exch_feed_time ?? update.last_traded_time);
-    if (!Number.isFinite(time)) continue;
-    const volume = Number(update.vol_traded_today);
+    if (update?.symbol !== symbol) continue;
+    const price = finiteNumber(update.ltp);
+    const time = finiteNumber(update.exch_feed_time ?? update.last_traded_time);
+    if (price === undefined || time === undefined) continue;
+    const volume = finiteNumber(update.vol_traded_today);
     quotes.push({
-      price: Number(update.ltp),
-      volume: Number.isFinite(volume) ? volume : lastQuoteVolume ?? 0,
+      price,
+      volume: volume ?? lastQuoteVolume ?? 0,
       time,
     });
   }
@@ -613,6 +631,9 @@ async function loadChart() {
     const result = await fetchJson(`/api/fyers/candles?${query}`);
     if (sequence !== loadSequence) return;
     candles = result.candles;
+    if (!Array.isArray(candles) || candles.some((bar) => !isValidCandle(bar))) {
+      throw new Error("Fyers returned invalid candle data. Check the symbol and try again.");
+    }
     if (!candles.length) throw new Error("No candles returned for this symbol and date range.");
     candleSeries.setData(candles);
     barSeries.setData(candles);

@@ -71,6 +71,35 @@ test("requests and normalizes a Fyers live quote", async () => {
   });
 });
 
+test("rejects null candle and quote values instead of coercing them to zero", async () => {
+  const fetchImpl = async (url) => new URL(url).pathname.endsWith("/history")
+    ? Response.json({ s: "ok", candles: [[1794307200, null, 105, 99, 103, 1200]] })
+    : Response.json({
+        s: "ok",
+        d: [{ n: "NSE:SBIN-EQ", s: "ok", v: { lp: null, volume: 1300, tt: "1794307500" } }],
+      });
+
+  await assert.rejects(
+    fetchFyersCandles({
+      appId: "test-app-id",
+      accessToken: "test-access-token",
+      symbol: "NSE:SBIN-EQ",
+      resolution: "5",
+      rangeFrom: "2026-11-10",
+      rangeTo: "2026-11-18",
+    }, fetchImpl),
+    (error) => error instanceof FyersMarketDataError && error.statusCode === 502,
+  );
+  await assert.rejects(
+    fetchFyersQuote({
+      appId: "test-app-id",
+      accessToken: "test-access-token",
+      symbol: "NSE:SBIN-EQ",
+    }, fetchImpl),
+    (error) => error instanceof FyersMarketDataError && error.statusCode === 502,
+  );
+});
+
 test("requests and normalizes the Fyers NIFTY option chain", async () => {
   let requestUrl;
   const optionChain = await fetchFyersNiftyOptionChain({
