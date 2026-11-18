@@ -29,3 +29,32 @@ test("extends each liquidity swing level to the next swing of the same side", ()
     [6, 8],
   ]);
 });
+
+test("builds a short pivot wick zone and totals volume until the next same-side swing", () => {
+  const bars = [
+    { time: 1, open: 5, close: 6, high: 7, low: 4, volume: 100 },
+    { time: 2, open: 8, close: 9, high: 10, low: 7, volume: 100 },
+    { time: 3, open: 6, close: 7, high: 8, low: 5, volume: 200 },
+    { time: 4, open: 10, close: 10.5, high: 11, low: 6, volume: 300 },
+    { time: 5, open: 7, close: 8, high: 9, low: 5, volume: 400 },
+    { time: 6, open: 6, close: 7, high: 8, low: 2, volume: 500 },
+  ];
+
+  const firstHigh = findLiquiditySwings(bars, 1).find((swing) => swing.side === "high");
+
+  assert.deepEqual({
+    startTime: firstHigh.startTime,
+    endTime: firstHigh.endTime,
+    zoneEndTime: firstHigh.zoneEndTime,
+    zoneTop: firstHigh.zoneTop,
+    zoneBottom: firstHigh.zoneBottom,
+    volume: firstHigh.volume,
+  }, {
+    startTime: 2,
+    endTime: 4,
+    zoneEndTime: 3,
+    zoneTop: 10,
+    zoneBottom: 9,
+    volume: 300,
+  });
+});

@@ -12,6 +12,8 @@ const chartColors = {
   upVolume: "rgba(8, 153, 129, 0.35)",
   downVolume: "rgba(242, 54, 69, 0.35)",
   drawing: "#2962ff",
+  liquidityZoneTop: "rgba(8, 153, 129, 0.24)",
+  liquidityZoneBottom: "rgba(8, 153, 129, 0.08)",
 };
 const chartElement = document.querySelector("#chart");
 const chartMessage = document.querySelector("#chart-message");
@@ -156,6 +158,14 @@ function formatVolume(value) {
   return Number.isFinite(value) ? new Intl.NumberFormat("en-IN", { notation: "compact" }).format(value) : "—";
 }
 
+function formatLiquidityVolume(value) {
+  if (!Number.isFinite(value) || value <= 0) return "";
+  const suffix = value >= 1_000_000 ? "M" : value >= 1_000 ? "K" : "";
+  const scaled = value / (value >= 1_000_000 ? 1_000_000 : value >= 1_000 ? 1_000 : 1);
+  const formatted = new Intl.NumberFormat("en-US", { maximumFractionDigits: 3 }).format(scaled);
+  return `${formatted}${suffix}`;
+}
+
 function addOptionChainCell(row, value, className = "") {
   const cell = document.createElement("td");
   if (className) cell.className = className;
@@ -289,10 +299,37 @@ function renderSwings() {
   const markers = [];
   for (const swing of findLiquiditySwings(candles, Number(lookbackSelect.value))) {
     const isHigh = swing.side === "high";
+    const color = isHigh ? chartColors.down : chartColors.up;
+    if (
+      Number.isFinite(swing.zoneEndTime) &&
+      swing.zoneEndTime > swing.startTime &&
+      swing.zoneTop > swing.zoneBottom
+    ) {
+      const zone = chart.addBaselineSeries({
+        baseValue: { type: "price", price: swing.zoneBottom },
+        topFillColor1: chartColors.liquidityZoneTop,
+        topFillColor2: chartColors.liquidityZoneBottom,
+        topLineColor: chartColors.liquidityZoneBottom,
+        bottomFillColor1: chartColors.liquidityZoneTop,
+        bottomFillColor2: chartColors.liquidityZoneBottom,
+        bottomLineColor: chartColors.liquidityZoneBottom,
+        lineVisible: false,
+        pointMarkersVisible: false,
+        lastValueVisible: false,
+        priceLineVisible: false,
+        crosshairMarkerVisible: false,
+      });
+      zone.setData([
+        { time: swing.startTime, value: swing.zoneTop },
+        { time: swing.zoneEndTime, value: swing.zoneTop },
+      ]);
+      swingSeries.push(zone);
+    }
+
     const series = chart.addLineSeries({
-      color: isHigh ? chartColors.down : chartColors.up,
+      color,
       lineWidth: 1,
-      lineStyle: LineStyle.Dashed,
+      lineStyle: LineStyle.Solid,
       lastValueVisible: false,
       priceLineVisible: false,
       crosshairMarkerVisible: false,
@@ -302,14 +339,17 @@ function renderSwings() {
       { time: swing.endTime, value: swing.level },
     ]);
     swingSeries.push(series);
-    markers.push({
-      time: swing.startTime,
-      position: isHigh ? "aboveBar" : "belowBar",
-      color: isHigh ? chartColors.down : chartColors.up,
-      shape: isHigh ? "arrowDown" : "arrowUp",
-      text: isHigh ? "SH" : "SL",
-      size: 1,
-    });
+    const volumeLabel = formatLiquidityVolume(swing.volume);
+    if (volumeLabel) {
+      markers.push({
+        time: swing.startTime,
+        position: isHigh ? "aboveBar" : "belowBar",
+        color,
+        shape: "circle",
+        text: volumeLabel,
+        size: 0,
+      });
+    }
   }
   activePriceSeries().setMarkers(markers);
 }
