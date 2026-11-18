@@ -62,7 +62,10 @@ stays server-side; only the current TOTP is submitted by the browser.
   interactive candlestick chart with zoom, pan, crosshair, and volume. It loads
   recent candles automatically; panning back loads earlier candles in
   interval-appropriate date chunks. Change the symbol or timeframe from the
-  chart header; requires an active Kotak Neo session to load data.
+  chart header; historical swing-high and swing-low liquidity zones, levels,
+  and volume labels are plotted over the candles. Use Indicator settings to
+  configure lookback, area, filters, intrabar precision, and styles. Requires
+  an active Kotak Neo session to load data.
 - `GET /orders` — view the authenticated Kotak Neo order book, separated into
   all, open, and closed orders.
 - `GET /order-stream` — view live order lifecycle and position updates.

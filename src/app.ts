@@ -270,6 +270,29 @@ export function buildApp({
     );
 
     api.get(
+      "/assets/liquidity-swing.js",
+      {
+        schema: {
+          tags: ["Market Data"],
+          summary: "Serve the liquidity-swing chart indicator",
+          response: {
+            200: { type: "string" },
+          },
+        },
+      },
+      async (_request, reply) => {
+        const script = await readFile(
+          new URL("./liquidity-swing-v2/swing-logic.js", import.meta.url),
+          "utf8",
+        );
+        return reply
+          .header("Cache-Control", "no-store")
+          .type("application/javascript; charset=utf-8")
+          .send(script);
+      },
+    );
+
+    api.get(
       "/api/auth/session-details",
       {
         schema: {

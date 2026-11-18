@@ -38,12 +38,20 @@ export function renderHistoricalChartPage(): string {
       .chart-tools button { width: 30px; min-width: 30px; height: 28px; padding: 0; border: 1px solid #34382f; background: #20241c; color: #e4e9dc; font-size: 13px; }
       .chart-tools button:hover:not(:disabled) { background: #2a3023; }
       .chart-tools .fit-button { width: auto; min-width: 44px; padding: 0 8px; color: var(--green); font-size: 10px; }
+      .chart-tools .indicator-settings-toggle { min-width: 72px; color: #e4e9dc; }
       .range-count { min-width: 76px; color: var(--muted); font-size: 9px; text-align: right; }
-      .chart-container { width: 100%; min-height: 0; flex: 1; }
+      .indicator-settings { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 7px; padding: 8px; border-bottom: 1px solid #242820; background: #141712; }
+      .indicator-settings label { display: flex; min-width: 0; flex-direction: column; gap: 4px; color: #a4aa9c; font-size: 9px; }
+      .indicator-settings input, .indicator-settings select { height: 27px; padding: 0 6px; font-size: 10px; }
+      .indicator-settings input[type="checkbox"] { width: 14px; min-width: 14px; height: 14px; margin: 0; accent-color: var(--green); }
+      .indicator-settings input[type="color"] { height: 27px; padding: 2px; }
+      .indicator-settings .setting-check { flex-direction: row; align-items: center; gap: 6px; padding-top: 17px; }
+      .chart-container { position: relative; width: 100%; min-height: 0; flex: 1; }
+      .liquidity-overlay { position: absolute; z-index: 2; inset: 0; width: 100%; height: 100%; pointer-events: none; }
       .empty { display: grid; min-height: 0; flex: 1; place-items: center; padding: 24px; color: #777d72; font-size: 12px; text-align: center; }
       [hidden] { display: none !important; }
-      @media (max-width: 900px) { .chart-toolbar { grid-template-columns: minmax(120px, 180px) minmax(0, 1fr) auto; gap: 6px; } .chart-actions { gap: 8px; } .chart-info { gap: 8px; } .chart-ohlc { max-width: calc(100vw - 230px); overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; } }
-      @media (max-width: 620px) { .shell { padding: 5px; } .chart-heading { min-height: 128px; gap: 7px; padding: 6px 3px; } .chart-toolbar { grid-template-columns: minmax(0, 1fr) auto; gap: 5px; } .chart-symbol-control { grid-column: 1 / -1; } .chart-timeframes { grid-column: 1 / -1; } .chart-actions { grid-column: 1 / -1; gap: 2px; } .chart-tools { gap: 3px; } .chart-tools button { width: 26px; min-width: 26px; } .chart-tools .fit-button { width: auto; min-width: 38px; } .range-count { min-width: 58px; font-size: 8px; } .chart-info { gap: 6px; } .chart-symbol { max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .chart-ohlc { max-width: calc(100vw - 120px); margin-top: 0; font-size: 9px; } }
+      @media (max-width: 900px) { .chart-toolbar { grid-template-columns: minmax(120px, 180px) minmax(0, 1fr) auto; gap: 6px; } .chart-actions { gap: 8px; } .chart-info { gap: 8px; } .chart-ohlc { max-width: calc(100vw - 230px); overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; } .indicator-settings { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+      @media (max-width: 620px) { .shell { padding: 5px; } .chart-heading { min-height: 128px; gap: 7px; padding: 6px 3px; } .chart-toolbar { grid-template-columns: minmax(0, 1fr) auto; gap: 5px; } .chart-symbol-control { grid-column: 1 / -1; } .chart-timeframes { grid-column: 1 / -1; } .chart-actions { grid-column: 1 / -1; gap: 2px; } .chart-tools { gap: 3px; } .chart-tools button { width: 26px; min-width: 26px; } .chart-tools .fit-button { width: auto; min-width: 38px; } .chart-tools .indicator-settings-toggle { min-width: 68px; } .range-count { min-width: 58px; font-size: 8px; } .chart-info { gap: 6px; } .chart-symbol { max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .chart-ohlc { max-width: calc(100vw - 120px); margin-top: 0; font-size: 9px; } .indicator-settings { grid-template-columns: repeat(2, minmax(0, 1fr)); max-height: 34vh; overflow-y: auto; } }
     </style>
   </head>
   <body>
@@ -75,9 +83,25 @@ export function renderHistoricalChartPage(): string {
                   <button id="zoom-out" type="button" aria-label="Zoom out" title="Zoom out">-</button>
                   <button id="zoom-in" type="button" aria-label="Zoom in" title="Zoom in">+</button>
                   <button id="fit-chart" class="fit-button" type="button" title="Show all candles">Fit</button>
+                  <button id="indicator-settings-toggle" class="fit-button indicator-settings-toggle" type="button" aria-expanded="false" aria-controls="indicator-settings">Indicator</button>
                   <span class="range-count" id="range-count" aria-live="polite">0 / 0</span>
                 </div>
               </div>
+            </div>
+            <div class="indicator-settings" id="indicator-settings" role="group" aria-label="Liquidity swing settings" hidden>
+              <label>Pivot lookback<input id="indicator-lookback" type="number" min="1" max="500" step="1" value="14" required></label>
+              <label>Swing area<select id="indicator-area"><option value="wick">Wick Extremity</option><option value="full">Full Range</option></select></label>
+              <label>Filter areas by<select id="indicator-filter-by"><option value="count">Count</option><option value="volume">Volume</option></select></label>
+              <label>Filter threshold<input id="indicator-filter-value" type="number" min="0" step="any" value="0" required></label>
+              <label class="setting-check"><input id="indicator-intrabar" type="checkbox">Intrabar precision</label>
+              <label>Intrabar timeframe<select id="indicator-intrabar-interval"><option value="1min">1m</option><option value="3min">3m</option><option value="5min">5m</option><option value="10min">10m</option><option value="15min">15m</option><option value="30min">30m</option><option value="60min">1h</option><option value="D">1D</option></select></label>
+              <label class="setting-check"><input id="indicator-show-high" type="checkbox" checked>Swing high</label>
+              <label>High line color<input id="indicator-high-color" type="color" value="#f23645"></label>
+              <label>High area color<input id="indicator-high-area-color" type="color" value="#f23645"></label>
+              <label class="setting-check"><input id="indicator-show-low" type="checkbox" checked>Swing low</label>
+              <label>Low line color<input id="indicator-low-color" type="color" value="#089981"></label>
+              <label>Low area color<input id="indicator-low-area-color" type="color" value="#089981"></label>
+              <label>Label size<select id="indicator-label-size"><option value="tiny">Tiny</option><option value="small">Small</option><option value="normal">Normal</option></select></label>
             </div>
             <div class="chart-info">
               <div class="chart-symbol" id="chart-symbol">NIFTY</div>
@@ -91,7 +115,9 @@ export function renderHistoricalChartPage(): string {
       </main>
     </div>
     <script src="/assets/lightweight-charts.js"></script>
-    <script>
+    <script type="module">
+      import { findLiquiditySwings } from "/assets/liquidity-swing.js?v=2";
+
       const form = document.querySelector("#chart-form");
       const symbolInput = document.querySelector("#neosymbol");
       const fromInput = document.querySelector("#fromdate");
@@ -107,12 +133,33 @@ export function renderHistoricalChartPage(): string {
       const zoomOutButton = document.querySelector("#zoom-out");
       const fitButton = document.querySelector("#fit-chart");
       const rangeCount = document.querySelector("#range-count");
+      const indicatorSettingsToggle = document.querySelector("#indicator-settings-toggle");
+      const indicatorSettingsPanel = document.querySelector("#indicator-settings");
+      const lookbackInput = document.querySelector("#indicator-lookback");
+      const areaInput = document.querySelector("#indicator-area");
+      const filterByInput = document.querySelector("#indicator-filter-by");
+      const filterValueInput = document.querySelector("#indicator-filter-value");
+      const intrabarInput = document.querySelector("#indicator-intrabar");
+      const intrabarIntervalInput = document.querySelector("#indicator-intrabar-interval");
+      const showHighInput = document.querySelector("#indicator-show-high");
+      const showLowInput = document.querySelector("#indicator-show-low");
+      const highColorInput = document.querySelector("#indicator-high-color");
+      const highAreaColorInput = document.querySelector("#indicator-high-area-color");
+      const lowColorInput = document.querySelector("#indicator-low-color");
+      const lowAreaColorInput = document.querySelector("#indicator-low-area-color");
+      const labelSizeInput = document.querySelector("#indicator-label-size");
       const intervalButtons = Array.from(document.querySelectorAll(".chart-timeframe-button"));
       const params = new URLSearchParams(location.search);
       let chart;
       let candleSeries;
       let volumeSeries;
+      let liquidityOverlay;
+      let liquidityOverlayContext;
+      let liquiditySwings = [];
       let currentCandles = [];
+      let intrabarCandles = [];
+      let indicatorSettings;
+      let indicatorSettingsVersion = 0;
       let lastPriceLine;
       let activeNeoSymbol = "";
       let activeInterval = "";
@@ -145,6 +192,70 @@ export function renderHistoricalChartPage(): string {
         D: "1D",
         W: "1W",
       };
+      const intervalMinutes = {
+        "1min": 1,
+        "3min": 3,
+        "5min": 5,
+        "10min": 10,
+        "15min": 15,
+        "30min": 30,
+        "60min": 60,
+        D: 1440,
+        W: 10080,
+      };
+      const intrabarIntervals = [
+        "1min", "3min", "5min", "10min", "15min", "30min", "60min", "D",
+      ];
+
+      function readIndicatorSettings() {
+        return {
+          pivotLookback: Number(lookbackInput.value),
+          area: areaInput.value,
+          filterBy: filterByInput.value,
+          filterValue: Number(filterValueInput.value),
+          intrabarPrecision: intrabarInput.checked,
+          intrabarInterval: intrabarIntervalInput.value,
+          showHigh: showHighInput.checked,
+          showLow: showLowInput.checked,
+          highColor: highColorInput.value,
+          highAreaColor: highAreaColorInput.value,
+          lowColor: lowColorInput.value,
+          lowAreaColor: lowAreaColorInput.value,
+          labelSize: labelSizeInput.value,
+        };
+      }
+
+      function writeIndicatorSettings(settings) {
+        lookbackInput.value = String(settings.pivotLookback);
+        areaInput.value = settings.area;
+        filterByInput.value = settings.filterBy;
+        filterValueInput.value = String(settings.filterValue);
+        intrabarInput.checked = settings.intrabarPrecision;
+        intrabarIntervalInput.value = settings.intrabarInterval;
+        showHighInput.checked = settings.showHigh;
+        showLowInput.checked = settings.showLow;
+        highColorInput.value = settings.highColor;
+        highAreaColorInput.value = settings.highAreaColor;
+        lowColorInput.value = settings.lowColor;
+        lowAreaColorInput.value = settings.lowAreaColor;
+        labelSizeInput.value = settings.labelSize;
+      }
+
+      function updateIntrabarIntervals(chartInterval) {
+        const chartMinutes = intervalMinutes[chartInterval] || Number.POSITIVE_INFINITY;
+        const allowed = intrabarIntervals.filter(function (interval) {
+          return intervalMinutes[interval] <= chartMinutes;
+        });
+        Array.from(intrabarIntervalInput.options).forEach(function (option) {
+          option.disabled = allowed.indexOf(option.value) < 0;
+        });
+        if (allowed.indexOf(intrabarIntervalInput.value) < 0) {
+          intrabarIntervalInput.value = allowed[0] || "1min";
+          if (indicatorSettings) {
+            indicatorSettings.intrabarInterval = intrabarIntervalInput.value;
+          }
+        }
+      }
 
       function dateInputValue(date) {
         return date.getFullYear() + "-" + String(date.getMonth() + 1).padStart(2, "0") +
@@ -169,6 +280,9 @@ export function renderHistoricalChartPage(): string {
       }
 
       updateIntervalButtons();
+      updateIntrabarIntervals(intervalInput.value);
+      indicatorSettings = readIndicatorSettings();
+      syncIndicatorSettingsControls();
 
       function formatPrice(value) {
         return new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
@@ -176,6 +290,21 @@ export function renderHistoricalChartPage(): string {
 
       function formatNumber(value) {
         return new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(value);
+      }
+
+      function formatVolume(value) {
+        const absolute = Math.abs(value);
+        const units = [
+          { limit: 1e9, suffix: "B" },
+          { limit: 1e6, suffix: "M" },
+          { limit: 1e3, suffix: "K" },
+        ];
+        for (const unit of units) {
+          if (absolute >= unit.limit) {
+            return (value / unit.limit).toFixed(3).replace(/\.?0+$/, "") + unit.suffix;
+          }
+        }
+        return formatNumber(value);
       }
 
       function formatTime(value, includeDate) {
@@ -208,6 +337,16 @@ export function renderHistoricalChartPage(): string {
             volume: values[4],
           };
           byTime.set(candle.time, candle);
+        });
+        return Array.from(byTime.values()).sort(function (a, b) { return a.time - b.time; });
+      }
+
+      function mergeCandles() {
+        const byTime = new Map();
+        Array.from(arguments).forEach(function (candles) {
+          (candles || []).forEach(function (candle) {
+            byTime.set(candle.time, candle);
+          });
         });
         return Array.from(byTime.values()).sort(function (a, b) { return a.time - b.time; });
       }
@@ -251,6 +390,20 @@ export function renderHistoricalChartPage(): string {
         return parseCandles(result.data && result.data.candles);
       }
 
+      async function fetchHistoricalRange(fromDate, toDate, neoSymbol, interval) {
+        const requestDays = requestDaysByInterval[interval];
+        if (!requestDays) throw new Error("Unsupported intrabar timeframe.");
+        const chunks = [];
+        let chunkFrom = fromDate;
+        while (chunkFrom <= toDate) {
+          const chunkEnd = shiftDate(chunkFrom, requestDays - 1);
+          const chunkTo = chunkEnd < toDate ? chunkEnd : toDate;
+          chunks.push(await fetchHistoricalCandles(chunkFrom, chunkTo, neoSymbol, interval));
+          chunkFrom = shiftDate(chunkTo, 1);
+        }
+        return mergeCandles.apply(null, chunks);
+      }
+
       function showError(error) {
         message.textContent = error instanceof Error ? error.message : "Historical data request failed.";
         message.dataset.kind = "error";
@@ -289,6 +442,181 @@ export function renderHistoricalChartPage(): string {
           Math.max(0, Math.ceil(visibleRange.to) - Math.floor(visibleRange.from) + 1),
         );
         rangeCount.textContent = visible + " / " + currentCandles.length;
+      }
+
+      function updateLiquiditySwing() {
+        const bars = currentCandles.map(function (candle) {
+          return {
+            timestamp: new Date(candle.time * 1000).toISOString(),
+            open: candle.open,
+            high: candle.high,
+            low: candle.low,
+            close: candle.close,
+            volume: candle.volume,
+          };
+        });
+        const lowerBars = intrabarCandles.map(function (candle) {
+          return {
+            timestamp: new Date(candle.time * 1000).toISOString(),
+            open: candle.open,
+            high: candle.high,
+            low: candle.low,
+            close: candle.close,
+            volume: candle.volume,
+          };
+        });
+        liquiditySwings = findLiquiditySwings(bars, {
+          pivotLookback: indicatorSettings.pivotLookback,
+          area: indicatorSettings.area,
+          filterBy: indicatorSettings.filterBy,
+          filterValue: indicatorSettings.filterValue,
+          intrabarPrecision: indicatorSettings.intrabarPrecision,
+          intrabarBars: lowerBars,
+        }).swings;
+        drawLiquiditySwings();
+      }
+
+      function hexToRgba(color, alpha) {
+        const match = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(color);
+        if (!match) throw new Error("Indicator colors must be six-digit hexadecimal values.");
+        return "rgba(" + parseInt(match[1], 16) + ", " + parseInt(match[2], 16) +
+          ", " + parseInt(match[3], 16) + ", " + alpha + ")";
+      }
+
+      function drawLiquiditySwings() {
+        if (!liquidityOverlay || !liquidityOverlayContext || !chart) return;
+        const bounds = container.getBoundingClientRect();
+        const width = bounds.width;
+        const height = bounds.height;
+        if (width <= 0 || height <= 0) return;
+
+        const pixelRatio = window.devicePixelRatio || 1;
+        const canvasWidth = Math.round(width * pixelRatio);
+        const canvasHeight = Math.round(height * pixelRatio);
+        if (liquidityOverlay.width !== canvasWidth || liquidityOverlay.height !== canvasHeight) {
+          liquidityOverlay.width = canvasWidth;
+          liquidityOverlay.height = canvasHeight;
+        }
+        liquidityOverlayContext.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+        liquidityOverlayContext.clearRect(0, 0, width, height);
+        if (!liquiditySwings.length || !currentCandles.length) return;
+        const timeScale = chart.timeScale();
+        const visibleSwings = liquiditySwings.filter(function (swing) {
+          return swing.qualified &&
+            (swing.side === "high" ? indicatorSettings.showHigh : indicatorSettings.showLow);
+        });
+        const context = liquidityOverlayContext;
+        visibleSwings.forEach(function (swing) {
+          const x1 = timeScale.logicalToCoordinate(swing.pivotIndex);
+          const x2 = timeScale.logicalToCoordinate(swing.zoneEndIndex);
+          const topY = candleSeries.priceToCoordinate(swing.zoneTop);
+          const bottomY = candleSeries.priceToCoordinate(swing.zoneBottom);
+          if (x1 === null || x2 === null || topY === null || bottomY === null) return;
+          const left = Math.min(x1, x2);
+          const rawWidth = Math.abs(x2 - x1);
+          const rawTop = Math.min(topY, bottomY);
+          const rawHeight = Math.abs(bottomY - topY);
+          const boxWidth = Math.max(2, rawWidth);
+          const boxHeight = Math.max(2, rawHeight);
+          const top = rawTop - (boxHeight - rawHeight) / 2;
+          const color = swing.side === "high"
+            ? indicatorSettings.highAreaColor
+            : indicatorSettings.lowAreaColor;
+          context.fillStyle = hexToRgba(color, 0.22);
+          context.fillRect(left, top, boxWidth, boxHeight);
+        });
+
+        visibleSwings.forEach(function (swing) {
+          const x1 = timeScale.logicalToCoordinate(swing.pivotIndex);
+          let x2 = timeScale.logicalToCoordinate(swing.lineEndIndex);
+          const y = candleSeries.priceToCoordinate(swing.level);
+          if (x1 === null || y === null) return;
+          if (x2 === null) {
+            const lastX = timeScale.logicalToCoordinate(currentCandles.length - 1);
+            const previousX = timeScale.logicalToCoordinate(Math.max(0, currentCandles.length - 2));
+            const spacing = lastX !== null && previousX !== null ? lastX - previousX : 8;
+            x2 = lastX === null ? x1 : lastX + Math.max(1, spacing) * 3;
+          }
+          const color = swing.side === "high"
+            ? indicatorSettings.highColor
+            : indicatorSettings.lowColor;
+          context.strokeStyle = color;
+          context.lineWidth = 1;
+          context.setLineDash(swing.status === "broken" ? [4, 3] : []);
+          context.beginPath();
+          context.moveTo(x1, y);
+          context.lineTo(x2, y);
+          context.stroke();
+          context.setLineDash([]);
+
+          const fontSize = indicatorSettings.labelSize === "normal"
+            ? 12
+            : indicatorSettings.labelSize === "small" ? 10 : 9;
+          context.font = "600 " + fontSize + "px Inter, ui-sans-serif, sans-serif";
+          context.textBaseline = swing.side === "high" ? "bottom" : "top";
+          context.fillStyle = color;
+          const labelY = swing.side === "high"
+            ? Math.max(fontSize + 2, y - 3)
+            : Math.min(height - fontSize - 2, y + 3);
+          context.fillText(
+            formatVolume(swing.intersectionVolume),
+            x1 + 3,
+            labelY,
+          );
+        });
+      }
+
+      function syncIndicatorSettingsControls() {
+        intrabarIntervalInput.disabled = !intrabarInput.checked;
+      }
+
+      async function applyIndicatorSettings() {
+        if (!lookbackInput.reportValidity() || !filterValueInput.reportValidity()) return;
+        const nextSettings = readIndicatorSettings();
+        const previousSettings = indicatorSettings;
+        const settingsVersion = ++indicatorSettingsVersion;
+        const requiresIntrabarReload = nextSettings.intrabarPrecision &&
+          currentCandles.length > 0 &&
+          (!previousSettings.intrabarPrecision ||
+            nextSettings.intrabarInterval !== previousSettings.intrabarInterval);
+
+        if (requiresIntrabarReload) {
+          message.textContent = "Loading intrabar candles…";
+          message.dataset.kind = "loading";
+          try {
+            const lastCandle = currentCandles[currentCandles.length - 1];
+            const fromDate = historyFromDate || fromInput.value;
+            const toDate = new Date(lastCandle.time * 1000).toISOString().slice(0, 10);
+            const loaded = nextSettings.intrabarInterval === activeInterval
+              ? currentCandles
+              : await fetchHistoricalRange(
+                fromDate,
+                toDate,
+                activeNeoSymbol,
+                nextSettings.intrabarInterval,
+              );
+            if (settingsVersion !== indicatorSettingsVersion) return;
+            if (!loaded.length) throw new Error("Kotak returned no candles for that intrabar timeframe.");
+            intrabarCandles = loaded;
+          } catch (error) {
+            if (settingsVersion !== indicatorSettingsVersion) return;
+            writeIndicatorSettings(previousSettings);
+            syncIndicatorSettingsControls();
+            showError(new Error(
+              "Could not load intrabar candles: " +
+              (error instanceof Error ? error.message : "Historical data request failed."),
+            ));
+            return;
+          }
+        }
+
+        if (settingsVersion !== indicatorSettingsVersion) return;
+        indicatorSettings = nextSettings;
+        if (!nextSettings.intrabarPrecision) intrabarCandles = [];
+        syncIndicatorSettingsControls();
+        if (currentCandles.length) updateLiquiditySwing();
+        message.textContent = "";
+        message.dataset.kind = "";
       }
 
       function createChart() {
@@ -336,6 +664,14 @@ export function renderHistoricalChartPage(): string {
             pinch: true,
           },
         });
+        liquidityOverlay = document.createElement("canvas");
+        liquidityOverlay.className = "liquidity-overlay";
+        liquidityOverlay.setAttribute("aria-hidden", "true");
+        container.append(liquidityOverlay);
+        liquidityOverlayContext = liquidityOverlay.getContext("2d");
+        if (!liquidityOverlayContext) {
+          throw new Error("Unable to initialize the liquidity-swing chart overlay.");
+        }
         candleSeries = chart.addSeries(library.CandlestickSeries, {
           upColor: "#089981",
           downColor: "#f23645",
@@ -370,6 +706,7 @@ export function renderHistoricalChartPage(): string {
         });
         chart.timeScale().subscribeVisibleLogicalRangeChange(function (range) {
           updateRangeCount(range);
+          drawLiquiditySwings();
           if (chartPointerDown && range && lastPointerRangeFrom !== undefined) {
             const preloadThreshold = Math.min(20, Math.max(3, currentCandles.length * 0.1));
             const movedTowardHistory = range.from < lastPointerRangeFrom;
@@ -395,6 +732,7 @@ export function renderHistoricalChartPage(): string {
           const size = entries[0] && entries[0].contentRect;
           if (size && size.width > 0 && size.height > 0) {
             chart.applyOptions({ width: size.width, height: size.height });
+            drawLiquiditySwings();
           }
         }).observe(container);
       }
@@ -408,11 +746,31 @@ export function renderHistoricalChartPage(): string {
         const requestVersion = dataRequestVersion;
         const toDate = shiftDate(historyFromDate, -1);
         const fromDate = shiftDate(toDate, -(requestDays - 1));
+        const requestSettings = { ...indicatorSettings };
+        const olderCandlesRequest = fetchHistoricalCandles(
+          fromDate,
+          toDate,
+          activeNeoSymbol,
+          activeInterval,
+        );
+        const olderIntrabarRequest = requestSettings.intrabarPrecision
+          ? requestSettings.intrabarInterval === activeInterval
+            ? olderCandlesRequest
+            : fetchHistoricalRange(
+              fromDate,
+              toDate,
+              activeNeoSymbol,
+              requestSettings.intrabarInterval,
+            )
+          : Promise.resolve([]);
         loadingOlderCandles = true;
         message.textContent = "Loading earlier candles…";
         message.dataset.kind = "loading";
         try {
-          const olderCandles = await fetchHistoricalCandles(fromDate, toDate, activeNeoSymbol, activeInterval);
+          const [olderCandles, olderIntrabar] = await Promise.all([
+            olderCandlesRequest,
+            olderIntrabarRequest,
+          ]);
           if (requestVersion !== dataRequestVersion) return;
           if (!olderCandles.length) {
             olderCandlesExhausted = true;
@@ -422,11 +780,7 @@ export function renderHistoricalChartPage(): string {
           }
           const previousCount = currentCandles.length;
           const previousRange = chart.timeScale().getVisibleLogicalRange();
-          const candlesByTime = new Map();
-          olderCandles.concat(currentCandles).forEach(function (candle) {
-            candlesByTime.set(candle.time, candle);
-          });
-          currentCandles = Array.from(candlesByTime.values()).sort(function (a, b) { return a.time - b.time; });
+          currentCandles = mergeCandles(olderCandles, currentCandles);
           const addedCount = currentCandles.length - previousCount;
           if (addedCount === 0) {
             olderCandlesExhausted = true;
@@ -435,7 +789,11 @@ export function renderHistoricalChartPage(): string {
             return;
           }
           historyFromDate = fromDate;
+          if (requestSettings.intrabarPrecision) {
+            intrabarCandles = mergeCandles(olderIntrabar, intrabarCandles);
+          }
           setSeriesData(currentCandles);
+          updateLiquiditySwing();
           if (previousRange) {
             chart.timeScale().setVisibleLogicalRange({
               from: previousRange.from + addedCount,
@@ -479,11 +837,34 @@ export function renderHistoricalChartPage(): string {
       fitButton.addEventListener("click", function () {
         if (chart) chart.timeScale().fitContent();
       });
+      indicatorSettingsToggle.addEventListener("click", function () {
+        indicatorSettingsPanel.hidden = !indicatorSettingsPanel.hidden;
+        indicatorSettingsToggle.setAttribute("aria-expanded", String(!indicatorSettingsPanel.hidden));
+      });
+      [
+        lookbackInput,
+        areaInput,
+        filterByInput,
+        filterValueInput,
+        intrabarInput,
+        intrabarIntervalInput,
+        showHighInput,
+        showLowInput,
+        highColorInput,
+        highAreaColorInput,
+        lowColorInput,
+        lowAreaColorInput,
+        labelSizeInput,
+      ].forEach(function (control) {
+        control.addEventListener("change", applyIndicatorSettings);
+      });
+      intrabarInput.addEventListener("change", syncIndicatorSettingsControls);
       symbolInput.addEventListener("change", function () { form.requestSubmit(); });
       intervalButtons.forEach(function (button) {
         button.addEventListener("click", function () {
           if (!button.dataset.interval || button.dataset.interval === intervalInput.value) return;
           intervalInput.value = button.dataset.interval;
+          updateIntrabarIntervals(intervalInput.value);
           updateIntervalButtons();
           form.requestSubmit();
         });
@@ -492,10 +873,15 @@ export function renderHistoricalChartPage(): string {
       form.addEventListener("submit", async function (event) {
         event.preventDefault();
         const requestVersion = ++dataRequestVersion;
+        indicatorSettingsVersion += 1;
         loadingOlderCandles = false;
         olderCandlesExhausted = false;
         activeNeoSymbol = symbolInput.value.trim();
         activeInterval = intervalInput.value;
+        updateIntrabarIntervals(activeInterval);
+        indicatorSettings = readIndicatorSettings();
+        syncIndicatorSettingsControls();
+        intrabarCandles = [];
         historyFromDate = fromInput.value;
         button.disabled = true;
         message.textContent = "Loading historical candles…";
@@ -518,6 +904,30 @@ export function renderHistoricalChartPage(): string {
             activeInterval,
           );
           if (requestVersion !== dataRequestVersion) return;
+          let intrabarLoadError;
+          if (currentCandles.length && indicatorSettings.intrabarPrecision) {
+            try {
+              intrabarCandles = indicatorSettings.intrabarInterval === activeInterval
+                ? currentCandles
+                : await fetchHistoricalRange(
+                  fromInput.value,
+                  toInput.value,
+                  activeNeoSymbol,
+                  indicatorSettings.intrabarInterval,
+                );
+              if (!intrabarCandles.length) {
+                throw new Error("Kotak returned no candles for that intrabar timeframe.");
+              }
+            } catch (error) {
+              if (requestVersion !== dataRequestVersion) return;
+              indicatorSettings = { ...indicatorSettings, intrabarPrecision: false };
+              intrabarInput.checked = false;
+              intrabarCandles = [];
+              syncIndicatorSettingsControls();
+              intrabarLoadError = error instanceof Error ? error.message : "Historical data request failed.";
+            }
+          }
+          if (requestVersion !== dataRequestVersion) return;
           title.textContent = activeNeoSymbol.toUpperCase() + " · " +
             (intervalLabels[activeInterval] || activeInterval);
           if (!currentCandles.length) {
@@ -533,6 +943,7 @@ export function renderHistoricalChartPage(): string {
           empty.hidden = true;
           createChart();
           setSeriesData(currentCandles);
+          updateLiquiditySwing();
           if (lastPriceLine) candleSeries.removePriceLine(lastPriceLine);
           const lastCandle = currentCandles[currentCandles.length - 1];
           lastPriceLine = candleSeries.createPriceLine({
@@ -550,8 +961,12 @@ export function renderHistoricalChartPage(): string {
               to: currentCandles.length - 1,
             });
           }
-          message.textContent = currentCandles.length + " candles loaded.";
-          message.dataset.kind = "";
+          if (intrabarLoadError) {
+            showError(new Error("Intrabar precision unavailable: " + intrabarLoadError));
+          } else {
+            message.textContent = currentCandles.length + " candles loaded.";
+            message.dataset.kind = "";
+          }
           updateOhlc(lastCandle, lastCandle.volume);
           updateRangeCount();
         } catch (error) {
