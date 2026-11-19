@@ -516,6 +516,16 @@ test("serves the TradingView-inspired chart and local charting assets", async ()
 
   assert.equal(page.statusCode, 200);
   assert.match(page.body, /Liquidity swings/);
+  const intervalOptions = page.body.match(/<select id="intervals">[\s\S]*?<\/select>/)?.[0];
+  const historyOptions = page.body.match(/<select id="range"[\s\S]*?<\/select>/)?.[0];
+  const pivotOptions = page.body.match(/<select id="lookback">[\s\S]*?<\/select>/)?.[0];
+  assert.ok(intervalOptions);
+  assert.ok(historyOptions);
+  assert.ok(pivotOptions);
+  assert.match(intervalOptions, /<option value="1" selected>1m<\/option>/);
+  assert.match(historyOptions, /<option value="1" selected>1 day<\/option>/);
+  assert.match(pivotOptions, /<option value="5" selected>5<\/option>/);
+  assert.match(client.body, /let currentResolution = "1"/);
   const toolbar = page.body.match(/<section class="chart-toolbar"[\s\S]*?<\/section>/)?.[0];
   assert.ok(toolbar);
   assert.match(toolbar, /id="range"/);

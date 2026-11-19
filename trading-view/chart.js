@@ -129,7 +129,7 @@ const volumeSeries = chart.addHistogramSeries({
 chart.priceScale("").applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
 
 let candles = [];
-let currentResolution = "5";
+let currentResolution = "1";
 let chartType = "candles";
 let activeTool = "cursor";
 let pendingTrendStart;
