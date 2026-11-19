@@ -35,8 +35,20 @@ const connectionStatus = document.querySelector("#connection-status");
 const feedStatus = document.querySelector("#feed-status");
 const priceActionTrigger = document.querySelector("#price-action-trigger");
 const priceActionMenu = document.querySelector("#price-action-menu");
-const priceActionPrice = document.querySelector("#price-action-price");
 const priceActionNotice = document.querySelector("#price-action-notice");
+const priceAlertLabel = document.querySelector("#price-alert-label");
+const priceSellLabel = document.querySelector("#price-sell-label");
+const priceBuyLabel = document.querySelector("#price-buy-label");
+const priceOrderLabel = document.querySelector("#price-order-label");
+const priceLineLabel = document.querySelector("#price-line-label");
+const orderPreviewModal = document.querySelector("#order-preview-modal");
+const orderPreviewTitle = document.querySelector("#order-preview-title");
+const orderPreviewSymbol = document.querySelector("#order-preview-symbol");
+const orderPreviewQuantity = document.querySelector("#order-preview-quantity");
+const orderPreviewType = document.querySelector("#order-preview-type");
+const orderPreviewPrice = document.querySelector("#order-preview-price");
+const orderPreviewNotice = document.querySelector("#order-preview-notice");
+const orderPreviewSubmit = document.querySelector("#submit-order-preview");
 const intervalSeconds = { "1": 60, "5": 300, "15": 900, "60": 3600, D: 86400 };
 const axisTickKinds = {
   [TickMarkType.Year]: "year",
@@ -118,9 +130,35 @@ let loadSequence = 0;
 let optionChainSequence = 0;
 let crosshairPrice;
 let crosshairY;
+let orderPreviewSide = "Buy";
 
 function activePriceSeries() {
   return chartType === "candles" ? candleSeries : barSeries;
+}
+
+function formatActionPrice(value) {
+  return Number.isFinite(value)
+    ? new Intl.NumberFormat("en-IN", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value)
+    : "—";
+}
+
+function priceActionInstrumentName() {
+  const symbol = symbolInput.value.trim().toUpperCase();
+  if (/^NSE:NIFTY\d*-INDEX$/.test(symbol)) return "NIFTY";
+  return symbol.split(":").at(-1)?.replace(/-(INDEX|EQ)$/, "") || symbol;
+}
+
+function updatePriceActionLabels() {
+  const instrument = priceActionInstrumentName();
+  const price = formatActionPrice(crosshairPrice);
+  priceAlertLabel.textContent = `Add alert on ${instrument} at ${price}`;
+  priceSellLabel.textContent = `Sell 1 ${instrument} @ ${price} limit`;
+  priceBuyLabel.textContent = `Buy 1 ${instrument} @ ${price} stop`;
+  priceOrderLabel.textContent = `Add order on ${instrument} at ${price}...`;
+  priceLineLabel.textContent = `Draw horizontal line at ${price}`;
 }
 
 function updatePriceActionPosition(y) {
@@ -132,10 +170,33 @@ function updatePriceActionPosition(y) {
   crosshairY = y;
   priceActionTrigger.style.top = `${y}px`;
   priceActionTrigger.hidden = false;
-  if (!priceActionMenu.hidden) {
-    priceActionMenu.style.top = `${y}px`;
-    priceActionPrice.textContent = `Price ${formatPrice(price)}`;
-  }
+  if (!priceActionMenu.hidden) priceActionMenu.style.top = `${y}px`;
+  updatePriceActionLabels();
+}
+
+function closePriceActionMenu() {
+  priceActionMenu.hidden = true;
+  priceActionTrigger.setAttribute("aria-expanded", "false");
+}
+
+function openOrderPreview(side, orderType) {
+  orderPreviewSide = side;
+  orderPreviewTitle.textContent = `${side} ${priceActionInstrumentName()}`;
+  orderPreviewSymbol.value = priceActionInstrumentName();
+  orderPreviewQuantity.value = "1";
+  orderPreviewType.value = orderType;
+  orderPreviewPrice.value = formatActionPrice(crosshairPrice);
+  orderPreviewNotice.textContent = "Preview only. No order will be placed.";
+  orderPreviewSubmit.textContent = `Preview ${side}`;
+  orderPreviewSubmit.className = side.toLowerCase();
+  closePriceActionMenu();
+  orderPreviewModal.hidden = false;
+  orderPreviewQuantity.focus();
+}
+
+function closeOrderPreview() {
+  orderPreviewModal.hidden = true;
+  priceActionTrigger.focus();
 }
 
 document.addEventListener("pointerout", (event) => {
@@ -902,21 +963,52 @@ priceActionTrigger.addEventListener("click", () => {
   priceActionTrigger.setAttribute("aria-expanded", String(isOpening));
   if (isOpening) {
     priceActionMenu.style.top = `${crosshairY}px`;
-    priceActionPrice.textContent = `Price ${formatPrice(crosshairPrice)}`;
-    priceActionNotice.textContent = "Demo only. No orders will be placed.";
+    updatePriceActionLabels();
+    priceActionNotice.textContent = "Demo only. No orders or alerts will be sent.";
   }
 });
 
-document.querySelector("#price-action-close").addEventListener("click", () => {
-  priceActionMenu.hidden = true;
-  priceActionTrigger.setAttribute("aria-expanded", "false");
+document.querySelectorAll("[data-price-action]").forEach((button) => {
+  button.addEventListener("click", () => {
+    switch (button.dataset.priceAction) {
+      case "alert":
+        priceActionNotice.textContent = "Alert preview only. No alert will be created.";
+        break;
+      case "sell":
+        openOrderPreview("Sell", "Limit");
+        break;
+      case "buy":
+        openOrderPreview("Buy", "Stop");
+        break;
+      case "order":
+        openOrderPreview("Buy", "Limit");
+        break;
+      case "horizontal": {
+        const series = activePriceSeries();
+        const line = series.createPriceLine({
+          price: crosshairPrice,
+          color: chartColors.drawing,
+          lineWidth: 1,
+          lineStyle: LineStyle.Dashed,
+          axisLabelVisible: true,
+          title: "Level",
+        });
+        drawings.push({ type: "price", series, line });
+        closePriceActionMenu();
+        break;
+      }
+      default:
+        break;
+    }
+  });
 });
 
-document.querySelectorAll("[data-demo-side]").forEach((button) => {
-  button.addEventListener("click", () => {
-    const side = button.dataset.demoSide;
-    priceActionNotice.textContent = `${side} at ${formatPrice(crosshairPrice)} is a demo action. No order was placed.`;
-  });
+document.querySelector("#close-order-preview").addEventListener("click", closeOrderPreview);
+document.querySelector("#cancel-order-preview").addEventListener("click", closeOrderPreview);
+document.querySelector("[data-close-order-preview]").addEventListener("click", closeOrderPreview);
+document.querySelector("#order-preview-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  orderPreviewNotice.textContent = `${orderPreviewSide} preview ready. No order was placed.`;
 });
 
 document.addEventListener("pointerdown", (event) => {
@@ -925,15 +1017,18 @@ document.addEventListener("pointerdown", (event) => {
     !priceActionMenu.contains(event.target) &&
     event.target !== priceActionTrigger
   ) {
-    priceActionMenu.hidden = true;
-    priceActionTrigger.setAttribute("aria-expanded", "false");
+    closePriceActionMenu();
   }
 });
 
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && !priceActionMenu.hidden) {
-    priceActionMenu.hidden = true;
-    priceActionTrigger.setAttribute("aria-expanded", "false");
+  if (event.key !== "Escape") return;
+  if (!orderPreviewModal.hidden) {
+    closeOrderPreview();
+    return;
+  }
+  if (!priceActionMenu.hidden) {
+    closePriceActionMenu();
     priceActionTrigger.focus();
   }
 });

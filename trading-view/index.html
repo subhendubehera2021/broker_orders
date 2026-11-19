@@ -150,17 +150,30 @@
             aria-controls="price-action-menu"
             hidden
           >+</button>
-          <div id="price-action-menu" class="price-action-menu" role="group" aria-label="Demo Buy/Sell actions" hidden>
-            <div class="price-action-heading">
-              <strong id="price-action-price">Price —</strong>
-              <button id="price-action-close" class="price-action-close" type="button" aria-label="Close Buy/Sell actions">×</button>
-            </div>
-            <div class="price-action-buttons">
-              <button class="price-action-side buy" type="button" data-demo-side="Buy">Buy</button>
-              <button class="price-action-side sell" type="button" data-demo-side="Sell">Sell</button>
-            </div>
+          <div id="price-action-menu" class="price-action-menu" role="group" aria-label="Price actions" hidden>
+            <button class="price-action-menu-item" type="button" data-price-action="alert">
+              <span class="price-action-icon" aria-hidden="true">◴</span>
+              <span id="price-alert-label">Add alert at —</span>
+            </button>
+            <button class="price-action-menu-item" type="button" data-price-action="sell">
+              <span class="price-action-icon" aria-hidden="true">⌄</span>
+              <span id="price-sell-label">Sell 1 at — limit</span>
+            </button>
+            <button class="price-action-menu-item" type="button" data-price-action="buy">
+              <span class="price-action-icon" aria-hidden="true">⌃</span>
+              <span id="price-buy-label">Buy 1 at — stop</span>
+            </button>
+            <button class="price-action-menu-item" type="button" data-price-action="order">
+              <span class="price-action-icon" aria-hidden="true">▱</span>
+              <span id="price-order-label">Add order at —</span>
+            </button>
+            <div class="price-action-divider" aria-hidden="true"></div>
+            <button class="price-action-menu-item" type="button" data-price-action="horizontal">
+              <span class="price-action-icon" aria-hidden="true">─</span>
+              <span id="price-line-label">Draw horizontal line at —</span>
+            </button>
             <p id="price-action-notice" class="price-action-notice" role="status" aria-live="polite">
-              Demo only. No orders will be placed.
+              Demo only. No orders or alerts will be sent.
             </p>
           </div>
           <div id="live-countdown" class="live-countdown" aria-label="Time remaining in current candle" hidden></div>
@@ -184,6 +197,50 @@
           </span>
         </div>
       </section>
+
+      <div id="order-preview-modal" class="order-preview-modal" hidden>
+        <div class="order-preview-backdrop" data-close-order-preview></div>
+        <section class="order-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="order-preview-title">
+          <header class="order-preview-header">
+            <div>
+              <p>DEMO ORDER PREVIEW</p>
+              <h2 id="order-preview-title">Buy NIFTY</h2>
+            </div>
+            <button id="close-order-preview" class="order-preview-close" type="button" aria-label="Close order preview">×</button>
+          </header>
+          <form id="order-preview-form">
+            <label class="order-preview-field">
+              <span>Instrument</span>
+              <input id="order-preview-symbol" type="text" readonly>
+            </label>
+            <div class="order-preview-row">
+              <label class="order-preview-field" for="order-preview-quantity">
+                <span>Quantity</span>
+                <input id="order-preview-quantity" type="number" min="1" step="1" value="1" required>
+              </label>
+              <label class="order-preview-field" for="order-preview-type">
+                <span>Order type</span>
+                <select id="order-preview-type">
+                  <option value="Market">Market</option>
+                  <option value="Limit">Limit</option>
+                  <option value="Stop">Stop</option>
+                </select>
+              </label>
+            </div>
+            <label class="order-preview-field">
+              <span>Price</span>
+              <input id="order-preview-price" type="text" readonly>
+            </label>
+            <p id="order-preview-notice" class="order-preview-notice" role="status" aria-live="polite">
+              Preview only. No order will be placed.
+            </p>
+            <div class="order-preview-actions">
+              <button id="cancel-order-preview" type="button">Cancel</button>
+              <button id="submit-order-preview" type="submit">Preview Buy</button>
+            </div>
+          </form>
+        </section>
+      </div>
     </main>
 
     <script src="/trading-view/lightweight-charts.js"></script>
