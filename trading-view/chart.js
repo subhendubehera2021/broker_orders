@@ -479,23 +479,25 @@ function updateLatestSwingActionTrigger() {
     return;
   }
 
-  const x = chart.timeScale().timeToCoordinate(latestSwingHigh.endTime);
+  const startX = chart.timeScale().timeToCoordinate(latestSwingHigh.startTime);
+  const endX = chart.timeScale().timeToCoordinate(latestSwingHigh.endTime);
   const y = activePriceSeries().priceToCoordinate(latestSwingHigh.level);
   const plotRight = chartElement.clientWidth - 80;
+  if (!Number.isFinite(startX) || !Number.isFinite(endX) || !Number.isFinite(y)) return;
+
+  const x = (startX + endX) / 2;
+  const edge = 11;
   if (
-    !Number.isFinite(x) ||
-    !Number.isFinite(y) ||
-    x < 0 ||
-    x > plotRight ||
-    y < 0 ||
-    y > chartElement.clientHeight - 30
+    x < edge ||
+    x > plotRight - edge ||
+    y < edge ||
+    y > chartElement.clientHeight - edge
   ) {
     swingHighActionTrigger.hidden = true;
     return;
   }
 
-  const left = Math.max(11, Math.min(x, plotRight - 11));
-  swingHighActionTrigger.style.left = `${left}px`;
+  swingHighActionTrigger.style.left = `${x}px`;
   swingHighActionTrigger.style.top = `${y}px`;
   swingHighActionTrigger.dataset.price = String(latestSwingHigh.level);
   swingHighActionTrigger.dataset.y = String(y);
@@ -505,6 +507,9 @@ function updateLatestSwingActionTrigger() {
   );
   swingHighActionTrigger.title = `Price actions at ${formatActionPrice(latestSwingHigh.level)}`;
   swingHighActionTrigger.hidden = false;
+  if (!priceActionMenu.hidden && priceActionMenuTrigger === swingHighActionTrigger) {
+    priceActionMenu.style.top = `${y}px`;
+  }
 }
 
 function updateChartOverlays() {
@@ -512,8 +517,28 @@ function updateChartOverlays() {
   updateDemoOrderPositions();
 }
 
-chart.timeScale().subscribeVisibleLogicalRangeChange(updateChartOverlays);
-window.addEventListener("resize", updateChartOverlays);
+let chartOverlayUpdateFrame;
+function scheduleChartOverlayUpdate() {
+  if (chartOverlayUpdateFrame !== undefined) return;
+  chartOverlayUpdateFrame = requestAnimationFrame(() => {
+    chartOverlayUpdateFrame = undefined;
+    updateChartOverlays();
+  });
+}
+
+let swingActionUpdateFrame;
+function scheduleSwingActionUpdate() {
+  if (swingActionUpdateFrame !== undefined) return;
+  swingActionUpdateFrame = requestAnimationFrame(() => {
+    swingActionUpdateFrame = undefined;
+    updateLatestSwingActionTrigger();
+  });
+}
+
+chart.timeScale().subscribeVisibleLogicalRangeChange(scheduleChartOverlayUpdate);
+chart.timeScale().subscribeSizeChange(scheduleChartOverlayUpdate);
+chartWrap.addEventListener("pointermove", scheduleSwingActionUpdate, { passive: true });
+window.addEventListener("resize", scheduleChartOverlayUpdate);
 
 function closePriceActionMenu() {
   priceActionMenu.hidden = true;
@@ -1418,6 +1443,7 @@ chart.subscribeClick((param) => {
 });
 
 chart.subscribeCrosshairMove((param) => {
+  scheduleSwingActionUpdate();
   if (param.point) updatePriceActionPosition(param.point.y);
   updateDemoOrderPositions();
   if (!param.time) return;

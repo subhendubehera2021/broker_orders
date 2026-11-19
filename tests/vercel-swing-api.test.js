@@ -533,6 +533,7 @@ test("serves the TradingView-inspired chart and local charting assets", async ()
   assert.equal(styles.statusCode, 200);
   assert.match(styles.body, /html\s*\{[^}]*overflow:\s*hidden;/);
   assert.match(styles.body, /body\s*\{[^}]*height:\s*100vh;[^}]*height:\s*100dvh;[^}]*overflow:\s*hidden;/);
+  assert.match(styles.body, /\.swing-high-action-trigger\s*\{[^}]*border-radius:\s*50%;/);
   const toolbar = page.body.match(/<section class="chart-toolbar"[\s\S]*?<\/section>/)?.[0];
   assert.ok(toolbar);
   assert.match(toolbar, /id="range"/);
