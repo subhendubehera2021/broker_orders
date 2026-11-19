@@ -48,6 +48,15 @@
               <option value="D">1D</option>
             </select>
           </div>
+          <div class="range-control header-history-control">
+            <label for="range">History</label>
+            <select id="range" aria-label="History range" title="History range">
+              <option value="1">1 day</option>
+              <option value="5" selected>5 days</option>
+              <option value="30">1 month</option>
+              <option value="90">3 months</option>
+            </select>
+          </div>
           <div class="header-chart-type" role="group" aria-label="Chart type">
             <button id="candles-type" class="selected" type="button" aria-label="Candles" aria-pressed="true" title="Candles">
               <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 2v4m0 8v4M3 6h4v8H3zm8-4v3m0 10v3m-2-13h4v10H9z" /></svg>
@@ -62,7 +71,7 @@
               <span>Indicators</span>
               <svg class="toolbar-chevron" viewBox="0 0 12 12" aria-hidden="true"><path d="m3 4.5 3 3 3-3" /></svg>
             </button>
-            <div id="indicator-popover" class="indicator-popover" hidden>
+            <div id="indicator-popover" class="toolbar-popover" hidden>
               <label class="toggle-control">
                 <input id="swing-toggle" type="checkbox" checked>
                 <span class="switch" aria-hidden="true"></span>
@@ -77,6 +86,22 @@
                   <option value="20">20</option>
                 </select>
               </label>
+            </div>
+          </div>
+          <div class="draw-control">
+            <button id="draw-toggle" class="toolbar-action" type="button" aria-expanded="false" aria-controls="draw-popover">
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m3 14 8-8 3 3-8 8H3zm9-9 2-2 4 4-2 2" /></svg>
+              <span>Draw</span>
+              <svg class="toolbar-chevron" viewBox="0 0 12 12" aria-hidden="true"><path d="m3 4.5 3 3 3-3" /></svg>
+            </button>
+            <div id="draw-popover" class="toolbar-popover draw-popover" hidden>
+              <div class="button-row" role="group" aria-label="Drawing tools">
+                <button type="button" data-tool="cursor" class="selected" aria-pressed="true">Cursor</button>
+                <button type="button" data-tool="horizontal" aria-pressed="false">Horizontal</button>
+                <button type="button" data-tool="trend" aria-pressed="false">Trend line</button>
+                <button id="clear-drawings" type="button">Clear</button>
+              </div>
+              <span id="draw-hint" class="draw-hint" aria-live="polite"></span>
             </div>
           </div>
           <button class="toolbar-action unavailable" type="button" aria-label="Alert, unavailable" title="Price alerts are not available yet" disabled>
@@ -115,40 +140,6 @@
           <button class="toolbar-upgrade unavailable" type="button" aria-label="Upgrade, unavailable" title="Upgrade is not available yet" disabled>Upgrade</button>
         </div>
       </section>
-
-      <div class="controls-heading">
-        <div class="controls-heading-bar">
-          <span>Chart controls</span>
-          <button id="controls-toggle" type="button" aria-expanded="false" aria-controls="chart-controls">
-            Show controls
-          </button>
-        </div>
-        <div id="chart-controls" hidden>
-          <section class="toolbar" aria-label="Chart controls">
-            <div class="range-control">
-              <label for="range">History</label>
-              <select id="range">
-                <option value="1">1 day</option>
-                <option value="5" selected>5 days</option>
-                <option value="30">1 month</option>
-                <option value="90">3 months</option>
-              </select>
-            </div>
-
-          </section>
-
-          <section class="toolbar secondary-toolbar" aria-label="Indicators and drawing tools">
-            <span class="control-label">Draw</span>
-            <div class="button-row" role="group" aria-label="Drawing tools">
-              <button type="button" data-tool="cursor" class="selected" aria-pressed="true">Cursor</button>
-              <button type="button" data-tool="horizontal" aria-pressed="false">Horizontal</button>
-              <button type="button" data-tool="trend" aria-pressed="false">Trend line</button>
-              <button id="clear-drawings" type="button">Clear</button>
-            </div>
-            <span id="draw-hint" class="draw-hint" aria-live="polite"></span>
-          </section>
-        </div>
-      </div>
 
       <dialog id="option-chain-modal" class="option-chain-modal" aria-labelledby="option-chain-title">
         <section id="option-chain-panel" class="option-chain-panel" aria-label="NIFTY option chain">

@@ -22,8 +22,6 @@ const chartMessageText = document.querySelector("#chart-message-text");
 const chartLogin = document.querySelector("#chart-login");
 const symbolInput = document.querySelector("#symbol");
 const rangeSelect = document.querySelector("#range");
-const chartControls = document.querySelector("#chart-controls");
-const chartControlsToggle = document.querySelector("#controls-toggle");
 const optionChainToggle = document.querySelector("#nifty-options-toggle");
 const optionChainModal = document.querySelector("#option-chain-modal");
 const optionChainPanel = document.querySelector("#option-chain-panel");
@@ -33,6 +31,8 @@ const optionExpirySelect = document.querySelector("#option-expiry");
 const swingToggle = document.querySelector("#swing-toggle");
 const indicatorsToggle = document.querySelector("#indicators-toggle");
 const indicatorPopover = document.querySelector("#indicator-popover");
+const drawToggle = document.querySelector("#draw-toggle");
+const drawPopover = document.querySelector("#draw-popover");
 const lookbackSelect = document.querySelector("#lookback");
 const connectionStatus = document.querySelector("#connection-status");
 const feedStatus = document.querySelector("#feed-status");
@@ -1102,6 +1102,12 @@ document.addEventListener("keydown", (event) => {
     indicatorsToggle.focus();
     return;
   }
+  if (!drawPopover.hidden) {
+    drawPopover.hidden = true;
+    drawToggle.setAttribute("aria-expanded", "false");
+    drawToggle.focus();
+    return;
+  }
   if (optionChainModal.open) {
     closeOptionChainModal();
     return;
@@ -1128,12 +1134,6 @@ symbolInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter") void loadChart();
 });
 rangeSelect.addEventListener("change", () => void loadChart());
-chartControlsToggle.addEventListener("click", () => {
-  chartControls.hidden = !chartControls.hidden;
-  const expanded = !chartControls.hidden;
-  chartControlsToggle.setAttribute("aria-expanded", String(expanded));
-  chartControlsToggle.textContent = expanded ? "Hide controls" : "Show controls";
-});
 optionChainToggle.addEventListener("click", () => {
   if (optionChainModal.open) {
     closeOptionChainModal();
@@ -1153,27 +1153,39 @@ optionExpirySelect.addEventListener("change", () => {
 document.querySelector("#close-option-chain").addEventListener("click", () => {
   closeOptionChainModal();
 });
-const positionIndicatorPopover = () => {
-  if (indicatorPopover.hidden) return;
-  const triggerBounds = indicatorsToggle.getBoundingClientRect();
+const positionToolbarPopover = (popover, trigger) => {
+  if (popover.hidden) return;
+  const triggerBounds = trigger.getBoundingClientRect();
   const gap = 8;
-  const popoverWidth = indicatorPopover.offsetWidth;
-  const popoverHeight = indicatorPopover.offsetHeight;
+  const popoverWidth = popover.offsetWidth;
+  const popoverHeight = popover.offsetHeight;
   const left = Math.max(gap, Math.min(triggerBounds.left, window.innerWidth - popoverWidth - gap));
   const top = triggerBounds.bottom + popoverHeight + gap <= window.innerHeight
     ? triggerBounds.bottom + gap
     : Math.max(gap, triggerBounds.top - popoverHeight - gap);
-  indicatorPopover.style.left = `${left}px`;
-  indicatorPopover.style.top = `${top}px`;
+  popover.style.left = `${left}px`;
+  popover.style.top = `${top}px`;
 };
 indicatorsToggle.addEventListener("click", () => {
   const expanded = indicatorsToggle.getAttribute("aria-expanded") !== "true";
   indicatorPopover.hidden = !expanded;
   indicatorsToggle.setAttribute("aria-expanded", String(expanded));
-  positionIndicatorPopover();
+  positionToolbarPopover(indicatorPopover, indicatorsToggle);
 });
-window.addEventListener("resize", positionIndicatorPopover);
-window.addEventListener("scroll", positionIndicatorPopover, true);
+drawToggle.addEventListener("click", () => {
+  const expanded = drawToggle.getAttribute("aria-expanded") !== "true";
+  drawPopover.hidden = !expanded;
+  drawToggle.setAttribute("aria-expanded", String(expanded));
+  positionToolbarPopover(drawPopover, drawToggle);
+});
+window.addEventListener("resize", () => {
+  positionToolbarPopover(indicatorPopover, indicatorsToggle);
+  positionToolbarPopover(drawPopover, drawToggle);
+});
+window.addEventListener("scroll", () => {
+  positionToolbarPopover(indicatorPopover, indicatorsToggle);
+  positionToolbarPopover(drawPopover, drawToggle);
+}, true);
 document.addEventListener("pointerdown", (event) => {
   if (
     indicatorPopover.hidden ||
@@ -1184,6 +1196,17 @@ document.addEventListener("pointerdown", (event) => {
   }
   indicatorPopover.hidden = true;
   indicatorsToggle.setAttribute("aria-expanded", "false");
+});
+document.addEventListener("pointerdown", (event) => {
+  if (
+    drawPopover.hidden ||
+    drawPopover.contains(event.target) ||
+    drawToggle.contains(event.target)
+  ) {
+    return;
+  }
+  drawPopover.hidden = true;
+  drawToggle.setAttribute("aria-expanded", "false");
 });
 optionChainRows.addEventListener("click", (event) => {
   const contract = event.target.closest("[data-option-symbol]");

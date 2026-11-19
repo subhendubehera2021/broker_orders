@@ -74,10 +74,25 @@ main { width: min(100% - 32px, 1440px); margin: 12px auto 28px; }
   background: var(--tv-background);
 }
 .header-symbol-control .icon-button { margin-left: 0; border-radius: 0 18px 18px 0; }
-.header-interval-control select {
+.chart-toolbar .header-interval-control select {
   width: 58px;
   height: 34px;
   padding: 0 17px 0 9px;
+  border-radius: 5px;
+  background-color: var(--tv-background);
+}
+.header-history-control { display: flex; align-items: center; gap: 6px; color: var(--tv-muted-light); font-size: 11px; }
+.chart-toolbar .header-history-control label {
+  display: inline;
+  margin: 0;
+  color: var(--tv-muted);
+  font-size: 10px;
+  letter-spacing: .04em;
+}
+.chart-toolbar .header-history-control select {
+  width: 88px;
+  height: 34px;
+  padding: 0 18px 0 8px;
   border-radius: 5px;
   background-color: var(--tv-background);
 }
@@ -137,8 +152,9 @@ main { width: min(100% - 32px, 1440px); margin: 12px auto 28px; }
 .chart-toolbar button:focus-visible { outline: 2px solid var(--tv-blue); outline-offset: 1px; }
 .chart-toolbar .toolbar-divider { flex: 0 0 1px; margin: 0 2px; }
 .toolbar-spacer { min-width: 8px; flex: 1 1 auto; }
-.indicator-control { position: relative; flex: 0 0 auto; }
-.indicator-popover {
+.indicator-control,
+.draw-control { position: relative; flex: 0 0 auto; }
+.toolbar-popover {
   position: fixed;
   z-index: 20;
   top: 0;
@@ -152,61 +168,14 @@ main { width: min(100% - 32px, 1440px); margin: 12px auto 28px; }
   background: var(--tv-panel);
   box-shadow: 0 8px 24px rgb(0 0 0 / 40%);
 }
-.indicator-popover[hidden] { display: none; }
-.indicator-popover .lookback-control { justify-content: space-between; }
-
-.controls-heading {
-  overflow: hidden;
-  border: 1px solid var(--tv-border);
-  border-radius: 8px;
-  background: var(--tv-panel);
-}
-.controls-heading-bar {
-  display: flex;
-  min-height: 40px;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 14px;
-  border-bottom: 1px solid var(--tv-border);
-  color: var(--tv-muted-light);
-  font-size: 11px;
-}
-.controls-heading-bar button {
-  padding: 5px 9px;
-  border: 1px solid var(--tv-border-strong);
-  border-radius: 4px;
-  background: var(--tv-panel-raised);
-  color: var(--tv-text);
-  font: inherit;
-}
-.controls-heading-bar button:hover { border-color: var(--tv-blue); color: var(--tv-blue); }
-#chart-controls[hidden] { display: none; }
-#chart-controls > .toolbar { border: 0; border-radius: 0; }
-#chart-controls > .toolbar + .toolbar { border-top: 1px solid var(--tv-border); }
-
-.toolbar {
-  display: flex;
-  min-height: 68px;
-  align-items: end;
-  gap: 22px;
-  padding: 11px 14px;
-  border: 1px solid var(--tv-border);
-  border-radius: 8px 8px 0 0;
-  background: var(--tv-panel);
-}
-
-.secondary-toolbar {
-  min-height: 54px;
-  align-items: center;
-  gap: 16px;
-  border-top: 0;
-  border-radius: 0;
-  padding-top: 8px;
-  padding-bottom: 8px;
-}
+.toolbar-popover[hidden] { display: none; }
+.toolbar-popover .lookback-control { justify-content: space-between; }
+.draw-popover { width: max-content; min-width: 0; gap: 8px; padding: 8px; }
+.draw-popover .button-row { flex-wrap: nowrap; }
+.draw-hint:empty { display: none; }
 
 .symbol-control { width: 210px; flex: 0 0 auto; }
-.symbol-control label, .range-control label, .control-label {
+.symbol-control label, .range-control label {
   display: block;
   margin-bottom: 5px;
   color: var(--tv-muted);
@@ -256,8 +225,7 @@ main { width: min(100% - 32px, 1440px); margin: 12px auto 28px; }
 }
 .option-chain-toggle:focus-visible { outline: 2px solid var(--tv-blue); outline-offset: 2px; }
 
-.control-group, .chart-type-control, .range-control, .lookback-control { flex: 0 0 auto; }
-.control-label { margin: 0 0 5px; }
+.range-control, .lookback-control { flex: 0 0 auto; }
 .button-row { display: flex; align-items: center; gap: 3px; }
 .button-row button {
   min-height: 31px;
@@ -551,9 +519,6 @@ main { width: min(100% - 32px, 1440px); margin: 12px auto 28px; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
 
 @media (max-width: 950px) {
-  .toolbar { flex-wrap: wrap; align-items: end; gap: 12px 18px; }
-  .secondary-toolbar { align-items: center; }
-  .draw-hint { width: 100%; }
   .instrument-summary { flex-wrap: wrap; gap: 12px 18px; }
   .ohlc-summary { order: 3; flex: 1 1 100%; }
   .last-price { margin-left: auto; }
@@ -563,11 +528,7 @@ main { width: min(100% - 32px, 1440px); margin: 12px auto 28px; }
   main { width: min(100% - 16px, 1440px); margin-top: 9px; }
   .chart-toolbar { gap: 5px; }
   .chart-toolbar .symbol-control { width: 184px; }
-  .toolbar { gap: 12px; padding: 10px; }
-  .symbol-control { width: 100%; }
-  .control-group { flex: 1 1 100%; }
   .button-row { flex-wrap: wrap; }
-  .secondary-toolbar { gap: 10px; }
   .option-chain-header { align-items: flex-start; flex-direction: column; }
   .option-chain-actions { flex-wrap: wrap; }
   .option-chain-table th, .option-chain-table td { padding-left: 6px; padding-right: 6px; }
