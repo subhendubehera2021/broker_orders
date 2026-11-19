@@ -872,15 +872,29 @@ async function loadChart() {
     renderSwings();
     updateLiveCountdown();
     hideMessage();
-    setConnectionStatus("Connecting", "");
-    feedStatus.textContent = "Connecting to Fyers market-data WebSocket";
     lastQuoteVolume = undefined;
     activeChartSymbol = symbol;
+    let subscriptionError;
     try {
       syncLiveSocketSubscription(symbol);
     } catch (error) {
       socketConnected = false;
-      feedStatus.textContent = `WebSocket subscription failed: ${error.message}`;
+      subscriptionError = error;
+    }
+    if (subscriptionError) {
+      setConnectionStatus("Fyers reconnecting");
+      feedStatus.textContent = `WebSocket subscription failed: ${subscriptionError.message}`;
+    } else if (socketTransportConnected) {
+      setConnectionStatus(socketConnected ? "Fyers live" : "Fyers connected", "connected");
+      feedStatus.textContent = socketConnected
+        ? "Fyers WebSocket active"
+        : "Waiting for first Fyers price update; REST fallback is active";
+    } else if (liveSocket) {
+      setConnectionStatus("Fyers reconnecting");
+      feedStatus.textContent = "Waiting for Fyers WebSocket reconnect; REST fallback is active";
+    } else {
+      setConnectionStatus("Connecting", "");
+      feedStatus.textContent = "Connecting to Fyers market-data WebSocket";
     }
     startQuotePolling();
     void connectLiveSocket();
