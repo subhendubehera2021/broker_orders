@@ -40,6 +40,12 @@ const priceActionTrigger = document.querySelector("#price-action-trigger");
 const priceActionMenu = document.querySelector("#price-action-menu");
 const priceActionNotice = document.querySelector("#price-action-notice");
 const swingHighBuyButton = document.querySelector("#swing-high-buy-button");
+const demoModeToggle = document.querySelector("#demo-mode-toggle");
+const demoTradingControls = document.querySelector("#demo-trading-controls");
+const demoBuyButton = document.querySelector("#demo-buy-button");
+const demoSellButton = document.querySelector("#demo-sell-button");
+const demoOrderLayer = document.querySelector("#demo-order-layer");
+const demoTradeStatus = document.querySelector("#demo-trade-status");
 const priceAlertLabel = document.querySelector("#price-alert-label");
 const priceSellLabel = document.querySelector("#price-sell-label");
 const priceBuyLabel = document.querySelector("#price-buy-label");
@@ -140,6 +146,9 @@ let optionChainSequence = 0;
 let crosshairPrice;
 let crosshairY;
 let orderPreviewSide = "Buy";
+let demoOrders = [];
+let nextDemoOrderId = 1;
+let demoOrderSymbol;
 
 function activePriceSeries() {
   return chartType === "candles" ? candleSeries : barSeries;
@@ -152,6 +161,162 @@ function formatActionPrice(value) {
       maximumFractionDigits: 2,
     }).format(value)
     : "—";
+}
+
+function updateDemoTradeButtons() {
+  const symbol = symbolInput.value.trim().toUpperCase();
+  const canPlaceOrder =
+    demoModeToggle.checked && candles.length > 0 && Boolean(activeChartSymbol) && activeChartSymbol === symbol;
+  demoBuyButton.disabled = !canPlaceOrder;
+  demoSellButton.disabled = !canPlaceOrder;
+}
+
+function updateDemoOrderPositions() {
+  const occupiedWidgetPositions = [];
+  for (const order of demoOrders) {
+    if (!candles.length) {
+      order.row.hidden = true;
+      continue;
+    }
+
+    const y = activePriceSeries().priceToCoordinate(order.price);
+    if (!Number.isFinite(y)) {
+      order.row.hidden = true;
+      continue;
+    }
+
+    const minY = 24;
+    const maxY = Math.max(minY, chartElement.clientHeight - 24);
+    const lineY = Math.max(minY, Math.min(y, maxY));
+    let widgetOffset = 0;
+    if (occupiedWidgetPositions.length) {
+      for (let distance = 28; distance <= chartElement.clientHeight; distance += 28) {
+        const down = lineY + distance;
+        const up = lineY - distance;
+        if (
+          down <= maxY &&
+          occupiedWidgetPositions.every((position) => Math.abs(position - down) >= 28)
+        ) {
+          widgetOffset = distance;
+          break;
+        }
+        if (
+          up >= minY &&
+          occupiedWidgetPositions.every((position) => Math.abs(position - up) >= 28)
+        ) {
+          widgetOffset = -distance;
+          break;
+        }
+      }
+    }
+    order.row.style.top = `${lineY}px`;
+    order.widget.style.setProperty("--demo-widget-offset", `${widgetOffset}px`);
+    occupiedWidgetPositions.push(lineY + widgetOffset);
+    order.row.hidden = false;
+  }
+}
+
+function clearDemoOrders(message = "") {
+  const count = demoOrders.length;
+  for (const order of demoOrders) order.row.remove();
+  demoOrders = [];
+  demoOrderSymbol = undefined;
+  updateDemoOrderPositions();
+  if (message && count) demoTradeStatus.textContent = message;
+  return count;
+}
+
+function cancelDemoOrder(id) {
+  const index = demoOrders.findIndex((order) => order.id === id);
+  if (index === -1) return;
+  const [order] = demoOrders.splice(index, 1);
+  order.row.remove();
+  demoTradeStatus.textContent =
+    `Demo ${order.side} limit order at ₹${formatActionPrice(order.price)} canceled. No live order was affected.`;
+}
+
+function placeDemoOrder(side) {
+  const symbol = symbolInput.value.trim().toUpperCase();
+  if (!demoModeToggle.checked || !candles.length || !symbol || symbol !== activeChartSymbol) return;
+  const price = Number.isFinite(crosshairPrice) ? crosshairPrice : candles.at(-1)?.close;
+  if (!Number.isFinite(price) || price <= 0) return;
+
+  const order = {
+    id: nextDemoOrderId++,
+    side,
+    price: Math.round(price * 100) / 100,
+    symbol,
+  };
+  demoOrderSymbol = order.symbol;
+  const row = document.createElement("div");
+  row.className = "demo-order-row";
+  row.dataset.side = side;
+  const widget = document.createElement("div");
+  widget.className = "demo-order-widget";
+  const dragButton = document.createElement("button");
+  dragButton.className = "demo-order-drag";
+  dragButton.type = "button";
+  const cancelButton = document.createElement("button");
+  cancelButton.className = "demo-order-cancel";
+  cancelButton.type = "button";
+  cancelButton.textContent = "×";
+  cancelButton.addEventListener("click", () => cancelDemoOrder(order.id));
+  let dragPointerId;
+
+  dragButton.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    dragPointerId = event.pointerId;
+    dragButton.setPointerCapture(event.pointerId);
+  });
+  dragButton.addEventListener("pointermove", (event) => {
+    if (event.pointerId !== dragPointerId) return;
+    event.preventDefault();
+    const y = event.clientY - chartElement.getBoundingClientRect().top;
+    const nextPrice = activePriceSeries().coordinateToPrice(y);
+    if (Number.isFinite(nextPrice) && nextPrice > 0) {
+      order.price = Math.round(nextPrice * 100) / 100;
+      updateDemoOrder(order);
+    }
+  });
+  const stopDragging = (event) => {
+    if (event.pointerId === dragPointerId) dragPointerId = undefined;
+  };
+  dragButton.addEventListener("pointerup", stopDragging);
+  dragButton.addEventListener("pointercancel", stopDragging);
+  dragButton.addEventListener("keydown", (event) => {
+    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+    event.preventDefault();
+    order.price = Math.max(0.01, Math.round(
+      (order.price + (event.key === "ArrowUp" ? 0.01 : -0.01)) * 100,
+    ) / 100);
+    updateDemoOrder(order);
+  });
+  widget.append(dragButton, cancelButton);
+  row.append(widget);
+  order.row = row;
+  order.widget = widget;
+  order.dragButton = dragButton;
+  order.cancelButton = cancelButton;
+  demoOrders.push(order);
+  demoOrderLayer.append(row);
+  updateDemoOrder(order);
+  demoTradeStatus.textContent =
+    `Demo ${side} limit order added at ₹${formatActionPrice(order.price)}. Drag the price tag to adjust it or use × to cancel. No order was sent.`;
+}
+
+function updateDemoOrder(order) {
+  order.dragButton.textContent = `${order.side.toUpperCase()} LIMIT · ₹${formatActionPrice(order.price)}`;
+  order.dragButton.setAttribute(
+    "aria-label",
+    `Move demo ${order.side} limit order at ₹${formatActionPrice(order.price)}. Use the up and down arrow keys to adjust the price.`,
+  );
+  order.cancelButton.setAttribute(
+    "aria-label",
+    `Cancel demo ${order.side} limit order at ₹${formatActionPrice(order.price)}`,
+  );
+  updateDemoOrderPositions();
 }
 
 function priceActionInstrumentName() {
@@ -217,8 +382,13 @@ function updateLatestSwingBuyButton() {
   swingHighBuyButton.hidden = false;
 }
 
-chart.timeScale().subscribeVisibleLogicalRangeChange(updateLatestSwingBuyButton);
-window.addEventListener("resize", updateLatestSwingBuyButton);
+function updateChartOverlays() {
+  updateLatestSwingBuyButton();
+  updateDemoOrderPositions();
+}
+
+chart.timeScale().subscribeVisibleLogicalRangeChange(updateChartOverlays);
+window.addEventListener("resize", updateChartOverlays);
 
 function closePriceActionMenu() {
   priceActionMenu.hidden = true;
@@ -810,6 +980,10 @@ async function loadChart() {
   activeChartSymbol = undefined;
   const sequence = ++loadSequence;
   const symbol = symbolInput.value.trim().toUpperCase();
+  if (demoOrders.length && symbol !== demoOrderSymbol) {
+    clearDemoOrders("Chart symbol changed. Pending demo orders were canceled.");
+  }
+  updateDemoTradeButtons();
   if (!symbol) {
     try {
       syncLiveSocketSubscription(undefined);
@@ -832,6 +1006,7 @@ async function loadChart() {
   candleSeries.setData([]);
   barSeries.setData([]);
   volumeSeries.setData([]);
+  updateDemoOrderPositions();
   showMessage("Loading historical candles…", { loading: true });
   setConnectionStatus("Loading", "");
   const { from, to } = rangeDates(rangeSelect.value);
@@ -869,11 +1044,13 @@ async function loadChart() {
     document.querySelector("#last-price").textContent = formatPrice(candles.at(-1).close);
     document.querySelector("#price-change").textContent = "Last traded price";
     updateOhlc(candles.at(-1));
+    updateDemoOrderPositions();
     renderSwings();
     updateLiveCountdown();
     hideMessage();
     lastQuoteVolume = undefined;
     activeChartSymbol = symbol;
+    updateDemoTradeButtons();
     let subscriptionError;
     try {
       syncLiveSocketSubscription(symbol);
@@ -902,6 +1079,8 @@ async function loadChart() {
   } catch (error) {
     if (sequence !== loadSequence) return;
     candles = [];
+    clearDemoOrders("Chart data could not be loaded. Pending demo orders were canceled.");
+    updateDemoTradeButtons();
     if (error.status === 401) {
       clearLiveTimer();
     } else {
@@ -1021,6 +1200,7 @@ function applyLiveQuote(sequence, symbol, quote) {
   updateCurrentCandleVolumeMarker();
   updateLiveCountdown();
   updateLatestSwingBuyButton();
+  updateDemoOrderPositions();
   setConnectionStatus(socketConnected ? "Fyers live" : "Fyers polling", "connected");
   feedStatus.textContent = socketConnected
     ? `Fyers WebSocket update ${formatIndiaTime(quote.time)} IST`
@@ -1083,6 +1263,7 @@ chart.subscribeClick((param) => {
 
 chart.subscribeCrosshairMove((param) => {
   if (param.point) updatePriceActionPosition(param.point.y);
+  updateDemoOrderPositions();
   if (!param.time) return;
   const bar = param.seriesData.get(activePriceSeries());
   const volume = param.seriesData.get(volumeSeries);
@@ -1226,6 +1407,7 @@ document.querySelector("#load-chart").addEventListener("click", () => void loadC
 symbolInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter") void loadChart();
 });
+symbolInput.addEventListener("input", updateDemoTradeButtons);
 rangeSelect.addEventListener("change", () => void loadChart());
 optionChainToggle.addEventListener("click", () => {
   if (optionChainModal.open) {
@@ -1324,6 +1506,7 @@ document.querySelector("#candles-type").addEventListener("click", () => {
   document.querySelector("#bars-type").setAttribute("aria-pressed", "false");
   clearDrawings();
   renderSwings();
+  updateDemoOrderPositions();
   updateLiveCountdown();
 });
 
@@ -1337,6 +1520,7 @@ document.querySelector("#bars-type").addEventListener("click", () => {
   document.querySelector("#candles-type").setAttribute("aria-pressed", "false");
   clearDrawings();
   renderSwings();
+  updateDemoOrderPositions();
   updateLiveCountdown();
 });
 
@@ -1344,6 +1528,22 @@ document.querySelectorAll("[data-tool]").forEach((button) => {
   button.addEventListener("click", () => selectTool(button.dataset.tool));
 });
 document.querySelector("#clear-drawings").addEventListener("click", clearDrawings);
+demoModeToggle.addEventListener("change", () => {
+  demoTradingControls.hidden = !demoModeToggle.checked;
+  if (demoModeToggle.checked) {
+    demoTradeStatus.textContent = candles.length
+      ? "Demo mode on. Buy or Sell adds a simulated limit order at the cursor price, or the latest price. Drag its price tag to adjust; use × to cancel. No orders are sent."
+      : "Demo mode on. Load chart data before adding demo orders.";
+  } else {
+    const canceled = clearDemoOrders();
+    demoTradeStatus.textContent = canceled
+      ? `Demo mode off. Canceled ${canceled} pending demo order${canceled === 1 ? "" : "s"}. No live orders were affected.`
+      : "Demo mode off. No live orders were affected.";
+  }
+  updateDemoTradeButtons();
+});
+demoBuyButton.addEventListener("click", () => placeDemoOrder("buy"));
+demoSellButton.addEventListener("click", () => placeDemoOrder("sell"));
 
 try {
   const session = await fetchJson("/api/fyers/session");

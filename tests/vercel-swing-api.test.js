@@ -523,6 +523,8 @@ test("serves the TradingView-inspired chart and local charting assets", async ()
   const demoModeToggle = toolbar.match(/<input id="demo-mode-toggle"[^>]*>/)?.[0];
   assert.ok(demoModeToggle);
   assert.doesNotMatch(demoModeToggle, /\bchecked\b/);
+  assert.match(page.body, /id="demo-trading-controls"/);
+  assert.match(page.body, /id="demo-order-layer"/);
   assert.doesNotMatch(page.body, /id="chart-controls"/);
   assert.doesNotMatch(page.body, /id="controls-toggle"/);
   assert.match(page.body, /NIFTY Options/);

@@ -141,7 +141,7 @@
             <span class="switch" aria-hidden="true"></span>
             <span>Demo</span>
           </label>
-          <span id="demo-mode-help" class="visually-hidden">This switch does not submit trades. Demo behavior will be configured separately.</span>
+          <span id="demo-mode-help" class="visually-hidden">Demo orders stay in this browser and are never sent to Fyers.</span>
           <button class="toolbar-text-button unavailable" type="button" aria-label="Trade, unavailable" title="Trading is not available yet" disabled>Trade</button>
           <button class="toolbar-upgrade unavailable" type="button" aria-label="Upgrade, unavailable" title="Upgrade is not available yet" disabled>Upgrade</button>
         </div>
@@ -199,6 +199,13 @@
               <span id="price-change">Waiting for data</span>
             </div>
           </div>
+            <div id="demo-trading-controls" class="demo-trading-controls" role="group" aria-label="Demo trading actions" hidden>
+              <span class="demo-mode-badge">SIMULATED</span>
+              <button id="demo-buy-button" class="demo-buy-button" type="button" disabled title="Place a demo buy limit order at the cursor or latest price">Buy</button>
+              <button id="demo-sell-button" class="demo-sell-button" type="button" disabled title="Place a demo sell limit order at the cursor or latest price">Sell</button>
+            </div>
+            <div id="demo-order-layer" class="demo-order-layer" role="group" aria-label="Demo limit orders"></div>
+            <span id="demo-trade-status" class="visually-hidden" role="status" aria-live="polite"></span>
           <button
             id="price-action-trigger"
             class="price-action-trigger"

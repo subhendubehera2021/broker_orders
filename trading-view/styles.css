@@ -395,6 +395,107 @@ main {
 
 .chart-wrap { position: relative; min-height: 0; flex: 1 1 auto; }
 #chart { position: absolute; z-index: 0; inset: 0; }
+.demo-trading-controls {
+  position: absolute;
+  z-index: 11;
+  top: 46px;
+  left: 12px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px;
+  border: 1px solid var(--tv-border);
+  border-radius: 6px;
+  background: var(--tv-panel);
+  box-shadow: 0 3px 12px rgb(0 0 0 / 28%);
+}
+.demo-trading-controls[hidden] { display: none; }
+.demo-mode-badge {
+  padding: 0 5px;
+  color: var(--tv-muted-light);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: .04em;
+}
+.demo-trading-controls button {
+  min-width: 46px;
+  height: 27px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 4px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+}
+.demo-trading-controls button:disabled { opacity: .45; cursor: not-allowed; }
+.demo-buy-button { background: var(--tv-green); }
+.demo-buy-button:not(:disabled):hover { background: #0bb596; }
+.demo-sell-button { background: var(--tv-red); }
+.demo-sell-button:not(:disabled):hover { background: #ff5260; }
+.demo-order-layer {
+  position: absolute;
+  z-index: 10;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.demo-order-row {
+  position: absolute;
+  right: 0;
+  left: 0;
+  pointer-events: none;
+}
+.demo-order-row[data-side="buy"] { --demo-order-color: var(--tv-green); }
+.demo-order-row[data-side="sell"] { --demo-order-color: var(--tv-red); }
+.demo-order-row::before {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  border-top: 1px dashed var(--demo-order-color);
+  content: "";
+  opacity: .85;
+}
+.demo-order-widget {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  right: 78px;
+  display: flex;
+  height: 26px;
+  align-items: stretch;
+  gap: 2px;
+  transform: translateY(calc(-50% + var(--demo-widget-offset, 0px)));
+  pointer-events: auto;
+}
+.demo-order-drag,
+.demo-order-cancel {
+  border: 1px solid var(--demo-order-color);
+  background: var(--tv-panel);
+  color: var(--tv-text);
+}
+.demo-order-drag {
+  padding: 0 8px;
+  border-radius: 4px 0 0 4px;
+  cursor: ns-resize;
+  font-size: 10px;
+  font-weight: 600;
+  touch-action: none;
+  white-space: nowrap;
+}
+.demo-order-drag:hover,
+.demo-order-drag:focus-visible { background: var(--demo-order-color); color: #fff; }
+.demo-order-cancel {
+  width: 26px;
+  padding: 0;
+  border-radius: 0 4px 4px 0;
+  color: var(--demo-order-color);
+  cursor: pointer;
+  font-size: 17px;
+  line-height: 1;
+}
+.demo-order-cancel:hover,
+.demo-order-cancel:focus-visible { background: var(--demo-order-color); color: #fff; }
 .price-action-trigger {
   position: absolute;
   z-index: 10;
@@ -576,6 +677,8 @@ main {
   .ohlc-summary { order: 0; flex: 1 1 100%; flex-wrap: wrap; gap: 3px 8px; font-size: 10px; }
   .last-price { order: 1; margin-left: 0; gap: 5px; }
   .last-price strong { font-size: 13px; }
+  .demo-trading-controls { top: 68px; left: 6px; }
+  .demo-order-widget { right: 76px; }
   .chart-footer { align-items: flex-start; flex-direction: column; justify-content: center; gap: 5px; padding: 8px 11px; }
   .feed-status-group { align-items: flex-start; flex-direction: column; gap: 3px; }
 }
