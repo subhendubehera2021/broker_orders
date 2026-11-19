@@ -505,9 +505,10 @@ test("Fastify serves Swagger and OpenAPI documentation for the GET endpoint", as
 });
 
 test("serves the TradingView-inspired chart and local charting assets", async () => {
-  const [page, client, timeFormat, demoTrading, chartingLibrary, license] = await Promise.all([
+  const [page, client, styles, timeFormat, demoTrading, chartingLibrary, license] = await Promise.all([
     app.inject({ method: "GET", url: "/trading-view" }),
     app.inject({ method: "GET", url: "/trading-view/chart.js" }),
+    app.inject({ method: "GET", url: "/trading-view/styles.css" }),
     app.inject({ method: "GET", url: "/trading-view/time-format.js" }),
     app.inject({ method: "GET", url: "/trading-view/demo-trading.js" }),
     app.inject({ method: "GET", url: "/trading-view/lightweight-charts.js" }),
@@ -526,6 +527,9 @@ test("serves the TradingView-inspired chart and local charting assets", async ()
   assert.match(historyOptions, /<option value="1" selected>1 day<\/option>/);
   assert.match(pivotOptions, /<option value="5" selected>5<\/option>/);
   assert.match(client.body, /let currentResolution = "1"/);
+  assert.equal(styles.statusCode, 200);
+  assert.match(styles.body, /html\s*\{[^}]*overflow:\s*hidden;/);
+  assert.match(styles.body, /body\s*\{[^}]*height:\s*100vh;[^}]*height:\s*100dvh;[^}]*overflow:\s*hidden;/);
   const toolbar = page.body.match(/<section class="chart-toolbar"[\s\S]*?<\/section>/)?.[0];
   assert.ok(toolbar);
   assert.match(toolbar, /id="range"/);
