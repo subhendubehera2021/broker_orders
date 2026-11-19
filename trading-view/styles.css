@@ -95,12 +95,18 @@ main {
 }
 .header-symbol-control .icon-button { margin-left: 0; border-radius: 0 18px 18px 0; }
 .chart-toolbar .header-interval-control select {
-  width: 58px;
-  height: 34px;
-  padding: 0 17px 0 9px;
-  border-radius: 5px;
-  background-color: var(--tv-background);
+  width: 54px;
+  height: 28px;
+  padding: 0 15px 0 8px;
+  border: 1px solid var(--tv-border);
+  border-radius: 6px;
+  background-color: var(--tv-panel-raised);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color .15s ease, background-color .15s ease;
 }
+.chart-toolbar .header-interval-control select:hover { border-color: var(--tv-border-strong); }
 .header-history-control { display: flex; align-items: center; gap: 6px; color: var(--tv-muted-light); font-size: 11px; }
 .chart-toolbar .header-history-control label {
   display: inline;

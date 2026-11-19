@@ -66,7 +66,7 @@ const orderPreviewType = document.querySelector("#order-preview-type");
 const orderPreviewPrice = document.querySelector("#order-preview-price");
 const orderPreviewNotice = document.querySelector("#order-preview-notice");
 const orderPreviewSubmit = document.querySelector("#submit-order-preview");
-const intervalSeconds = { "1": 60, "5": 300, "15": 900, "60": 3600, D: 86400 };
+const intervalSeconds = { "1": 60, "3": 180, "5": 300, "15": 900, "60": 3600, D: 86400 };
 const axisTickKinds = {
   [TickMarkType.Year]: "year",
   [TickMarkType.Month]: "month",
@@ -1226,7 +1226,9 @@ async function loadChart() {
 }
 
 function intervalLabel(resolution) {
-  return resolution === "60" ? "1 hour" : resolution === "D" ? "1 day" : `${resolution} minute`;
+  if (resolution === "60") return "1 hour";
+  if (resolution === "D") return "1 day";
+  return `${resolution} minute${resolution === "1" ? "" : "s"}`;
 }
 
 function timeBucket(time, resolution) {
