@@ -515,8 +515,13 @@ test("serves the TradingView-inspired chart and local charting assets", async ()
 
   assert.equal(page.statusCode, 200);
   assert.match(page.body, /Liquidity swings/);
-  assert.match(page.body, /id="chart-controls"/);
-  assert.match(page.body, /id="controls-toggle"/);
+  const toolbar = page.body.match(/<section class="chart-toolbar"[\s\S]*?<\/section>/)?.[0];
+  assert.ok(toolbar);
+  assert.match(toolbar, /id="range"/);
+  assert.match(toolbar, /id="draw-popover"/);
+  assert.match(toolbar, /data-tool="horizontal"/);
+  assert.doesNotMatch(page.body, /id="chart-controls"/);
+  assert.doesNotMatch(page.body, /id="controls-toggle"/);
   assert.match(page.body, /NIFTY Options/);
   assert.match(page.body, /option-chain-panel/);
   assert.doesNotMatch(page.body, /class="topbar"/);
