@@ -129,6 +129,11 @@ let countdownTimer;
 let quoteInFlight = false;
 let liveSocket;
 let socketConnected = false;
+let socketTransportConnected = false;
+let subscribedSymbol;
+let activeChartSymbol;
+let socketConnectionPromise;
+let socketGeneration = 0;
 let lastQuoteVolume;
 let loadSequence = 0;
 let optionChainSequence = 0;
@@ -588,14 +593,23 @@ function renderSwings() {
   updateLatestSwingBuyButton();
 }
 
-function clearLiveTimer() {
-  stopQuotePolling();
+function stopCountdownTimer() {
   if (countdownTimer) clearInterval(countdownTimer);
   countdownTimer = undefined;
   document.querySelector("#live-countdown").hidden = true;
+}
+
+function clearLiveTimer() {
+  stopQuotePolling();
+  stopCountdownTimer();
   const socket = liveSocket;
   liveSocket = undefined;
   socketConnected = false;
+  socketTransportConnected = false;
+  subscribedSymbol = undefined;
+  activeChartSymbol = undefined;
+  socketGeneration += 1;
+  socketConnectionPromise = undefined;
   if (typeof socket?.close === "function") socket.close();
 }
 
@@ -604,10 +618,12 @@ function stopQuotePolling() {
   quoteTimer = undefined;
 }
 
-function startQuotePolling(sequence, symbol) {
-  if (sequence !== loadSequence || quoteTimer) return;
-  quoteTimer = setInterval(() => void pollQuote(sequence, symbol), 5000);
-  void pollQuote(sequence, symbol);
+function startQuotePolling() {
+  if (socketConnected || quoteTimer || !activeChartSymbol) return;
+  quoteTimer = setInterval(() => {
+    if (activeChartSymbol) void pollQuote(loadSequence, activeChartSymbol);
+  }, 5000);
+  void pollQuote(loadSequence, activeChartSymbol);
 }
 
 function updateLiveCountdown() {
@@ -677,85 +693,129 @@ function updateFromSocket(sequence, symbol, message) {
   for (const quote of quotes) applyLiveQuote(sequence, symbol, quote);
 }
 
-async function connectLiveSocket(sequence, symbol) {
+function syncLiveSocketSubscription(symbol) {
+  if (subscribedSymbol === symbol) return;
+  socketConnected = false;
+  if (!liveSocket || !socketTransportConnected) return;
+
+  if (subscribedSymbol) {
+    if (typeof liveSocket.unsubscribe !== "function") {
+      throw new Error("Fyers WebSocket SDK does not support unsubscribe");
+    }
+    liveSocket.unsubscribe([subscribedSymbol]);
+    subscribedSymbol = undefined;
+  }
+  if (!symbol) return;
+
+  liveSocket.subscribe([symbol]);
+  subscribedSymbol = symbol;
+}
+
+async function connectLiveSocket() {
+  if (liveSocket || socketConnectionPromise) return;
   if (typeof window.fyersDataSocket !== "function") {
     feedStatus.textContent = "Fyers WebSocket SDK unavailable; using REST quote fallback";
     setConnectionStatus("Starting fallback");
-    startQuotePolling(sequence, symbol);
+    startQuotePolling();
     return;
   }
 
-  try {
-    const credentials = await fetchJson("/api/fyers/ws-token", { method: "POST" });
-    if (sequence !== loadSequence) return;
+  const generation = socketGeneration;
+  const attempt = (async () => {
+    try {
+      const credentials = await fetchJson("/api/fyers/ws-token", { method: "POST" });
+      if (generation !== socketGeneration || liveSocket) return;
 
-    const token = `${credentials.appId}:${credentials.accessToken}`;
-    const Socket = window.fyersDataSocket;
-    const socket = typeof Socket.getInstance === "function"
-      ? Socket.getInstance(token, "", true)
-      : new Socket(token, "", true);
-    liveSocket = socket;
-    socketConnected = false;
-    socket.on("connect", () => {
-      if (sequence !== loadSequence || liveSocket !== socket) return;
-      try {
-        if (typeof socket.mode === "function" && socket.FullMode !== undefined) {
-          socket.mode(socket.FullMode);
+      const token = `${credentials.appId}:${credentials.accessToken}`;
+      const Socket = window.fyersDataSocket;
+      const socket = typeof Socket.getInstance === "function"
+        ? Socket.getInstance(token, "", true)
+        : new Socket(token, "", true);
+      liveSocket = socket;
+      socketConnected = false;
+      socket.on("connect", () => {
+        if (liveSocket !== socket) return;
+        socketTransportConnected = true;
+        try {
+          if (typeof socket.mode === "function" && socket.FullMode !== undefined) {
+            socket.mode(socket.FullMode);
+          }
+          syncLiveSocketSubscription(activeChartSymbol);
+          if (activeChartSymbol) {
+            setConnectionStatus("Fyers connected");
+            feedStatus.textContent = "Waiting for first Fyers price update; REST fallback is active";
+            startQuotePolling();
+          }
+        } catch (error) {
+          socketConnected = false;
+          setConnectionStatus("Fyers reconnecting");
+          feedStatus.textContent = `WebSocket subscription failed: ${error.message}`;
+          startQuotePolling();
         }
-        socket.subscribe([symbol]);
-        setConnectionStatus("Fyers connected");
-        feedStatus.textContent = "Waiting for first Fyers price update; REST fallback is active";
-      } catch (error) {
+      });
+      socket.on("message", (message) => {
+        if (liveSocket === socket && activeChartSymbol) {
+          updateFromSocket(loadSequence, activeChartSymbol, message);
+        }
+      });
+      socket.on("error", () => {
+        if (liveSocket !== socket) return;
+        socketTransportConnected = false;
+        subscribedSymbol = undefined;
         socketConnected = false;
         setConnectionStatus("Fyers reconnecting");
-        feedStatus.textContent = `WebSocket subscription failed: ${error.message}`;
-        startQuotePolling(sequence, symbol);
+        feedStatus.textContent = "WebSocket interrupted; using REST quote fallback";
+        startQuotePolling();
+      });
+      socket.on("close", () => {
+        if (liveSocket !== socket) return;
+        socketTransportConnected = false;
+        subscribedSymbol = undefined;
+        socketConnected = false;
+        setConnectionStatus("Fyers reconnecting");
+        feedStatus.textContent = "WebSocket disconnected; using REST quote fallback";
+        startQuotePolling();
+      });
+      if (typeof socket.autoreconnect === "function") socket.autoreconnect(10);
+      else if (typeof socket.autoReconnect === "function") socket.autoReconnect(10);
+      socket.connect();
+    } catch (error) {
+      if (generation !== socketGeneration) return;
+      const failedSocket = liveSocket;
+      liveSocket = undefined;
+      socketTransportConnected = false;
+      subscribedSymbol = undefined;
+      socketConnected = false;
+      if (typeof failedSocket?.close === "function") failedSocket.close();
+      if (error.status === 401) {
+        clearLiveTimer();
+        showMessage(error.message, { login: true });
+        setConnectionStatus("Login required", "error");
+        feedStatus.textContent = "Your Fyers session is missing or expired";
+        return;
       }
-    });
-    socket.on("message", (message) => {
-      if (sequence === loadSequence && liveSocket === socket) updateFromSocket(sequence, symbol, message);
-    });
-    socket.on("error", () => {
-      if (sequence !== loadSequence || liveSocket !== socket) return;
-      socketConnected = false;
-      setConnectionStatus("Fyers reconnecting");
-      feedStatus.textContent = "WebSocket interrupted; using REST quote fallback";
-      startQuotePolling(sequence, symbol);
-    });
-    socket.on("close", () => {
-      if (sequence !== loadSequence || liveSocket !== socket) return;
-      socketConnected = false;
-      setConnectionStatus("Fyers reconnecting");
-      feedStatus.textContent = "WebSocket disconnected; using REST quote fallback";
-      startQuotePolling(sequence, symbol);
-    });
-    if (typeof socket.autoreconnect === "function") socket.autoreconnect(10);
-    else if (typeof socket.autoReconnect === "function") socket.autoReconnect(10);
-    socket.connect();
-  } catch (error) {
-    if (sequence !== loadSequence) return;
-    const failedSocket = liveSocket;
-    liveSocket = undefined;
-    socketConnected = false;
-    if (typeof failedSocket?.close === "function") failedSocket.close();
-    if (error.status === 401) {
-      clearLiveTimer();
-      showMessage(error.message, { login: true });
-      setConnectionStatus("Login required", "error");
-      feedStatus.textContent = "Your Fyers session is missing or expired";
-      return;
+      feedStatus.textContent = `Fyers WebSocket unavailable: ${error.message}`;
+      setConnectionStatus("Starting fallback");
+      startQuotePolling();
     }
-    feedStatus.textContent = `Fyers WebSocket unavailable: ${error.message}`;
-    setConnectionStatus("Starting fallback");
-    startQuotePolling(sequence, symbol);
-  }
+  })();
+  socketConnectionPromise = attempt;
+  await attempt;
+  if (generation === socketGeneration) socketConnectionPromise = undefined;
 }
 
 async function loadChart() {
-  clearLiveTimer();
+  stopQuotePolling();
+  stopCountdownTimer();
+  activeChartSymbol = undefined;
   const sequence = ++loadSequence;
   const symbol = symbolInput.value.trim().toUpperCase();
   if (!symbol) {
+    try {
+      syncLiveSocketSubscription(undefined);
+    } catch (error) {
+      feedStatus.textContent = `WebSocket unsubscribe failed: ${error.message}`;
+    }
     showMessage("Enter a Fyers symbol to load the chart.");
     symbolInput.focus();
     return;
@@ -768,6 +828,7 @@ async function loadChart() {
   priceActionTrigger.setAttribute("aria-expanded", "false");
   crosshairPrice = undefined;
   crosshairY = undefined;
+  candles = [];
   candleSeries.setData([]);
   barSeries.setData([]);
   volumeSeries.setData([]);
@@ -814,17 +875,35 @@ async function loadChart() {
     setConnectionStatus("Connecting", "");
     feedStatus.textContent = "Connecting to Fyers market-data WebSocket";
     lastQuoteVolume = undefined;
-    startQuotePolling(sequence, symbol);
-    void connectLiveSocket(sequence, symbol);
+    activeChartSymbol = symbol;
+    try {
+      syncLiveSocketSubscription(symbol);
+    } catch (error) {
+      socketConnected = false;
+      feedStatus.textContent = `WebSocket subscription failed: ${error.message}`;
+    }
+    startQuotePolling();
+    void connectLiveSocket();
     countdownTimer = setInterval(updateLiveCountdown, 1000);
   } catch (error) {
     if (sequence !== loadSequence) return;
     candles = [];
+    if (error.status === 401) {
+      clearLiveTimer();
+    } else {
+      try {
+        syncLiveSocketSubscription(undefined);
+      } catch (subscriptionError) {
+        feedStatus.textContent = `WebSocket unsubscribe failed: ${subscriptionError.message}`;
+      }
+    }
     showMessage(error.message, { login: error.status === 401 });
     setConnectionStatus(error.status === 401 ? "Login required" : "Data unavailable", "error");
-    feedStatus.textContent = error.status === 401
-      ? "Your Fyers session is missing or expired"
-      : "Could not load market data";
+    if (error.status === 401) {
+      feedStatus.textContent = "Your Fyers session is missing or expired";
+    } else if (!feedStatus.textContent.startsWith("WebSocket unsubscribe failed:")) {
+      feedStatus.textContent = "Could not load market data";
+    }
   }
 }
 
