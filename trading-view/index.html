@@ -18,15 +18,6 @@
         </div>
         <div id="chart-controls" hidden>
           <section class="toolbar" aria-label="Chart controls">
-            <div class="symbol-control">
-              <label for="symbol">Symbol</label>
-              <div class="symbol-entry">
-                <input id="symbol" value="NSE:NIFTY50-INDEX" autocomplete="off" spellcheck="false" aria-describedby="symbol-help">
-                <button id="load-chart" class="icon-button" type="button" aria-label="Load symbol">↵</button>
-              </div>
-              <span id="symbol-help" class="visually-hidden">Enter a Fyers symbol, for example NSE:SBIN-EQ.</span>
-            </div>
-
             <div class="range-control">
               <label for="range">History</label>
               <select id="range">
@@ -111,7 +102,15 @@
       <section class="chart-card" aria-label="Market chart">
         <div class="instrument-summary">
           <div>
-            <h1 id="instrument-name">NSE:NIFTY50-INDEX</h1>
+            <h1 id="instrument-name" class="visually-hidden">NSE:NIFTY50-INDEX</h1>
+            <div class="symbol-control">
+              <label for="symbol">Symbol</label>
+              <div class="symbol-entry">
+                <input id="symbol" value="NSE:NIFTY50-INDEX" autocomplete="off" spellcheck="false" aria-describedby="symbol-help">
+                <button id="load-chart" class="icon-button" type="button" aria-label="Load symbol">↵</button>
+              </div>
+              <span id="symbol-help" class="visually-hidden">Enter a Fyers symbol, for example NSE:SBIN-EQ.</span>
+            </div>
             <span id="chart-subtitle">Fyers market data · 5 minute</span>
           </div>
           <div class="range-control chart-interval-control">
