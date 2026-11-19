@@ -176,24 +176,23 @@
       </dialog>
 
       <section class="chart-card" aria-label="Market chart">
-        <div class="instrument-summary">
-          <h1 id="instrument-name" class="visually-hidden">NSE:NIFTY50-INDEX</h1>
-          <span id="chart-subtitle">Fyers market data · 5 minute</span>
-          <div class="ohlc-summary" aria-live="polite">
-            <span>O <b id="open-value">—</b></span>
-            <span>H <b id="high-value">—</b></span>
-            <span>L <b id="low-value">—</b></span>
-            <span>C <b id="close-value">—</b></span>
-            <span>V <b id="volume-value">—</b></span>
-          </div>
-          <div class="last-price">
-            <strong id="last-price">—</strong>
-            <span id="price-change">Waiting for data</span>
-          </div>
-        </div>
-
         <div id="chart-wrap" class="chart-wrap">
           <div id="chart" role="img" aria-label="Interactive price and volume chart"></div>
+          <div class="instrument-summary">
+            <h1 id="instrument-name" class="visually-hidden">NSE:NIFTY50-INDEX</h1>
+            <span id="chart-subtitle">Fyers market data · 5 minute</span>
+            <div class="ohlc-summary" aria-live="polite">
+              <span>O <b id="open-value">—</b></span>
+              <span>H <b id="high-value">—</b></span>
+              <span>L <b id="low-value">—</b></span>
+              <span>C <b id="close-value">—</b></span>
+              <span>V <b id="volume-value">—</b></span>
+            </div>
+            <div class="last-price">
+              <strong id="last-price">—</strong>
+              <span id="price-change">Waiting for data</span>
+            </div>
+          </div>
           <button
             id="price-action-trigger"
             class="price-action-trigger"

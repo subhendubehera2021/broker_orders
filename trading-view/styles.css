@@ -342,21 +342,26 @@ main { width: min(100% - 32px, 1440px); margin: 12px auto 28px; }
 }
 
 .instrument-summary {
+  position: absolute;
+  z-index: 4;
+  top: 8px;
+  right: 80px;
+  left: 12px;
   display: flex;
-  min-height: 73px;
+  min-height: 0;
   align-items: center;
-  gap: 26px;
-  padding: 12px 18px;
-  border-bottom: 1px solid var(--tv-border);
-  background: var(--tv-background);
+  gap: 12px;
+  padding: 2px 4px;
+  background: transparent;
+  pointer-events: none;
 }
 
-.instrument-summary h1 { margin: 0 0 3px; font-size: 15px; font-weight: 650; }
+.instrument-summary h1 { margin: 0; font-size: 15px; font-weight: 650; }
 .instrument-summary > #chart-subtitle { margin-right: auto; color: var(--tv-muted); font-size: 11px; }
-.ohlc-summary { display: flex; flex-wrap: wrap; gap: 12px; color: var(--tv-muted-light); font-size: 11px; }
+.ohlc-summary { display: flex; flex-wrap: nowrap; gap: 8px; color: var(--tv-muted-light); font-size: 11px; white-space: nowrap; }
 .ohlc-summary b { margin-left: 3px; color: var(--tv-text); font-weight: 500; }
-.last-price { display: flex; flex-direction: column; gap: 3px; margin-left: auto; text-align: right; }
-.last-price strong { font-size: 18px; font-weight: 650; }
+.last-price { display: flex; flex-direction: row; align-items: baseline; gap: 6px; margin-left: auto; text-align: right; white-space: nowrap; }
+.last-price strong { font-size: 14px; font-weight: 650; }
 .last-price span { color: var(--tv-muted); font-size: 11px; }
 .last-price .positive { color: var(--tv-green); }
 .last-price .negative { color: var(--tv-red); }
@@ -522,9 +527,8 @@ main { width: min(100% - 32px, 1440px); margin: 12px auto 28px; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
 
 @media (max-width: 950px) {
-  .instrument-summary { flex-wrap: wrap; gap: 12px 18px; }
-  .ohlc-summary { order: 3; flex: 1 1 100%; }
-  .last-price { margin-left: auto; }
+  .instrument-summary { right: 76px; gap: 8px; }
+  .instrument-summary > #chart-subtitle { display: none; }
 }
 
 @media (max-width: 620px) {
@@ -536,9 +540,10 @@ main { width: min(100% - 32px, 1440px); margin: 12px auto 28px; }
   .option-chain-actions { flex-wrap: wrap; }
   .option-chain-table th, .option-chain-table td { padding-left: 6px; padding-right: 6px; }
   .option-contract { min-width: 78px; }
-  .instrument-summary { flex-wrap: wrap; gap: 8px 16px; padding: 11px; }
-  .ohlc-summary { order: 3; width: 100%; gap: 8px; }
-  .last-price { margin-left: auto; }
+  .instrument-summary { top: 6px; right: 74px; left: 6px; flex-wrap: wrap; gap: 4px 8px; padding: 0; }
+  .ohlc-summary { order: 0; flex: 1 1 100%; flex-wrap: wrap; gap: 3px 8px; font-size: 10px; }
+  .last-price { order: 1; margin-left: 0; gap: 5px; }
+  .last-price strong { font-size: 13px; }
   .chart-wrap { min-height: 420px; height: 65vh; }
   .chart-footer { align-items: flex-start; flex-direction: column; justify-content: center; gap: 5px; padding: 8px 11px; }
   .feed-status-group { align-items: flex-start; flex-direction: column; gap: 3px; }
