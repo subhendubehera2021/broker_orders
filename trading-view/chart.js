@@ -1094,6 +1094,10 @@ document.addEventListener("pointerdown", (event) => {
 
 document.addEventListener("keydown", (event) => {
   if (event.key !== "Escape") return;
+  if (optionChainModal.open) {
+    closeOptionChainModal();
+    return;
+  }
   if (!orderPreviewModal.hidden) {
     closeOrderPreview();
     return;
