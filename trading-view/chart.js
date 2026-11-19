@@ -31,6 +31,8 @@ const optionChainStatus = document.querySelector("#option-chain-status");
 const optionChainRows = document.querySelector("#option-chain-rows");
 const optionExpirySelect = document.querySelector("#option-expiry");
 const swingToggle = document.querySelector("#swing-toggle");
+const indicatorsToggle = document.querySelector("#indicators-toggle");
+const indicatorPopover = document.querySelector("#indicator-popover");
 const lookbackSelect = document.querySelector("#lookback");
 const connectionStatus = document.querySelector("#connection-status");
 const feedStatus = document.querySelector("#feed-status");
@@ -1094,6 +1096,12 @@ document.addEventListener("pointerdown", (event) => {
 
 document.addEventListener("keydown", (event) => {
   if (event.key !== "Escape") return;
+  if (!indicatorPopover.hidden) {
+    indicatorPopover.hidden = true;
+    indicatorsToggle.setAttribute("aria-expanded", "false");
+    indicatorsToggle.focus();
+    return;
+  }
   if (optionChainModal.open) {
     closeOptionChainModal();
     return;
@@ -1145,6 +1153,22 @@ optionExpirySelect.addEventListener("change", () => {
 document.querySelector("#close-option-chain").addEventListener("click", () => {
   closeOptionChainModal();
 });
+indicatorsToggle.addEventListener("click", () => {
+  const expanded = indicatorsToggle.getAttribute("aria-expanded") !== "true";
+  indicatorPopover.hidden = !expanded;
+  indicatorsToggle.setAttribute("aria-expanded", String(expanded));
+});
+document.addEventListener("pointerdown", (event) => {
+  if (
+    indicatorPopover.hidden ||
+    indicatorPopover.contains(event.target) ||
+    indicatorsToggle.contains(event.target)
+  ) {
+    return;
+  }
+  indicatorPopover.hidden = true;
+  indicatorsToggle.setAttribute("aria-expanded", "false");
+});
 optionChainRows.addEventListener("click", (event) => {
   const contract = event.target.closest("[data-option-symbol]");
   if (!contract) return;
@@ -1152,7 +1176,10 @@ optionChainRows.addEventListener("click", (event) => {
   closeOptionChainModal();
   void loadChart();
 });
-swingToggle.addEventListener("change", renderSwings);
+swingToggle.addEventListener("change", () => {
+  indicatorsToggle.setAttribute("aria-pressed", String(swingToggle.checked));
+  renderSwings();
+});
 lookbackSelect.addEventListener("change", renderSwings);
 
 document.querySelector("#candles-type").addEventListener("click", () => {
@@ -1161,6 +1188,8 @@ document.querySelector("#candles-type").addEventListener("click", () => {
   barSeries.applyOptions({ visible: false });
   document.querySelector("#candles-type").classList.add("selected");
   document.querySelector("#bars-type").classList.remove("selected");
+  document.querySelector("#candles-type").setAttribute("aria-pressed", "true");
+  document.querySelector("#bars-type").setAttribute("aria-pressed", "false");
   clearDrawings();
   renderSwings();
   updateLiveCountdown();
@@ -1172,6 +1201,8 @@ document.querySelector("#bars-type").addEventListener("click", () => {
   barSeries.applyOptions({ visible: true });
   document.querySelector("#bars-type").classList.add("selected");
   document.querySelector("#candles-type").classList.remove("selected");
+  document.querySelector("#bars-type").setAttribute("aria-pressed", "true");
+  document.querySelector("#candles-type").setAttribute("aria-pressed", "false");
   clearDrawings();
   renderSwings();
   updateLiveCountdown();

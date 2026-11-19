@@ -9,6 +9,113 @@
   </head>
   <body>
     <main>
+      <section class="chart-toolbar" aria-label="Chart toolbar">
+        <div class="toolbar-group toolbar-symbol-group">
+          <span class="toolbar-market-badge" aria-hidden="true">N</span>
+          <div class="symbol-control header-symbol-control">
+            <label class="visually-hidden" for="symbol">Symbol</label>
+            <div class="symbol-entry">
+              <input id="symbol" value="NSE:NIFTY50-INDEX" autocomplete="off" spellcheck="false" aria-describedby="symbol-help">
+              <button id="load-chart" class="icon-button" type="button" aria-label="Load symbol">↵</button>
+            </div>
+            <span id="symbol-help" class="visually-hidden">Enter a Fyers symbol, for example NSE:SBIN-EQ.</span>
+          </div>
+          <button
+            id="nifty-options-toggle"
+            class="option-chain-toggle"
+            type="button"
+            aria-label="NIFTY Options"
+            title="NIFTY Options"
+            aria-expanded="false"
+          >
+            <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+              <path d="M2.5 4.5h15v11h-15zM2.5 8h15M7.5 4.5v11m5-11v11" />
+            </svg>
+          </button>
+          <button class="toolbar-icon-button unavailable" type="button" aria-label="Add item, unavailable" title="Add item is unavailable" disabled>+</button>
+        </div>
+
+        <span class="toolbar-divider" aria-hidden="true"></span>
+
+        <div class="toolbar-group">
+          <div class="range-control chart-interval-control header-interval-control">
+            <label class="visually-hidden" for="intervals">Interval</label>
+            <select id="intervals">
+              <option value="1">1m</option>
+              <option value="5" selected>5m</option>
+              <option value="15">15m</option>
+              <option value="60">1h</option>
+              <option value="D">1D</option>
+            </select>
+          </div>
+          <div class="header-chart-type" role="group" aria-label="Chart type">
+            <button id="candles-type" class="selected" type="button" aria-label="Candles" aria-pressed="true" title="Candles">
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 2v4m0 8v4M3 6h4v8H3zm8-4v3m0 10v3m-2-13h4v10H9z" /></svg>
+            </button>
+            <button id="bars-type" type="button" aria-label="Bars" aria-pressed="false" title="Bars">
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 3v14m-3-10h6m4-4v14m-3-6h6" /></svg>
+            </button>
+          </div>
+          <div class="indicator-control">
+            <button id="indicators-toggle" class="toolbar-action" type="button" aria-expanded="false" aria-controls="indicator-popover" aria-pressed="true">
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2 16h4V9H2zm6 0h4V4H8zm6 0h4v-5h-4z" /></svg>
+              <span>Indicators</span>
+              <svg class="toolbar-chevron" viewBox="0 0 12 12" aria-hidden="true"><path d="m3 4.5 3 3 3-3" /></svg>
+            </button>
+            <div id="indicator-popover" class="indicator-popover" hidden>
+              <label class="toggle-control">
+                <input id="swing-toggle" type="checkbox" checked>
+                <span class="switch" aria-hidden="true"></span>
+                <span>Liquidity swings</span>
+              </label>
+              <label class="lookback-control" for="lookback">
+                <span>Pivot</span>
+                <select id="lookback">
+                  <option value="5">5</option>
+                  <option value="10">10</option>
+                  <option value="14" selected>14</option>
+                  <option value="20">20</option>
+                </select>
+              </label>
+            </div>
+          </div>
+          <button class="toolbar-action unavailable" type="button" aria-label="Alert, unavailable" title="Price alerts are not available yet" disabled>
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2a6 6 0 0 0-6 6c0 6-2 6-2 7h16c0-1-2-1-2-7a6 6 0 0 0-6-6zm-2 15a2 2 0 0 0 4 0" /></svg>
+            <span>Alert</span>
+          </button>
+          <button class="toolbar-action unavailable" type="button" aria-label="Replay, unavailable" title="Replay is not available yet" disabled>
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8 4 2 10l6 6M3 10h8a6 6 0 0 1 6 6" /></svg>
+            <span>Replay</span>
+          </button>
+        </div>
+
+        <span class="toolbar-divider" aria-hidden="true"></span>
+        <div class="toolbar-group">
+          <button class="toolbar-icon-button unavailable" type="button" aria-label="Undo, unavailable" title="Undo is not available yet" disabled><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8 5 3 9l5 4M4 9h7a6 6 0 0 1 6 6" /></svg></button>
+          <button class="toolbar-icon-button unavailable" type="button" aria-label="Redo, unavailable" title="Redo is not available yet" disabled><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m12 5 5 4-5 4m4-4H9a6 6 0 0 0-6 6" /></svg></button>
+        </div>
+
+        <span class="toolbar-divider" aria-hidden="true"></span>
+        <div class="toolbar-group toolbar-layout-group">
+          <button class="toolbar-action unavailable" type="button" aria-label="Unnamed layout, unavailable" title="Saved chart layouts are not available yet" disabled>
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2 3h16v13H2zm0 4h16M6 3v4m8-4v4" /></svg>
+            <span>Unnamed</span>
+            <svg class="toolbar-chevron" viewBox="0 0 12 12" aria-hidden="true"><path d="m3 4.5 3 3 3-3" /></svg>
+          </button>
+          <button class="toolbar-text-button unavailable" type="button" aria-label="Save layout, unavailable" title="Saving layouts is not available yet" disabled>Save</button>
+        </div>
+        <div class="toolbar-spacer"></div>
+        <div class="toolbar-group toolbar-end-group">
+          <button class="toolbar-icon-button unavailable" type="button" aria-label="Search, unavailable" title="Search is not available yet" disabled><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" /><path d="m13 13 4 4" /></svg></button>
+          <button class="toolbar-icon-button unavailable" type="button" aria-label="Settings, unavailable" title="Settings are not available yet" disabled><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m8 2-.5 2a6 6 0 0 0-1.6.9L4 4.2l-2 3.4 1.7 1.3a6 6 0 0 0 0 1.9L2 12.1l2 3.4 1.9-.7a6 6 0 0 0 1.6.9l.5 2h4l.5-2a6 6 0 0 0 1.6-.9l1.9.7 2-3.4-1.7-1.3a6 6 0 0 0 0-1.9L18 7.6l-2-3.4-1.9.7a6 6 0 0 0-1.6-.9L12 2z" /><circle cx="10" cy="9.5" r="2.5" /></svg></button>
+          <button class="toolbar-icon-button unavailable" type="button" aria-label="Fullscreen, unavailable" title="Fullscreen mode is not available yet" disabled><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 7V3h4m6 0h4v4m0 6v4h-4m-6 0H3v-4" /></svg></button>
+          <button class="toolbar-icon-button unavailable" type="button" aria-label="Snapshot, unavailable" title="Chart snapshots are not available yet" disabled><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2 6h4l1.5-2h5L14 6h4v10H2z" /><circle cx="10" cy="11" r="3" /></svg></button>
+          <button class="toolbar-icon-button unavailable" type="button" aria-label="More chart tools, unavailable" title="More chart tools are not available yet" disabled>＋</button>
+          <button class="toolbar-text-button unavailable" type="button" aria-label="Trade, unavailable" title="Trading is not available yet" disabled>Trade</button>
+          <button class="toolbar-upgrade unavailable" type="button" aria-label="Upgrade, unavailable" title="Upgrade is not available yet" disabled>Upgrade</button>
+        </div>
+      </section>
+
       <div class="controls-heading">
         <div class="controls-heading-bar">
           <span>Chart controls</span>
@@ -28,31 +135,9 @@
               </select>
             </div>
 
-            <div class="chart-type-control" role="group" aria-label="Chart type">
-              <span class="control-label">Style</span>
-              <div class="button-row">
-                <button id="candles-type" type="button" class="selected">Candles</button>
-                <button id="bars-type" type="button">Bars</button>
-              </div>
-            </div>
           </section>
 
           <section class="toolbar secondary-toolbar" aria-label="Indicators and drawing tools">
-            <label class="toggle-control">
-              <input id="swing-toggle" type="checkbox" checked>
-              <span class="switch" aria-hidden="true"></span>
-              <span>Liquidity swings</span>
-            </label>
-            <label class="lookback-control" for="lookback">
-              <span>Pivot</span>
-              <select id="lookback">
-                <option value="5">5</option>
-                <option value="10">10</option>
-                <option value="14" selected>14</option>
-                <option value="20">20</option>
-              </select>
-            </label>
-            <span class="toolbar-divider" aria-hidden="true"></span>
             <span class="control-label">Draw</span>
             <div class="button-row" role="group" aria-label="Drawing tools">
               <button type="button" data-tool="cursor" class="selected" aria-pressed="true">Cursor</button>
@@ -101,40 +186,8 @@
 
       <section class="chart-card" aria-label="Market chart">
         <div class="instrument-summary">
-          <div>
-            <h1 id="instrument-name" class="visually-hidden">NSE:NIFTY50-INDEX</h1>
-            <div class="symbol-control">
-              <label for="symbol">Symbol</label>
-              <div class="symbol-entry">
-                <input id="symbol" value="NSE:NIFTY50-INDEX" autocomplete="off" spellcheck="false" aria-describedby="symbol-help">
-                <button id="load-chart" class="icon-button" type="button" aria-label="Load symbol">↵</button>
-              </div>
-              <span id="symbol-help" class="visually-hidden">Enter a Fyers symbol, for example NSE:SBIN-EQ.</span>
-            </div>
-            <span id="chart-subtitle">Fyers market data · 5 minute</span>
-          </div>
-          <div class="range-control chart-interval-control">
-            <label for="intervals">Interval</label>
-            <select id="intervals">
-              <option value="1">1m</option>
-              <option value="5" selected>5m</option>
-              <option value="15">15m</option>
-              <option value="60">1h</option>
-              <option value="D">1D</option>
-            </select>
-          </div>
-          <button
-            id="nifty-options-toggle"
-            class="option-chain-toggle"
-            type="button"
-            aria-label="NIFTY Options"
-            title="NIFTY Options"
-            aria-expanded="false"
-          >
-            <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
-              <path d="M2.5 4.5h15v11h-15zM2.5 8h15M7.5 4.5v11m5-11v11" />
-            </svg>
-          </button>
+          <h1 id="instrument-name" class="visually-hidden">NSE:NIFTY50-INDEX</h1>
+          <span id="chart-subtitle">Fyers market data · 5 minute</span>
           <div class="ohlc-summary" aria-live="polite">
             <span>O <b id="open-value">—</b></span>
             <span>H <b id="high-value">—</b></span>
