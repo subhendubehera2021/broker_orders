@@ -168,15 +168,23 @@ main { width: min(100% - 32px, 1440px); margin: 12px auto 28px; }
 .toolbar-divider { width: 1px; height: 24px; background: var(--tv-border); }
 .draw-hint { color: var(--tv-blue); font-size: 11px; }
 
-.option-chain-panel {
+.option-chain-modal {
+  width: min(920px, calc(100vw - 32px));
+  max-width: none;
+  max-height: min(82vh, 820px);
+  padding: 0;
   overflow: hidden;
-  border: 1px solid var(--tv-border);
-  border-top: 0;
+  border: 1px solid var(--tv-border-strong);
+  border-radius: 8px;
   background: var(--tv-panel);
+  color: var(--tv-text);
+  box-shadow: 0 16px 48px rgb(0 0 0 / 55%);
 }
-.option-chain-panel[hidden] { display: none; }
+.option-chain-modal::backdrop { background: rgb(0 0 0 / 68%); }
+.option-chain-panel { display: flex; max-height: min(82vh, 820px); flex-direction: column; overflow: hidden; }
 .option-chain-header {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -198,7 +206,7 @@ main { width: min(100% - 32px, 1440px); margin: 12px auto 28px; }
 .option-chain-actions button:hover { border-color: var(--tv-blue); }
 .option-chain-actions #close-option-chain { width: 30px; padding: 0; font-size: 18px; }
 .option-chain-status { margin: 0; padding: 8px 14px; }
-.option-chain-table-wrap { max-height: 42vh; overflow: auto; }
+.option-chain-table-wrap { max-height: 55vh; overflow: auto; }
 .option-chain-table { width: 100%; border-collapse: collapse; font-size: 11px; text-align: right; }
 .option-chain-table th {
   position: sticky;

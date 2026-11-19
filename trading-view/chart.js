@@ -25,6 +25,7 @@ const rangeSelect = document.querySelector("#range");
 const chartControls = document.querySelector("#chart-controls");
 const chartControlsToggle = document.querySelector("#controls-toggle");
 const optionChainToggle = document.querySelector("#nifty-options-toggle");
+const optionChainModal = document.querySelector("#option-chain-modal");
 const optionChainPanel = document.querySelector("#option-chain-panel");
 const optionChainStatus = document.querySelector("#option-chain-status");
 const optionChainRows = document.querySelector("#option-chain-rows");
@@ -1059,6 +1060,28 @@ document.querySelector("#order-preview-form").addEventListener("submit", (event)
   orderPreviewNotice.textContent = `${orderPreviewSide} preview ready. No order was placed.`;
 });
 
+function closeOptionChainModal() {
+  if (optionChainModal.open) optionChainModal.close();
+}
+
+optionChainModal.addEventListener("close", () => {
+  optionChainToggle.setAttribute("aria-expanded", "false");
+  optionChainToggle.focus();
+});
+
+optionChainModal.addEventListener("click", (event) => {
+  if (event.target !== optionChainModal) return;
+  const bounds = optionChainModal.getBoundingClientRect();
+  if (
+    event.clientX < bounds.left ||
+    event.clientX > bounds.right ||
+    event.clientY < bounds.top ||
+    event.clientY > bounds.bottom
+  ) {
+    closeOptionChainModal();
+  }
+});
+
 document.addEventListener("pointerdown", (event) => {
   if (
     !priceActionMenu.hidden &&
@@ -1100,9 +1123,14 @@ chartControlsToggle.addEventListener("click", () => {
   chartControlsToggle.textContent = expanded ? "Hide controls" : "Show controls";
 });
 optionChainToggle.addEventListener("click", () => {
-  optionChainPanel.hidden = !optionChainPanel.hidden;
-  optionChainToggle.setAttribute("aria-expanded", String(!optionChainPanel.hidden));
-  if (!optionChainPanel.hidden) void loadNiftyOptionChain(optionExpirySelect.value);
+  if (optionChainModal.open) {
+    closeOptionChainModal();
+    return;
+  }
+  optionChainModal.showModal();
+  optionChainToggle.setAttribute("aria-expanded", "true");
+  document.querySelector("#close-option-chain").focus();
+  void loadNiftyOptionChain(optionExpirySelect.value);
 });
 document.querySelector("#refresh-option-chain").addEventListener("click", () => {
   void loadNiftyOptionChain(optionExpirySelect.value);
@@ -1111,15 +1139,13 @@ optionExpirySelect.addEventListener("change", () => {
   void loadNiftyOptionChain(optionExpirySelect.value);
 });
 document.querySelector("#close-option-chain").addEventListener("click", () => {
-  optionChainPanel.hidden = true;
-  optionChainToggle.setAttribute("aria-expanded", "false");
+  closeOptionChainModal();
 });
 optionChainRows.addEventListener("click", (event) => {
   const contract = event.target.closest("[data-option-symbol]");
   if (!contract) return;
   symbolInput.value = contract.dataset.optionSymbol;
-  optionChainPanel.hidden = true;
-  optionChainToggle.setAttribute("aria-expanded", "false");
+  closeOptionChainModal();
   void loadChart();
 });
 swingToggle.addEventListener("change", renderSwings);

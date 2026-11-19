@@ -74,37 +74,39 @@
         </div>
       </div>
 
-      <section id="option-chain-panel" class="option-chain-panel" aria-label="NIFTY option chain" hidden>
-        <div class="option-chain-header">
-          <div>
-            <h2>NIFTY Option Chain</h2>
-            <span id="option-chain-underlying">Call and put contracts</span>
+      <dialog id="option-chain-modal" class="option-chain-modal" aria-labelledby="option-chain-title">
+        <section id="option-chain-panel" class="option-chain-panel" aria-label="NIFTY option chain">
+          <div class="option-chain-header">
+            <div>
+              <h2 id="option-chain-title">NIFTY Option Chain</h2>
+              <span id="option-chain-underlying">Call and put contracts</span>
+            </div>
+            <div class="option-chain-actions">
+              <label for="option-expiry">Expiry</label>
+              <select id="option-expiry"></select>
+              <button id="refresh-option-chain" type="button">Refresh</button>
+              <button id="close-option-chain" type="button" aria-label="Close option chain">×</button>
+            </div>
           </div>
-          <div class="option-chain-actions">
-            <label for="option-expiry">Expiry</label>
-            <select id="option-expiry"></select>
-            <button id="refresh-option-chain" type="button">Refresh</button>
-            <button id="close-option-chain" type="button" aria-label="Close option chain">×</button>
+          <p id="option-chain-status" class="option-chain-status" role="status" aria-live="polite">
+            Click a contract to open its chart.
+          </p>
+          <div class="option-chain-table-wrap">
+            <table class="option-chain-table">
+              <thead>
+                <tr>
+                  <th scope="col">CALL OI</th>
+                  <th scope="col">CALL · LTP</th>
+                  <th scope="col">STRIKE</th>
+                  <th scope="col">PUT · LTP</th>
+                  <th scope="col">PUT OI</th>
+                </tr>
+              </thead>
+              <tbody id="option-chain-rows"></tbody>
+            </table>
           </div>
-        </div>
-        <p id="option-chain-status" class="option-chain-status" role="status" aria-live="polite">
-          Click a contract to open its chart.
-        </p>
-        <div class="option-chain-table-wrap">
-          <table class="option-chain-table">
-            <thead>
-              <tr>
-                <th scope="col">CALL OI</th>
-                <th scope="col">CALL · LTP</th>
-                <th scope="col">STRIKE</th>
-                <th scope="col">PUT · LTP</th>
-                <th scope="col">PUT OI</th>
-              </tr>
-            </thead>
-            <tbody id="option-chain-rows"></tbody>
-          </table>
-        </div>
-      </section>
+        </section>
+      </dialog>
 
       <section class="chart-card" aria-label="Market chart">
         <div class="instrument-summary">
