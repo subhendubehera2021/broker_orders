@@ -543,16 +543,12 @@ main {
 }
 .demo-position-close:hover,
 .demo-position-close:focus-visible { background: var(--demo-order-color); color: #fff; }
-.price-action-trigger {
-  position: absolute;
-  z-index: 10;
-  top: 0;
-  right: 72px;
+.price-action-trigger,
+.swing-high-action-trigger {
   display: grid;
   width: 22px;
   height: 22px;
   padding: 0;
-  transform: translate(50%, -50%);
   place-items: center;
   border: 1px solid var(--tv-border-strong);
   border-radius: 4px;
@@ -561,28 +557,27 @@ main {
   font-size: 17px;
   line-height: 1;
 }
-.price-action-trigger:hover,
-.price-action-trigger:focus-visible { border-color: var(--tv-blue); color: #fff; }
-.price-action-trigger[hidden],
-.swing-high-buy-button[hidden],
-.price-action-menu[hidden] { display: none; }
-.swing-high-buy-button {
+.price-action-trigger {
+  position: absolute;
+  z-index: 10;
+  top: 0;
+  right: 72px;
+  transform: translate(50%, -50%);
+}
+.swing-high-action-trigger {
   position: absolute;
   z-index: 9;
   top: 0;
   left: 0;
-  padding: 4px 8px;
-  transform: translateY(-50%);
-  border: 1px solid var(--tv-green);
-  border-radius: 4px;
-  background: var(--tv-green);
-  color: #fff;
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 16px;
+  transform: translate(-50%, -50%);
 }
-.swing-high-buy-button:hover,
-.swing-high-buy-button:focus-visible { border-color: #0bb596; background: #0bb596; }
+.price-action-trigger:hover,
+.price-action-trigger:focus-visible,
+.swing-high-action-trigger:hover,
+.swing-high-action-trigger:focus-visible { border-color: var(--tv-blue); color: #fff; }
+.price-action-trigger[hidden],
+.swing-high-action-trigger[hidden],
+.price-action-menu[hidden] { display: none; }
 .price-action-menu {
   position: absolute;
   z-index: 11;

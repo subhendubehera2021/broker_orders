@@ -45,7 +45,7 @@ const feedStatus = document.querySelector("#feed-status");
 const priceActionTrigger = document.querySelector("#price-action-trigger");
 const priceActionMenu = document.querySelector("#price-action-menu");
 const priceActionNotice = document.querySelector("#price-action-notice");
-const swingHighBuyButton = document.querySelector("#swing-high-buy-button");
+const swingHighActionTrigger = document.querySelector("#swing-high-action-trigger");
 const demoModeToggle = document.querySelector("#demo-mode-toggle");
 const demoTradingControls = document.querySelector("#demo-trading-controls");
 const demoBuyButton = document.querySelector("#demo-buy-button");
@@ -152,6 +152,7 @@ let loadSequence = 0;
 let optionChainSequence = 0;
 let crosshairPrice;
 let crosshairY;
+let priceActionMenuTrigger = priceActionTrigger;
 let orderPreviewSide = "Buy";
 let demoOrders = [];
 let nextDemoOrderId = 1;
@@ -471,10 +472,10 @@ function updatePriceActionPosition(y) {
   updatePriceActionLabels();
 }
 
-function updateLatestSwingBuyButton() {
+function updateLatestSwingActionTrigger() {
   const latestSwingHigh = activeSwings.filter((swing) => swing.side === "high").at(-1);
   if (!swingToggle.checked || !latestSwingHigh) {
-    swingHighBuyButton.hidden = true;
+    swingHighActionTrigger.hidden = true;
     return;
   }
 
@@ -489,24 +490,25 @@ function updateLatestSwingBuyButton() {
     y < 0 ||
     y > chartElement.clientHeight - 30
   ) {
-    swingHighBuyButton.hidden = true;
+    swingHighActionTrigger.hidden = true;
     return;
   }
 
-  const left = Math.max(0, Math.min(x + 4, plotRight - 50));
-  swingHighBuyButton.style.left = `${left}px`;
-  swingHighBuyButton.style.top = `${y}px`;
-  swingHighBuyButton.dataset.price = String(latestSwingHigh.level);
-  swingHighBuyButton.setAttribute(
+  const left = Math.max(11, Math.min(x, plotRight - 11));
+  swingHighActionTrigger.style.left = `${left}px`;
+  swingHighActionTrigger.style.top = `${y}px`;
+  swingHighActionTrigger.dataset.price = String(latestSwingHigh.level);
+  swingHighActionTrigger.dataset.y = String(y);
+  swingHighActionTrigger.setAttribute(
     "aria-label",
-    `Open buy preview at latest liquidity swing high ${formatActionPrice(latestSwingHigh.level)}`,
+    `Open price actions at latest liquidity swing high ${formatActionPrice(latestSwingHigh.level)}`,
   );
-  swingHighBuyButton.title = `Buy preview at ${formatActionPrice(latestSwingHigh.level)}`;
-  swingHighBuyButton.hidden = false;
+  swingHighActionTrigger.title = `Price actions at ${formatActionPrice(latestSwingHigh.level)}`;
+  swingHighActionTrigger.hidden = false;
 }
 
 function updateChartOverlays() {
-  updateLatestSwingBuyButton();
+  updateLatestSwingActionTrigger();
   updateDemoOrderPositions();
 }
 
@@ -516,9 +518,34 @@ window.addEventListener("resize", updateChartOverlays);
 function closePriceActionMenu() {
   priceActionMenu.hidden = true;
   priceActionTrigger.setAttribute("aria-expanded", "false");
+  swingHighActionTrigger.setAttribute("aria-expanded", "false");
 }
 
-function openOrderPreview(side, orderType, price = crosshairPrice, returnFocus = priceActionTrigger) {
+function togglePriceActionMenu(price, y, trigger) {
+  if (!Number.isFinite(price) || !Number.isFinite(y)) return;
+  if (!priceActionMenu.hidden) {
+    closePriceActionMenu();
+    return;
+  }
+
+  crosshairPrice = price;
+  crosshairY = y;
+  priceActionMenuTrigger = trigger;
+  priceActionMenu.hidden = false;
+  priceActionMenu.style.top = `${y}px`;
+  trigger.setAttribute("aria-expanded", "true");
+  updatePriceActionLabels();
+  priceActionNotice.textContent = demoModeToggle.checked
+    ? "Demo mode adds local orders only. Nothing is sent to Fyers."
+    : "Preview only. No orders or alerts will be sent.";
+}
+
+function openOrderPreview(
+  side,
+  orderType,
+  price = crosshairPrice,
+  returnFocus = priceActionMenuTrigger,
+) {
   orderPreviewSide = side;
   orderPreviewTitle.textContent = `${side} ${priceActionInstrumentName()}`;
   orderPreviewSymbol.value = priceActionInstrumentName();
@@ -750,7 +777,7 @@ function clearSwings() {
   swingSeries = [];
   swingMarkers = [];
   activeSwings = [];
-  swingHighBuyButton.hidden = true;
+  swingHighActionTrigger.hidden = true;
   candleSeries.setMarkers([]);
   barSeries.setMarkers([]);
 }
@@ -883,7 +910,7 @@ function renderSwings() {
     }
   }
   updateCurrentCandleVolumeMarker();
-  updateLatestSwingBuyButton();
+  updateLatestSwingActionTrigger();
 }
 
 function stopCountdownTimer() {
@@ -1328,7 +1355,7 @@ function applyLiveQuote(sequence, symbol, quote) {
   updateDemoPositionPnl(symbol, price);
   updateCurrentCandleVolumeMarker();
   updateLiveCountdown();
-  updateLatestSwingBuyButton();
+  updateLatestSwingActionTrigger();
   updateDemoOrderPositions();
   setConnectionStatus(socketConnected ? "Fyers live" : "Fyers polling", "connected");
   feedStatus.textContent = socketConnected
@@ -1404,25 +1431,16 @@ chart.subscribeCrosshairMove((param) => {
   }
 });
 
-swingHighBuyButton.addEventListener("click", () => {
-  const price = Number(swingHighBuyButton.dataset.price);
-  if (!Number.isFinite(price)) return;
-  if (demoModeToggle.checked) placeDemoOrder("buy", price, "Stop");
-  else openOrderPreview("Buy", "Stop", price, swingHighBuyButton);
+swingHighActionTrigger.addEventListener("click", () => {
+  togglePriceActionMenu(
+    Number(swingHighActionTrigger.dataset.price),
+    Number(swingHighActionTrigger.dataset.y),
+    swingHighActionTrigger,
+  );
 });
 
 priceActionTrigger.addEventListener("click", () => {
-  if (!Number.isFinite(crosshairPrice)) return;
-  const isOpening = priceActionMenu.hidden;
-  priceActionMenu.hidden = !isOpening;
-  priceActionTrigger.setAttribute("aria-expanded", String(isOpening));
-  if (isOpening) {
-    priceActionMenu.style.top = `${crosshairY}px`;
-    updatePriceActionLabels();
-    priceActionNotice.textContent = demoModeToggle.checked
-      ? "Demo mode adds local orders only. Nothing is sent to Fyers."
-      : "Preview only. No orders or alerts will be sent.";
-  }
+  togglePriceActionMenu(crosshairPrice, crosshairY, priceActionTrigger);
 });
 
 document.querySelectorAll("[data-price-action]").forEach((button) => {
@@ -1435,7 +1453,7 @@ document.querySelectorAll("[data-price-action]").forEach((button) => {
         if (demoModeToggle.checked) {
           placeDemoOrder("sell", crosshairPrice, "Limit");
           closePriceActionMenu();
-          priceActionTrigger.focus();
+          priceActionMenuTrigger.focus();
         } else {
           openOrderPreview("Sell", "Limit");
         }
@@ -1444,7 +1462,7 @@ document.querySelectorAll("[data-price-action]").forEach((button) => {
         if (demoModeToggle.checked) {
           placeDemoOrder("buy", crosshairPrice, "Stop");
           closePriceActionMenu();
-          priceActionTrigger.focus();
+          priceActionMenuTrigger.focus();
         } else {
           openOrderPreview("Buy", "Stop");
         }
@@ -1453,7 +1471,7 @@ document.querySelectorAll("[data-price-action]").forEach((button) => {
         if (demoModeToggle.checked) {
           placeDemoOrder("buy", crosshairPrice, "Limit");
           closePriceActionMenu();
-          priceActionTrigger.focus();
+          priceActionMenuTrigger.focus();
         } else {
           openOrderPreview("Buy", "Limit");
         }
@@ -1512,7 +1530,8 @@ document.addEventListener("pointerdown", (event) => {
   if (
     !priceActionMenu.hidden &&
     !priceActionMenu.contains(event.target) &&
-    event.target !== priceActionTrigger
+    event.target !== priceActionTrigger &&
+    event.target !== swingHighActionTrigger
   ) {
     closePriceActionMenu();
   }

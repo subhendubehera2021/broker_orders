@@ -544,6 +544,10 @@ test("serves the TradingView-inspired chart and local charting assets", async ()
   assert.match(page.body, /id="demo-trading-controls"/);
   assert.match(page.body, /id="demo-order-layer"/);
   assert.match(page.body, /id="demo-pnl-summary"/);
+  const swingHighAction = page.body.match(/<button\s+id="swing-high-action-trigger"[\s\S]*?<\/button>/)?.[0];
+  assert.ok(swingHighAction);
+  assert.match(swingHighAction, />\+</);
+  assert.doesNotMatch(swingHighAction, />Buy</);
   assert.doesNotMatch(page.body, /id="chart-controls"/);
   assert.doesNotMatch(page.body, /id="controls-toggle"/);
   assert.match(page.body, /NIFTY Options/);
