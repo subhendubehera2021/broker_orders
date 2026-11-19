@@ -1153,11 +1153,27 @@ optionExpirySelect.addEventListener("change", () => {
 document.querySelector("#close-option-chain").addEventListener("click", () => {
   closeOptionChainModal();
 });
+const positionIndicatorPopover = () => {
+  if (indicatorPopover.hidden) return;
+  const triggerBounds = indicatorsToggle.getBoundingClientRect();
+  const gap = 8;
+  const popoverWidth = indicatorPopover.offsetWidth;
+  const popoverHeight = indicatorPopover.offsetHeight;
+  const left = Math.max(gap, Math.min(triggerBounds.left, window.innerWidth - popoverWidth - gap));
+  const top = triggerBounds.bottom + popoverHeight + gap <= window.innerHeight
+    ? triggerBounds.bottom + gap
+    : Math.max(gap, triggerBounds.top - popoverHeight - gap);
+  indicatorPopover.style.left = `${left}px`;
+  indicatorPopover.style.top = `${top}px`;
+};
 indicatorsToggle.addEventListener("click", () => {
   const expanded = indicatorsToggle.getAttribute("aria-expanded") !== "true";
   indicatorPopover.hidden = !expanded;
   indicatorsToggle.setAttribute("aria-expanded", String(expanded));
+  positionIndicatorPopover();
 });
+window.addEventListener("resize", positionIndicatorPopover);
+window.addEventListener("scroll", positionIndicatorPopover, true);
 document.addEventListener("pointerdown", (event) => {
   if (
     indicatorPopover.hidden ||

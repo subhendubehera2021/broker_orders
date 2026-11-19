@@ -139,9 +139,9 @@ main { width: min(100% - 32px, 1440px); margin: 12px auto 28px; }
 .toolbar-spacer { min-width: 8px; flex: 1 1 auto; }
 .indicator-control { position: relative; flex: 0 0 auto; }
 .indicator-popover {
-  position: absolute;
+  position: fixed;
   z-index: 20;
-  top: calc(100% + 8px);
+  top: 0;
   left: 0;
   display: grid;
   min-width: 220px;
