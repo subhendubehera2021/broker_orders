@@ -3,10 +3,10 @@ import { formatIndiaAxisTick, formatIndiaTime } from "/trading-view/time-format.
 
 const { CrosshairMode, LineStyle, TickMarkType, createChart } = window.LightweightCharts;
 const chartColors = {
-  background: "#131722",
+  background: "#0f0f0f",
   text: "#787b86",
-  grid: "#1e222d",
-  border: "#2a2e39",
+  grid: "#1b1b1b",
+  border: "#2b2b2b",
   up: "#089981",
   down: "#f23645",
   upVolume: "rgba(8, 153, 129, 0.35)",
