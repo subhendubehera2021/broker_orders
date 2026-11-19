@@ -417,6 +417,15 @@ main {
   font-weight: 650;
   letter-spacing: .04em;
 }
+.demo-pnl-summary {
+  padding: 0 6px;
+  color: var(--tv-muted-light);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.demo-pnl-summary[data-pnl="positive"] { color: var(--tv-green); }
+.demo-pnl-summary[data-pnl="negative"] { color: var(--tv-red); }
 .demo-trading-controls button {
   min-width: 46px;
   height: 27px;
@@ -496,6 +505,29 @@ main {
 }
 .demo-order-cancel:hover,
 .demo-order-cancel:focus-visible { background: var(--demo-order-color); color: #fff; }
+.demo-position-summary,
+.demo-position-pnl,
+.demo-position-close {
+  display: inline-flex;
+  min-height: 26px;
+  align-items: center;
+  padding: 0 7px;
+  border: 1px solid var(--demo-order-color);
+  background: var(--tv-panel);
+  font-size: 10px;
+  white-space: nowrap;
+}
+.demo-position-summary { border-radius: 4px 0 0 4px; color: var(--tv-text); }
+.demo-position-pnl { color: var(--tv-text); font-variant-numeric: tabular-nums; }
+.demo-position-pnl[data-pnl="positive"] { color: var(--tv-green); }
+.demo-position-pnl[data-pnl="negative"] { color: var(--tv-red); }
+.demo-position-close {
+  border-radius: 0 4px 4px 0;
+  color: var(--tv-muted-light);
+  cursor: pointer;
+}
+.demo-position-close:hover,
+.demo-position-close:focus-visible { background: var(--demo-order-color); color: #fff; }
 .price-action-trigger {
   position: absolute;
   z-index: 10;

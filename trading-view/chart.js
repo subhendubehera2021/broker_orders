@@ -1,5 +1,11 @@
 import { findLiquiditySwings } from "/trading-view/liquidity-swings.js";
 import { formatIndiaAxisTick, formatIndiaTime } from "/trading-view/time-format.js";
+import {
+  calculateDemoPnl,
+  DEMO_LOT_SIZE,
+  demoFillPrice,
+  isDemoOrderTriggered,
+} from "/trading-view/demo-trading.js";
 
 const { CrosshairMode, LineStyle, TickMarkType, createChart } = window.LightweightCharts;
 const chartColors = {
@@ -46,6 +52,7 @@ const demoBuyButton = document.querySelector("#demo-buy-button");
 const demoSellButton = document.querySelector("#demo-sell-button");
 const demoOrderLayer = document.querySelector("#demo-order-layer");
 const demoTradeStatus = document.querySelector("#demo-trade-status");
+const demoPnlSummary = document.querySelector("#demo-pnl-summary");
 const priceAlertLabel = document.querySelector("#price-alert-label");
 const priceSellLabel = document.querySelector("#price-sell-label");
 const priceBuyLabel = document.querySelector("#price-buy-label");
@@ -149,6 +156,8 @@ let orderPreviewSide = "Buy";
 let demoOrders = [];
 let nextDemoOrderId = 1;
 let demoOrderSymbol;
+let demoPositions = [];
+let demoRealizedPnl = 0;
 
 function activePriceSeries() {
   return chartType === "candles" ? candleSeries : barSeries;
@@ -171,17 +180,31 @@ function updateDemoTradeButtons() {
   demoSellButton.disabled = !canPlaceOrder;
 }
 
+function formatDemoPnl(value) {
+  return `${value < 0 ? "-" : "+"}₹${formatActionPrice(Math.abs(value))}`;
+}
+
+function updateDemoPnlSummary(symbol = activeChartSymbol) {
+  const openPnl = demoPositions
+    .filter((position) => position.symbol === symbol)
+    .reduce((total, position) => total + position.pnl, 0);
+  demoPnlSummary.textContent =
+    `Open P/L ${formatDemoPnl(openPnl)} · Realized ${formatDemoPnl(demoRealizedPnl)}`;
+  demoPnlSummary.dataset.pnl = openPnl > 0 ? "positive" : openPnl < 0 ? "negative" : "flat";
+}
+
 function updateDemoOrderPositions() {
   const occupiedWidgetPositions = [];
-  for (const order of demoOrders) {
-    if (!candles.length) {
-      order.row.hidden = true;
+  for (const item of [...demoOrders, ...demoPositions]) {
+    if (!candles.length || item.symbol !== activeChartSymbol) {
+      item.row.hidden = true;
       continue;
     }
 
-    const y = activePriceSeries().priceToCoordinate(order.price);
+    const price = "entryPrice" in item ? item.entryPrice : item.price;
+    const y = activePriceSeries().priceToCoordinate(price);
     if (!Number.isFinite(y)) {
-      order.row.hidden = true;
+      item.row.hidden = true;
       continue;
     }
 
@@ -209,10 +232,10 @@ function updateDemoOrderPositions() {
         }
       }
     }
-    order.row.style.top = `${lineY}px`;
-    order.widget.style.setProperty("--demo-widget-offset", `${widgetOffset}px`);
+    item.row.style.top = `${lineY}px`;
+    item.widget.style.setProperty("--demo-widget-offset", `${widgetOffset}px`);
     occupiedWidgetPositions.push(lineY + widgetOffset);
-    order.row.hidden = false;
+    item.row.hidden = false;
   }
 }
 
@@ -231,8 +254,10 @@ function cancelDemoOrder(id) {
   if (index === -1) return;
   const [order] = demoOrders.splice(index, 1);
   order.row.remove();
+  if (!demoOrders.length) demoOrderSymbol = undefined;
+  updateDemoOrderPositions();
   demoTradeStatus.textContent =
-    `Demo ${order.side} ${order.type.toLowerCase()} order at ₹${formatActionPrice(order.price)} canceled. No live order was affected.`;
+    `Demo ${order.side} ${order.type.toLowerCase()} order for ${DEMO_LOT_SIZE} units at ₹${formatActionPrice(order.price)} canceled. No live order was affected.`;
 }
 
 function placeDemoOrder(side, requestedPrice = crosshairPrice, type = "Limit") {
@@ -304,21 +329,111 @@ function placeDemoOrder(side, requestedPrice = crosshairPrice, type = "Limit") {
   demoOrderLayer.append(row);
   updateDemoOrder(order);
   demoTradeStatus.textContent =
-    `Demo ${side} ${type.toLowerCase()} order added at ₹${formatActionPrice(order.price)}. Drag the price tag to adjust it or use × to cancel. No order was sent.`;
+    `Demo ${side} ${type.toLowerCase()} order for ${DEMO_LOT_SIZE} units (1 lot) added at ₹${formatActionPrice(order.price)}. Drag the price tag to adjust it or use × to cancel. No order was sent.`;
 }
 
 function updateDemoOrder(order) {
   const orderType = order.type.toLowerCase();
-  order.dragButton.textContent = `${order.side.toUpperCase()} ${orderType.toUpperCase()} · ₹${formatActionPrice(order.price)}`;
+  order.dragButton.textContent =
+    `${order.side.toUpperCase()} ${orderType.toUpperCase()} · ${DEMO_LOT_SIZE} qty · ₹${formatActionPrice(order.price)}`;
   order.dragButton.setAttribute(
     "aria-label",
-    `Move demo ${order.side} ${orderType} order at ₹${formatActionPrice(order.price)}. Use the up and down arrow keys to adjust the price.`,
+    `Move demo ${order.side} ${orderType} order for ${DEMO_LOT_SIZE} units at ₹${formatActionPrice(order.price)}. Use the up and down arrow keys to adjust the price.`,
   );
   order.cancelButton.setAttribute(
     "aria-label",
-    `Cancel demo ${order.side} ${orderType} order at ₹${formatActionPrice(order.price)}`,
+    `Cancel demo ${order.side} ${orderType} order for ${DEMO_LOT_SIZE} units at ₹${formatActionPrice(order.price)}`,
   );
   updateDemoOrderPositions();
+}
+
+function updateDemoPositionPnl(symbol, marketPrice) {
+  for (const position of demoPositions) {
+    if (position.symbol !== symbol) continue;
+    const pnl = calculateDemoPnl(position.side, position.entryPrice, marketPrice, position.quantity);
+    if (!Number.isFinite(pnl)) continue;
+    position.currentPrice = marketPrice;
+    position.pnl = pnl;
+    position.pnlLabel.textContent = `P/L ${formatDemoPnl(pnl)}`;
+    position.pnlLabel.dataset.pnl = pnl > 0 ? "positive" : pnl < 0 ? "negative" : "flat";
+    position.closeButton.setAttribute(
+      "aria-label",
+      `Close demo ${position.side} position at ₹${formatActionPrice(marketPrice)}. Current P/L ${formatDemoPnl(pnl)}.`,
+    );
+  }
+  updateDemoPnlSummary(symbol);
+  updateDemoOrderPositions();
+}
+
+function closeDemoPosition(id) {
+  const index = demoPositions.findIndex((position) => position.id === id);
+  if (index === -1) return;
+  const [position] = demoPositions.splice(index, 1);
+  demoRealizedPnl += position.pnl;
+  position.row.remove();
+  updateDemoPnlSummary();
+  updateDemoOrderPositions();
+  demoTradeStatus.textContent =
+    `Demo ${position.side} position closed. Realized P/L ${formatDemoPnl(position.pnl)} for ${position.quantity} units.`;
+}
+
+function createDemoPosition(order, marketPrice) {
+  const entryPrice = demoFillPrice(order, marketPrice);
+  if (!Number.isFinite(entryPrice)) return;
+  const position = {
+    id: order.id,
+    symbol: order.symbol,
+    side: order.side,
+    entryPrice,
+    currentPrice: marketPrice,
+    quantity: DEMO_LOT_SIZE,
+    pnl: calculateDemoPnl(order.side, entryPrice, marketPrice, DEMO_LOT_SIZE) ?? 0,
+  };
+  const row = document.createElement("div");
+  row.className = "demo-order-row";
+  row.dataset.side = position.side;
+  const widget = document.createElement("div");
+  widget.className = "demo-order-widget";
+  const summary = document.createElement("span");
+  summary.className = "demo-position-summary";
+  summary.textContent =
+    `${position.side.toUpperCase()} ${position.quantity} qty (1 lot) · Entry ₹${formatActionPrice(entryPrice)}`;
+  const pnlLabel = document.createElement("span");
+  pnlLabel.className = "demo-position-pnl";
+  const closeButton = document.createElement("button");
+  closeButton.className = "demo-position-close";
+  closeButton.type = "button";
+  closeButton.textContent = "Close";
+  closeButton.addEventListener("click", () => closeDemoPosition(position.id));
+  widget.append(summary, pnlLabel, closeButton);
+  row.append(widget);
+  position.row = row;
+  position.widget = widget;
+  position.pnlLabel = pnlLabel;
+  position.closeButton = closeButton;
+  demoPositions.push(position);
+  demoOrderLayer.append(row);
+  updateDemoPositionPnl(order.symbol, marketPrice);
+}
+
+function processDemoOrderFills(symbol, marketPrice) {
+  if (!demoModeToggle.checked) return;
+  const remaining = [];
+  const filled = [];
+  for (const order of demoOrders) {
+    if (order.symbol === symbol && isDemoOrderTriggered(order, marketPrice)) filled.push(order);
+    else remaining.push(order);
+  }
+  demoOrders = remaining;
+  if (!demoOrders.length) demoOrderSymbol = undefined;
+  for (const order of filled) {
+    order.row.remove();
+    createDemoPosition(order, marketPrice);
+  }
+  if (filled.length) {
+    demoTradeStatus.textContent =
+      `${filled.length} demo order${filled.length === 1 ? "" : "s"} filled at the market quote. Open P/L is now displayed on the chart.`;
+  }
 }
 
 function priceActionInstrumentName() {
@@ -986,6 +1101,7 @@ async function loadChart() {
   stopQuotePolling();
   stopCountdownTimer();
   activeChartSymbol = undefined;
+  updateDemoOrderPositions();
   const sequence = ++loadSequence;
   const symbol = symbolInput.value.trim().toUpperCase();
   if (demoOrders.length && symbol !== demoOrderSymbol) {
@@ -1059,6 +1175,7 @@ async function loadChart() {
     lastQuoteVolume = undefined;
     activeChartSymbol = symbol;
     updateDemoTradeButtons();
+    updateDemoPositionPnl(symbol, candles.at(-1).close);
     let subscriptionError;
     try {
       syncLiveSocketSubscription(symbol);
@@ -1205,6 +1322,8 @@ function applyLiveQuote(sequence, symbol, quote) {
   });
   document.querySelector("#last-price").textContent = formatPrice(price);
   updateOhlc(next);
+  processDemoOrderFills(symbol, price);
+  updateDemoPositionPnl(symbol, price);
   updateCurrentCandleVolumeMarker();
   updateLiveCountdown();
   updateLatestSwingBuyButton();
@@ -1561,7 +1680,7 @@ demoModeToggle.addEventListener("change", () => {
   demoTradingControls.hidden = !demoModeToggle.checked;
   if (demoModeToggle.checked) {
     demoTradeStatus.textContent = candles.length
-      ? "Demo mode on. Toolbar Buy and Sell add limit orders; the chart plus menu and swing-high Buy add orders at their displayed types. Drag tags or use × to cancel. Nothing is sent to Fyers."
+      ? "Demo mode on. Orders fill on a price touch or a quote gap of at least ₹0.10. Each fill is 65 units (1 lot); P/L updates on quotes. Nothing is sent to Fyers."
       : "Demo mode on. Load chart data before adding demo orders.";
   } else {
     const canceled = clearDemoOrders();

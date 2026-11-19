@@ -1,11 +1,12 @@
 import { readFile } from "node:fs/promises";
 
-const [page, clientScript, styles, swingLogic, timeFormat, chartLibrary, chartLicense] = await Promise.all([
+const [page, clientScript, styles, swingLogic, timeFormat, demoTrading, chartLibrary, chartLicense] = await Promise.all([
   readFile(new URL("../trading-view/index.html", import.meta.url), "utf8"),
   readFile(new URL("../trading-view/chart.js", import.meta.url), "utf8"),
   readFile(new URL("../trading-view/styles.css", import.meta.url), "utf8"),
   readFile(new URL("../trading-view/liquidity-swings.js", import.meta.url), "utf8"),
   readFile(new URL("../trading-view/time-format.js", import.meta.url), "utf8"),
+  readFile(new URL("../trading-view/demo-trading.js", import.meta.url), "utf8"),
   readFile(
     new URL("../node_modules/lightweight-charts/dist/lightweight-charts.standalone.production.js", import.meta.url),
     "utf8",
@@ -25,6 +26,9 @@ export function registerTradingViewRoutes(app) {
   });
   app.get("/trading-view/time-format.js", async (_request, reply) => {
     return reply.type("application/javascript; charset=utf-8").send(timeFormat);
+  });
+  app.get("/trading-view/demo-trading.js", async (_request, reply) => {
+    return reply.type("application/javascript; charset=utf-8").send(demoTrading);
   });
   app.get("/trading-view/styles.css", async (_request, reply) => {
     return reply.type("text/css; charset=utf-8").send(styles);
