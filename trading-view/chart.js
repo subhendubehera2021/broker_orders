@@ -232,18 +232,19 @@ function cancelDemoOrder(id) {
   const [order] = demoOrders.splice(index, 1);
   order.row.remove();
   demoTradeStatus.textContent =
-    `Demo ${order.side} limit order at ₹${formatActionPrice(order.price)} canceled. No live order was affected.`;
+    `Demo ${order.side} ${order.type.toLowerCase()} order at ₹${formatActionPrice(order.price)} canceled. No live order was affected.`;
 }
 
-function placeDemoOrder(side) {
+function placeDemoOrder(side, requestedPrice = crosshairPrice, type = "Limit") {
   const symbol = symbolInput.value.trim().toUpperCase();
   if (!demoModeToggle.checked || !candles.length || !symbol || symbol !== activeChartSymbol) return;
-  const price = Number.isFinite(crosshairPrice) ? crosshairPrice : candles.at(-1)?.close;
+  const price = Number.isFinite(requestedPrice) ? requestedPrice : candles.at(-1)?.close;
   if (!Number.isFinite(price) || price <= 0) return;
 
   const order = {
     id: nextDemoOrderId++,
     side,
+    type,
     price: Math.round(price * 100) / 100,
     symbol,
   };
@@ -303,18 +304,19 @@ function placeDemoOrder(side) {
   demoOrderLayer.append(row);
   updateDemoOrder(order);
   demoTradeStatus.textContent =
-    `Demo ${side} limit order added at ₹${formatActionPrice(order.price)}. Drag the price tag to adjust it or use × to cancel. No order was sent.`;
+    `Demo ${side} ${type.toLowerCase()} order added at ₹${formatActionPrice(order.price)}. Drag the price tag to adjust it or use × to cancel. No order was sent.`;
 }
 
 function updateDemoOrder(order) {
-  order.dragButton.textContent = `${order.side.toUpperCase()} LIMIT · ₹${formatActionPrice(order.price)}`;
+  const orderType = order.type.toLowerCase();
+  order.dragButton.textContent = `${order.side.toUpperCase()} ${orderType.toUpperCase()} · ₹${formatActionPrice(order.price)}`;
   order.dragButton.setAttribute(
     "aria-label",
-    `Move demo ${order.side} limit order at ₹${formatActionPrice(order.price)}. Use the up and down arrow keys to adjust the price.`,
+    `Move demo ${order.side} ${orderType} order at ₹${formatActionPrice(order.price)}. Use the up and down arrow keys to adjust the price.`,
   );
   order.cancelButton.setAttribute(
     "aria-label",
-    `Cancel demo ${order.side} limit order at ₹${formatActionPrice(order.price)}`,
+    `Cancel demo ${order.side} ${orderType} order at ₹${formatActionPrice(order.price)}`,
   );
   updateDemoOrderPositions();
 }
@@ -329,9 +331,15 @@ function updatePriceActionLabels() {
   const instrument = priceActionInstrumentName();
   const price = formatActionPrice(crosshairPrice);
   priceAlertLabel.textContent = `Add alert on ${instrument} at ${price}`;
-  priceSellLabel.textContent = `Sell 1 ${instrument} @ ${price} limit`;
-  priceBuyLabel.textContent = `Buy 1 ${instrument} @ ${price} stop`;
-  priceOrderLabel.textContent = `Add order on ${instrument} at ${price}...`;
+  priceSellLabel.textContent = demoModeToggle.checked
+    ? `Place demo sell limit at ${price}`
+    : `Sell 1 ${instrument} @ ${price} limit`;
+  priceBuyLabel.textContent = demoModeToggle.checked
+    ? `Place demo buy stop at ${price}`
+    : `Buy 1 ${instrument} @ ${price} stop`;
+  priceOrderLabel.textContent = demoModeToggle.checked
+    ? `Place demo buy limit at ${price}`
+    : `Add order on ${instrument} at ${price}...`;
   priceLineLabel.textContent = `Draw horizontal line at ${price}`;
 }
 
@@ -1278,7 +1286,8 @@ chart.subscribeCrosshairMove((param) => {
 swingHighBuyButton.addEventListener("click", () => {
   const price = Number(swingHighBuyButton.dataset.price);
   if (!Number.isFinite(price)) return;
-  openOrderPreview("Buy", "Stop", price, swingHighBuyButton);
+  if (demoModeToggle.checked) placeDemoOrder("buy", price, "Stop");
+  else openOrderPreview("Buy", "Stop", price, swingHighBuyButton);
 });
 
 priceActionTrigger.addEventListener("click", () => {
@@ -1289,7 +1298,9 @@ priceActionTrigger.addEventListener("click", () => {
   if (isOpening) {
     priceActionMenu.style.top = `${crosshairY}px`;
     updatePriceActionLabels();
-    priceActionNotice.textContent = "Demo only. No orders or alerts will be sent.";
+    priceActionNotice.textContent = demoModeToggle.checked
+      ? "Demo mode adds local orders only. Nothing is sent to Fyers."
+      : "Preview only. No orders or alerts will be sent.";
   }
 });
 
@@ -1300,13 +1311,31 @@ document.querySelectorAll("[data-price-action]").forEach((button) => {
         priceActionNotice.textContent = "Alert preview only. No alert will be created.";
         break;
       case "sell":
-        openOrderPreview("Sell", "Limit");
+        if (demoModeToggle.checked) {
+          placeDemoOrder("sell", crosshairPrice, "Limit");
+          closePriceActionMenu();
+          priceActionTrigger.focus();
+        } else {
+          openOrderPreview("Sell", "Limit");
+        }
         break;
       case "buy":
-        openOrderPreview("Buy", "Stop");
+        if (demoModeToggle.checked) {
+          placeDemoOrder("buy", crosshairPrice, "Stop");
+          closePriceActionMenu();
+          priceActionTrigger.focus();
+        } else {
+          openOrderPreview("Buy", "Stop");
+        }
         break;
       case "order":
-        openOrderPreview("Buy", "Limit");
+        if (demoModeToggle.checked) {
+          placeDemoOrder("buy", crosshairPrice, "Limit");
+          closePriceActionMenu();
+          priceActionTrigger.focus();
+        } else {
+          openOrderPreview("Buy", "Limit");
+        }
         break;
       case "horizontal": {
         const series = activePriceSeries();
@@ -1532,13 +1561,19 @@ demoModeToggle.addEventListener("change", () => {
   demoTradingControls.hidden = !demoModeToggle.checked;
   if (demoModeToggle.checked) {
     demoTradeStatus.textContent = candles.length
-      ? "Demo mode on. Buy or Sell adds a simulated limit order at the cursor price, or the latest price. Drag its price tag to adjust; use × to cancel. No orders are sent."
+      ? "Demo mode on. Toolbar Buy and Sell add limit orders; the chart plus menu and swing-high Buy add orders at their displayed types. Drag tags or use × to cancel. Nothing is sent to Fyers."
       : "Demo mode on. Load chart data before adding demo orders.";
   } else {
     const canceled = clearDemoOrders();
     demoTradeStatus.textContent = canceled
       ? `Demo mode off. Canceled ${canceled} pending demo order${canceled === 1 ? "" : "s"}. No live orders were affected.`
       : "Demo mode off. No live orders were affected.";
+  }
+  updatePriceActionLabels();
+  if (!priceActionMenu.hidden) {
+    priceActionNotice.textContent = demoModeToggle.checked
+      ? "Demo mode adds local orders only. Nothing is sent to Fyers."
+      : "Preview only. No orders or alerts will be sent.";
   }
   updateDemoTradeButtons();
 });
