@@ -136,6 +136,12 @@
           <button class="toolbar-icon-button unavailable" type="button" aria-label="Fullscreen, unavailable" title="Fullscreen mode is not available yet" disabled><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 7V3h4m6 0h4v4m0 6v4h-4m-6 0H3v-4" /></svg></button>
           <button class="toolbar-icon-button unavailable" type="button" aria-label="Snapshot, unavailable" title="Chart snapshots are not available yet" disabled><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2 6h4l1.5-2h5L14 6h4v10H2z" /><circle cx="10" cy="11" r="3" /></svg></button>
           <button class="toolbar-icon-button unavailable" type="button" aria-label="More chart tools, unavailable" title="More chart tools are not available yet" disabled>＋</button>
+          <label class="toggle-control demo-mode-toggle" title="Practice mode only; no trades are submitted">
+            <input id="demo-mode-toggle" type="checkbox" aria-label="Demo trading mode" aria-describedby="demo-mode-help">
+            <span class="switch" aria-hidden="true"></span>
+            <span>Demo</span>
+          </label>
+          <span id="demo-mode-help" class="visually-hidden">This switch does not submit trades. Demo behavior will be configured separately.</span>
           <button class="toolbar-text-button unavailable" type="button" aria-label="Trade, unavailable" title="Trading is not available yet" disabled>Trade</button>
           <button class="toolbar-upgrade unavailable" type="button" aria-label="Upgrade, unavailable" title="Upgrade is not available yet" disabled>Upgrade</button>
         </div>

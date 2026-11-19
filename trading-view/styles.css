@@ -259,6 +259,21 @@ main {
 .toggle-control input:checked + .switch { background: var(--tv-blue); }
 .toggle-control input:checked + .switch::after { transform: translateX(12px); background: #fff; }
 .toggle-control input:focus-visible + .switch { outline: 2px solid var(--tv-blue); outline-offset: 2px; }
+.demo-mode-toggle {
+  min-height: 32px;
+  gap: 5px;
+  padding: 0 8px;
+  border: 1px solid var(--tv-border-strong);
+  border-radius: 18px;
+  background: var(--tv-panel);
+  color: var(--tv-muted-light);
+  font-size: 11px;
+}
+.demo-mode-toggle:hover { border-color: var(--tv-muted); color: var(--tv-text); }
+.demo-mode-toggle .switch { width: 24px; height: 14px; }
+.demo-mode-toggle .switch::after { width: 10px; height: 10px; }
+.demo-mode-toggle input:checked + .switch { background: var(--tv-green); }
+.demo-mode-toggle input:checked + .switch::after { transform: translateX(10px); }
 .lookback-control { display: flex; align-items: center; gap: 6px; color: var(--tv-muted-light); font-size: 11px; }
 .lookback-control select { height: 28px; padding: 0 7px; }
 .toolbar-divider { width: 1px; height: 24px; background: var(--tv-border); }

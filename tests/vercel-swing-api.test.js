@@ -520,6 +520,9 @@ test("serves the TradingView-inspired chart and local charting assets", async ()
   assert.match(toolbar, /id="range"/);
   assert.match(toolbar, /id="draw-popover"/);
   assert.match(toolbar, /data-tool="horizontal"/);
+  const demoModeToggle = toolbar.match(/<input id="demo-mode-toggle"[^>]*>/)?.[0];
+  assert.ok(demoModeToggle);
+  assert.doesNotMatch(demoModeToggle, /\bchecked\b/);
   assert.doesNotMatch(page.body, /id="chart-controls"/);
   assert.doesNotMatch(page.body, /id="controls-toggle"/);
   assert.match(page.body, /NIFTY Options/);
