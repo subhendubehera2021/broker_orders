@@ -36,6 +36,7 @@ const feedStatus = document.querySelector("#feed-status");
 const priceActionTrigger = document.querySelector("#price-action-trigger");
 const priceActionMenu = document.querySelector("#price-action-menu");
 const priceActionNotice = document.querySelector("#price-action-notice");
+const swingHighBuyButton = document.querySelector("#swing-high-buy-button");
 const priceAlertLabel = document.querySelector("#price-alert-label");
 const priceSellLabel = document.querySelector("#price-sell-label");
 const priceBuyLabel = document.querySelector("#price-buy-label");
@@ -174,21 +175,59 @@ function updatePriceActionPosition(y) {
   updatePriceActionLabels();
 }
 
+function updateLatestSwingBuyButton() {
+  const latestSwingHigh = activeSwings.filter((swing) => swing.side === "high").at(-1);
+  if (!swingToggle.checked || !latestSwingHigh) {
+    swingHighBuyButton.hidden = true;
+    return;
+  }
+
+  const x = chart.timeScale().timeToCoordinate(latestSwingHigh.endTime);
+  const y = activePriceSeries().priceToCoordinate(latestSwingHigh.level);
+  const plotRight = chartElement.clientWidth - 80;
+  if (
+    !Number.isFinite(x) ||
+    !Number.isFinite(y) ||
+    x < 0 ||
+    x > plotRight ||
+    y < 0 ||
+    y > chartElement.clientHeight - 30
+  ) {
+    swingHighBuyButton.hidden = true;
+    return;
+  }
+
+  const left = Math.max(0, Math.min(x + 4, plotRight - 50));
+  swingHighBuyButton.style.left = `${left}px`;
+  swingHighBuyButton.style.top = `${y}px`;
+  swingHighBuyButton.dataset.price = String(latestSwingHigh.level);
+  swingHighBuyButton.setAttribute(
+    "aria-label",
+    `Open buy preview at latest liquidity swing high ${formatActionPrice(latestSwingHigh.level)}`,
+  );
+  swingHighBuyButton.title = `Buy preview at ${formatActionPrice(latestSwingHigh.level)}`;
+  swingHighBuyButton.hidden = false;
+}
+
+chart.timeScale().subscribeVisibleLogicalRangeChange(updateLatestSwingBuyButton);
+window.addEventListener("resize", updateLatestSwingBuyButton);
+
 function closePriceActionMenu() {
   priceActionMenu.hidden = true;
   priceActionTrigger.setAttribute("aria-expanded", "false");
 }
 
-function openOrderPreview(side, orderType) {
+function openOrderPreview(side, orderType, price = crosshairPrice, returnFocus = priceActionTrigger) {
   orderPreviewSide = side;
   orderPreviewTitle.textContent = `${side} ${priceActionInstrumentName()}`;
   orderPreviewSymbol.value = priceActionInstrumentName();
   orderPreviewQuantity.value = "1";
   orderPreviewType.value = orderType;
-  orderPreviewPrice.value = formatActionPrice(crosshairPrice);
+  orderPreviewPrice.value = formatActionPrice(price);
   orderPreviewNotice.textContent = "Preview only. No order will be placed.";
   orderPreviewSubmit.textContent = `Preview ${side}`;
   orderPreviewSubmit.className = side.toLowerCase();
+  orderPreviewModal.dataset.returnFocus = returnFocus.id;
   closePriceActionMenu();
   orderPreviewModal.hidden = false;
   orderPreviewQuantity.focus();
@@ -196,7 +235,7 @@ function openOrderPreview(side, orderType) {
 
 function closeOrderPreview() {
   orderPreviewModal.hidden = true;
-  priceActionTrigger.focus();
+  document.querySelector(`#${orderPreviewModal.dataset.returnFocus || "price-action-trigger"}`).focus();
 }
 
 document.addEventListener("pointerout", (event) => {
@@ -410,6 +449,7 @@ function clearSwings() {
   swingSeries = [];
   swingMarkers = [];
   activeSwings = [];
+  swingHighBuyButton.hidden = true;
   candleSeries.setMarkers([]);
   barSeries.setMarkers([]);
 }
@@ -542,6 +582,7 @@ function renderSwings() {
     }
   }
   updateCurrentCandleVolumeMarker();
+  updateLatestSwingBuyButton();
 }
 
 function clearLiveTimer() {
@@ -883,6 +924,7 @@ function applyLiveQuote(sequence, symbol, quote) {
   updateOhlc(next);
   updateCurrentCandleVolumeMarker();
   updateLiveCountdown();
+  updateLatestSwingBuyButton();
   setConnectionStatus(socketConnected ? "Fyers live" : "Fyers polling", "connected");
   feedStatus.textContent = socketConnected
     ? `Fyers WebSocket update ${formatIndiaTime(quote.time)} IST`
@@ -954,6 +996,12 @@ chart.subscribeCrosshairMove((param) => {
       volume: volume?.value ?? 0,
     });
   }
+});
+
+swingHighBuyButton.addEventListener("click", () => {
+  const price = Number(swingHighBuyButton.dataset.price);
+  if (!Number.isFinite(price)) return;
+  openOrderPreview("Buy", "Stop", price, swingHighBuyButton);
 });
 
 priceActionTrigger.addEventListener("click", () => {
