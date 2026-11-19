@@ -141,6 +141,28 @@
 
         <div id="chart-wrap" class="chart-wrap">
           <div id="chart" role="img" aria-label="Interactive price and volume chart"></div>
+          <button
+            id="price-action-trigger"
+            class="price-action-trigger"
+            type="button"
+            aria-label="Open demo Buy/Sell actions at this price"
+            aria-expanded="false"
+            aria-controls="price-action-menu"
+            hidden
+          >+</button>
+          <div id="price-action-menu" class="price-action-menu" role="group" aria-label="Demo Buy/Sell actions" hidden>
+            <div class="price-action-heading">
+              <strong id="price-action-price">Price —</strong>
+              <button id="price-action-close" class="price-action-close" type="button" aria-label="Close Buy/Sell actions">×</button>
+            </div>
+            <div class="price-action-buttons">
+              <button class="price-action-side buy" type="button" data-demo-side="Buy">Buy</button>
+              <button class="price-action-side sell" type="button" data-demo-side="Sell">Sell</button>
+            </div>
+            <p id="price-action-notice" class="price-action-notice" role="status" aria-live="polite">
+              Demo only. No orders will be placed.
+            </p>
+          </div>
           <div id="live-countdown" class="live-countdown" aria-label="Time remaining in current candle" hidden></div>
           <div id="chart-message" class="chart-message" role="status">
             <span class="spinner" aria-hidden="true"></span>

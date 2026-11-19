@@ -16,6 +16,7 @@ const chartColors = {
   liquidityZoneBottom: "rgba(8, 153, 129, 0.08)",
 };
 const chartElement = document.querySelector("#chart");
+const chartWrap = document.querySelector("#chart-wrap");
 const chartMessage = document.querySelector("#chart-message");
 const chartMessageText = document.querySelector("#chart-message-text");
 const chartLogin = document.querySelector("#chart-login");
@@ -32,6 +33,10 @@ const swingToggle = document.querySelector("#swing-toggle");
 const lookbackSelect = document.querySelector("#lookback");
 const connectionStatus = document.querySelector("#connection-status");
 const feedStatus = document.querySelector("#feed-status");
+const priceActionTrigger = document.querySelector("#price-action-trigger");
+const priceActionMenu = document.querySelector("#price-action-menu");
+const priceActionPrice = document.querySelector("#price-action-price");
+const priceActionNotice = document.querySelector("#price-action-notice");
 const intervalSeconds = { "1": 60, "5": 300, "15": 900, "60": 3600, D: 86400 };
 const axisTickKinds = {
   [TickMarkType.Year]: "year",
@@ -111,10 +116,37 @@ let socketConnected = false;
 let lastQuoteVolume;
 let loadSequence = 0;
 let optionChainSequence = 0;
+let crosshairPrice;
+let crosshairY;
 
 function activePriceSeries() {
   return chartType === "candles" ? candleSeries : barSeries;
 }
+
+function updatePriceActionPosition(y) {
+  if (!candles.length || !Number.isFinite(y) || y < 0 || y > chartElement.clientHeight - 30) return;
+  const price = activePriceSeries().coordinateToPrice(y);
+  if (!Number.isFinite(price)) return;
+
+  crosshairPrice = price;
+  crosshairY = y;
+  priceActionTrigger.style.top = `${y}px`;
+  priceActionTrigger.hidden = false;
+  if (!priceActionMenu.hidden) {
+    priceActionMenu.style.top = `${y}px`;
+    priceActionPrice.textContent = `Price ${formatPrice(price)}`;
+  }
+}
+
+document.addEventListener("pointerout", (event) => {
+  if (
+    priceActionMenu.hidden &&
+    chartWrap.contains(event.target) &&
+    !chartWrap.contains(event.relatedTarget)
+  ) {
+    priceActionTrigger.hidden = true;
+  }
+});
 
 function showMessage(message, { loading = false, login = false } = {}) {
   chartMessage.hidden = false;
@@ -626,6 +658,11 @@ async function loadChart() {
 
   clearDrawings();
   clearSwings();
+  priceActionMenu.hidden = true;
+  priceActionTrigger.hidden = true;
+  priceActionTrigger.setAttribute("aria-expanded", "false");
+  crosshairPrice = undefined;
+  crosshairY = undefined;
   candleSeries.setData([]);
   barSeries.setData([]);
   volumeSeries.setData([]);
@@ -846,6 +883,7 @@ chart.subscribeClick((param) => {
 });
 
 chart.subscribeCrosshairMove((param) => {
+  if (param.point) updatePriceActionPosition(param.point.y);
   if (!param.time) return;
   const bar = param.seriesData.get(activePriceSeries());
   const volume = param.seriesData.get(volumeSeries);
@@ -854,6 +892,49 @@ chart.subscribeCrosshairMove((param) => {
       ...bar,
       volume: volume?.value ?? 0,
     });
+  }
+});
+
+priceActionTrigger.addEventListener("click", () => {
+  if (!Number.isFinite(crosshairPrice)) return;
+  const isOpening = priceActionMenu.hidden;
+  priceActionMenu.hidden = !isOpening;
+  priceActionTrigger.setAttribute("aria-expanded", String(isOpening));
+  if (isOpening) {
+    priceActionMenu.style.top = `${crosshairY}px`;
+    priceActionPrice.textContent = `Price ${formatPrice(crosshairPrice)}`;
+    priceActionNotice.textContent = "Demo only. No orders will be placed.";
+  }
+});
+
+document.querySelector("#price-action-close").addEventListener("click", () => {
+  priceActionMenu.hidden = true;
+  priceActionTrigger.setAttribute("aria-expanded", "false");
+});
+
+document.querySelectorAll("[data-demo-side]").forEach((button) => {
+  button.addEventListener("click", () => {
+    const side = button.dataset.demoSide;
+    priceActionNotice.textContent = `${side} at ${formatPrice(crosshairPrice)} is a demo action. No order was placed.`;
+  });
+});
+
+document.addEventListener("pointerdown", (event) => {
+  if (
+    !priceActionMenu.hidden &&
+    !priceActionMenu.contains(event.target) &&
+    event.target !== priceActionTrigger
+  ) {
+    priceActionMenu.hidden = true;
+    priceActionTrigger.setAttribute("aria-expanded", "false");
+  }
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !priceActionMenu.hidden) {
+    priceActionMenu.hidden = true;
+    priceActionTrigger.setAttribute("aria-expanded", "false");
+    priceActionTrigger.focus();
   }
 });
 
