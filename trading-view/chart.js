@@ -66,7 +66,7 @@ const orderPreviewType = document.querySelector("#order-preview-type");
 const orderPreviewPrice = document.querySelector("#order-preview-price");
 const orderPreviewNotice = document.querySelector("#order-preview-notice");
 const orderPreviewSubmit = document.querySelector("#submit-order-preview");
-const intervalSeconds = { "1": 60, "3": 180, "5": 300, "15": 900, "60": 3600, D: 86400 };
+const intervalSeconds = { "1": 60, "2": 120, "3": 180, "5": 300, "15": 900, "60": 3600, D: 86400 };
 const axisTickKinds = {
   [TickMarkType.Year]: "year",
   [TickMarkType.Month]: "month",

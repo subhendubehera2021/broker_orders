@@ -524,10 +524,12 @@ test("serves the TradingView-inspired chart and local charting assets", async ()
   assert.ok(historyOptions);
   assert.ok(pivotOptions);
   assert.match(intervalOptions, /<option value="1" selected>1m<\/option>/);
+  assert.match(intervalOptions, /<option value="2">2m<\/option>/);
   assert.match(intervalOptions, /<option value="3">3m<\/option>/);
   assert.match(historyOptions, /<option value="1" selected>1 day<\/option>/);
   assert.match(pivotOptions, /<option value="5" selected>5<\/option>/);
   assert.match(client.body, /let currentResolution = "1"/);
+  assert.match(client.body, /"2": 120/);
   assert.match(client.body, /"3": 180/);
   assert.match(client.body, /resolution === "1" \? "" : "s"/);
   assert.equal(styles.statusCode, 200);
