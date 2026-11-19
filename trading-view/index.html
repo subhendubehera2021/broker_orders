@@ -37,10 +37,6 @@
               </select>
             </div>
 
-            <button id="nifty-options-toggle" class="option-chain-toggle" type="button" aria-expanded="false">
-              NIFTY Options
-            </button>
-
             <div class="chart-type-control" role="group" aria-label="Chart type">
               <span class="control-label">Style</span>
               <div class="button-row">
@@ -126,6 +122,18 @@
               <option value="D">1D</option>
             </select>
           </div>
+          <button
+            id="nifty-options-toggle"
+            class="option-chain-toggle"
+            type="button"
+            aria-label="NIFTY Options"
+            title="NIFTY Options"
+            aria-expanded="false"
+          >
+            <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+              <path d="M2.5 4.5h15v11h-15zM2.5 8h15M7.5 4.5v11m5-11v11" />
+            </svg>
+          </button>
           <div class="ohlc-summary" aria-live="polite">
             <span>O <b id="open-value">—</b></span>
             <span>H <b id="high-value">—</b></span>

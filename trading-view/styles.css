@@ -122,19 +122,22 @@ main { width: min(100% - 32px, 1440px); margin: 12px auto 28px; }
 }
 
 .option-chain-toggle {
-  min-height: 32px;
-  padding: 0 11px;
+  display: grid;
+  width: 34px;
+  height: 32px;
+  padding: 0;
+  place-items: center;
   border: 1px solid var(--tv-border-strong);
   border-radius: 4px;
   background: var(--tv-panel-raised);
   color: var(--tv-text);
-  font-size: 11px;
-  white-space: nowrap;
 }
+.option-chain-toggle svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.5; }
 .option-chain-toggle:hover, .option-chain-toggle[aria-expanded="true"] {
   border-color: var(--tv-blue);
   color: var(--tv-blue);
 }
+.option-chain-toggle:focus-visible { outline: 2px solid var(--tv-blue); outline-offset: 2px; }
 
 .control-group, .chart-type-control, .range-control, .lookback-control { flex: 0 0 auto; }
 .control-label { margin: 0 0 5px; }
