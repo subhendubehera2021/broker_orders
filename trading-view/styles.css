@@ -47,7 +47,8 @@ button { cursor: pointer; }
 
 main {
   display: flex;
-  width: min(100% - 32px, 1440px);
+  width: min(calc(100% - 32px), 1440px);
+  overflow-x: clip;
   height: calc(100vh - 40px);
   height: calc(100dvh - 40px);
   flex-direction: column;
@@ -73,6 +74,7 @@ main {
 .chart-toolbar::-webkit-scrollbar-track { background: transparent; }
 .chart-toolbar::-webkit-scrollbar-thumb { border-radius: 4px; background: var(--tv-border-strong); }
 .toolbar-group { display: flex; flex: 0 0 auto; align-items: center; gap: 4px; }
+.toolbar-end-group { position: relative; }
 .toolbar-symbol-group { gap: 5px; }
 .toolbar-market-badge {
   display: grid;
@@ -267,7 +269,7 @@ main {
 .button-row button:hover { background: var(--tv-panel-raised); color: var(--tv-text); }
 .button-row button.selected { border-color: var(--tv-blue); background: var(--tv-panel-raised); color: var(--tv-text); }
 .range-control select { height: 32px; padding: 0 24px 0 8px; }
-.toggle-control { display: inline-flex; align-items: center; gap: 8px; color: var(--tv-text); font-size: 12px; white-space: nowrap; cursor: pointer; }
+.toggle-control { position: relative; display: inline-flex; align-items: center; gap: 8px; color: var(--tv-text); font-size: 12px; white-space: nowrap; cursor: pointer; }
 .toggle-control input { position: absolute; width: 1px; height: 1px; opacity: 0; }
 .switch { position: relative; width: 28px; height: 16px; border-radius: 9px; background: var(--tv-border-strong); transition: background .15s ease; }
 .switch::after { position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: var(--tv-muted-light); content: ""; transition: transform .15s ease; }
@@ -704,12 +706,17 @@ main {
 
 @media (max-width: 620px) {
   main {
-    width: min(100% - 16px, 1440px);
+    width: min(calc(100% - 16px), 1440px);
     height: calc(100vh - 37px);
     height: calc(100dvh - 37px);
     margin-top: 9px;
   }
-  .chart-toolbar { gap: 5px; }
+  .chart-toolbar {
+    flex-wrap: nowrap;
+    gap: 5px;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
   .chart-toolbar .symbol-control { width: 184px; }
   .button-row { flex-wrap: wrap; }
   .option-chain-header { align-items: flex-start; flex-direction: column; }
@@ -717,10 +724,11 @@ main {
   .option-chain-table th, .option-chain-table td { padding-left: 6px; padding-right: 6px; }
   .option-contract { min-width: 78px; }
   .instrument-summary { top: 6px; right: 74px; left: 6px; flex-wrap: wrap; gap: 4px 8px; padding: 0; }
-  .ohlc-summary { order: 0; flex: 1 1 100%; flex-wrap: wrap; gap: 3px 8px; font-size: 10px; }
+  .ohlc-summary { min-width: 0; order: 0; flex: 1 1 100%; flex-wrap: wrap; gap: 3px 8px; font-size: 10px; }
   .last-price { order: 1; margin-left: 0; gap: 5px; }
   .last-price strong { font-size: 13px; }
-  .demo-trading-controls { top: 68px; left: 6px; }
+  .demo-trading-controls { top: 68px; left: 6px; max-width: calc(100% - 12px); flex-wrap: wrap; }
+  .demo-pnl-summary { white-space: normal; }
   .demo-order-widget { right: 76px; }
   .chart-footer { align-items: flex-start; flex-direction: column; justify-content: center; gap: 5px; padding: 8px 11px; }
   .feed-status-group { align-items: flex-start; flex-direction: column; gap: 3px; }
