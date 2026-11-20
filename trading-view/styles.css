@@ -662,8 +662,8 @@ main {
 .live-countdown {
   position: absolute;
   z-index: 1;
-  right: 0;
-  width: 72px;
+  right: 8px;
+  width: 70px;
   height: 20px;
   display: flex;
   align-items: center;
