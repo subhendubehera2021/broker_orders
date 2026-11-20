@@ -67,12 +67,9 @@ main {
   border: 1px solid var(--tv-border);
   border-radius: 6px;
   background: var(--tv-panel);
-  scrollbar-width: thin;
-  scrollbar-color: var(--tv-border-strong) transparent;
+  scrollbar-width: none;
 }
-.chart-toolbar::-webkit-scrollbar { height: 4px; }
-.chart-toolbar::-webkit-scrollbar-track { background: transparent; }
-.chart-toolbar::-webkit-scrollbar-thumb { border-radius: 4px; background: var(--tv-border-strong); }
+.chart-toolbar::-webkit-scrollbar { display: none; }
 .toolbar-group { display: flex; flex: 0 0 auto; align-items: center; gap: 4px; }
 .toolbar-end-group { position: relative; }
 .toolbar-symbol-group { gap: 5px; }
