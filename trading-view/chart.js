@@ -67,6 +67,8 @@ const orderPreviewPrice = document.querySelector("#order-preview-price");
 const orderPreviewNotice = document.querySelector("#order-preview-notice");
 const orderPreviewSubmit = document.querySelector("#submit-order-preview");
 const intervalSeconds = { "1": 60, "2": 120, "3": 180, "5": 300, "15": 900, "60": 3600, D: 86400 };
+const livePriceLabelHeight = 20;
+const liveCountdownHeight = 20;
 const axisTickKinds = {
   [TickMarkType.Year]: "year",
   [TickMarkType.Month]: "month",
@@ -515,6 +517,7 @@ function updateLatestSwingActionTrigger() {
 function updateChartOverlays() {
   updateLatestSwingActionTrigger();
   updateDemoOrderPositions();
+  updateLiveCountdown();
 }
 
 let chartOverlayUpdateFrame;
@@ -532,6 +535,7 @@ function scheduleSwingActionUpdate() {
   swingActionUpdateFrame = requestAnimationFrame(() => {
     swingActionUpdateFrame = undefined;
     updateLatestSwingActionTrigger();
+    updateLiveCountdown();
   });
 }
 
@@ -989,7 +993,13 @@ function updateLiveCountdown() {
 
   const remaining = Math.ceil(latest.time + duration - now);
   const y = activePriceSeries().priceToCoordinate(latest.close);
-  if (remaining <= 0 || !Number.isFinite(y) || y < 0 || y + 28 > chartElement.clientHeight) {
+  const top = y + livePriceLabelHeight / 2;
+  if (
+    remaining <= 0 ||
+    !Number.isFinite(y) ||
+    y < livePriceLabelHeight / 2 ||
+    top + liveCountdownHeight > chartElement.clientHeight
+  ) {
     timer.hidden = true;
     return;
   }
@@ -998,10 +1008,10 @@ function updateLiveCountdown() {
   const seconds = (remaining % 60).toString().padStart(2, "0");
   const text = `${minutes}:${seconds}`;
   const direction = latest.close >= latest.open ? "up" : "down";
-  const top = `${Math.round(y + 10)}px`;
+  const topStyle = `${Math.round(top)}px`;
   if (timer.textContent !== text) timer.textContent = text;
   if (timer.dataset.direction !== direction) timer.dataset.direction = direction;
-  if (timer.style.top !== top) timer.style.top = top;
+  if (timer.style.top !== topStyle) timer.style.top = topStyle;
   if (timer.hidden) timer.hidden = false;
 }
 
@@ -1382,6 +1392,7 @@ function applyLiveQuote(sequence, symbol, quote) {
   processDemoOrderFills(symbol, price);
   updateDemoPositionPnl(symbol, price);
   updateCurrentCandleVolumeMarker();
+  updateLiveCountdown();
   updateLatestSwingActionTrigger();
   updateDemoOrderPositions();
   setConnectionStatus(socketConnected ? "Fyers live" : "Fyers polling", "connected");

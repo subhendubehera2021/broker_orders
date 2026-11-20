@@ -664,6 +664,10 @@ main {
   z-index: 1;
   right: 0;
   width: 72px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding: 2px 3px;
   border-radius: 0 0 3px 3px;
   color: #fff;
