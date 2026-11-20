@@ -690,15 +690,18 @@ function addOptionChainCell(row, value, className = "") {
   return cell;
 }
 
-function createOptionContractButton(option) {
+function createOptionContractButton(option, isHighestVolume) {
   const button = document.createElement("button");
   button.type = "button";
   button.className = `option-contract ${option.optionType === "PE" ? "put" : "call"}`;
+  if (isHighestVolume) button.classList.add("highest-volume");
   button.dataset.optionSymbol = option.symbol;
   button.title = option.symbol;
+  const sideLabel = option.optionType === "CE" ? "call" : "put";
   button.setAttribute(
     "aria-label",
-    `Open ${option.optionType === "CE" ? "call" : "put"} ${formatPrice(option.strikePrice)} chart`,
+    `Open ${sideLabel} ${formatPrice(option.strikePrice)} chart, volume ${formatVolume(option.volume)}` +
+      (isHighestVolume ? `, highest volume on the ${sideLabel} side` : ""),
   );
 
   const price = document.createElement("strong");
@@ -707,7 +710,16 @@ function createOptionContractButton(option) {
   change.textContent = Number.isFinite(option.ltpChangePercent)
     ? `${option.ltpChangePercent > 0 ? "+" : ""}${option.ltpChangePercent.toFixed(2)}%`
     : option.symbol;
-  button.append(price, change);
+  const volume = document.createElement("small");
+  volume.className = "option-volume";
+  volume.textContent = `Vol ${formatVolume(option.volume)}`;
+  button.append(price, change, volume);
+  if (isHighestVolume) {
+    const indicator = document.createElement("span");
+    indicator.className = "option-volume-indicator";
+    indicator.textContent = "Max vol";
+    button.append(indicator);
+  }
   return button;
 }
 
@@ -743,6 +755,15 @@ function renderOptionChain(optionChain, requestedTimestamp) {
     row[option.optionType] = option;
     strikes.set(option.strikePrice, row);
   }
+  const highestVolumeBySide = { CE: 0, PE: 0 };
+  for (const contracts of strikes.values()) {
+    for (const side of ["CE", "PE"]) {
+      const volume = contracts[side]?.volume;
+      if (Number.isFinite(volume)) {
+        highestVolumeBySide[side] = Math.max(highestVolumeBySide[side], volume);
+      }
+    }
+  }
   const orderedStrikes = [...strikes.entries()].sort(([left], [right]) => left - right);
   const atmStrike = Number.isFinite(optionChain.underlyingPrice) && orderedStrikes.length
     ? orderedStrikes.reduce((closest, [strike]) =>
@@ -759,12 +780,22 @@ function renderOptionChain(optionChain, requestedTimestamp) {
 
     addOptionChainCell(row, formatVolume(contracts.CE?.openInterest), "call-oi");
     const callCell = document.createElement("td");
-    if (contracts.CE) callCell.append(createOptionContractButton(contracts.CE));
+    if (contracts.CE) {
+      callCell.append(createOptionContractButton(
+        contracts.CE,
+        contracts.CE.volume > 0 && contracts.CE.volume === highestVolumeBySide.CE,
+      ));
+    }
     else callCell.textContent = "—";
     row.append(callCell);
     addOptionChainCell(row, formatPrice(strike), "option-strike");
     const putCell = document.createElement("td");
-    if (contracts.PE) putCell.append(createOptionContractButton(contracts.PE));
+    if (contracts.PE) {
+      putCell.append(createOptionContractButton(
+        contracts.PE,
+        contracts.PE.volume > 0 && contracts.PE.volume === highestVolumeBySide.PE,
+      ));
+    }
     else putCell.textContent = "—";
     row.append(putCell);
     addOptionChainCell(row, formatVolume(contracts.PE?.openInterest), "put-oi");

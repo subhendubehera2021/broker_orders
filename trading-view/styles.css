@@ -365,8 +365,11 @@ main {
 }
 .option-contract.put { color: var(--tv-red); }
 .option-contract:hover { border-color: currentColor; background: var(--tv-panel); }
+.option-contract.highest-volume { border-color: var(--tv-blue); background: rgb(41 98 255 / 10%); }
 .option-contract strong { font-size: 11px; font-weight: 600; }
 .option-contract small { margin-top: 2px; color: var(--tv-muted); font-size: 10px; }
+.option-contract .option-volume { color: var(--tv-muted-light); }
+.option-volume-indicator { margin-top: 3px; padding: 2px 4px; border-radius: 3px; background: rgb(41 98 255 / 18%); color: #8eaaff; font-size: 8px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
 .option-contract:disabled { color: var(--tv-muted); cursor: default; }
 .option-strike { font-weight: 600; }
 .atm .option-strike { color: var(--tv-blue); }
