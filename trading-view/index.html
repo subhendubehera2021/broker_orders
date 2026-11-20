@@ -32,32 +32,102 @@
               <path d="M2.5 4.5h15v11h-15zM2.5 8h15M7.5 4.5v11m5-11v11" />
             </svg>
           </button>
-          <button class="toolbar-icon-button unavailable" type="button" aria-label="Add item, unavailable" title="Add item is unavailable" disabled>+</button>
         </div>
 
         <span class="toolbar-divider" aria-hidden="true"></span>
 
         <div class="toolbar-group">
-          <div class="range-control chart-interval-control header-interval-control">
-            <label class="visually-hidden" for="intervals">Interval</label>
-            <select id="intervals">
-              <option value="1" selected>1m</option>
-              <option value="2">2m</option>
-              <option value="3">3m</option>
-              <option value="5">5m</option>
-              <option value="15">15m</option>
-              <option value="60">1h</option>
-              <option value="D">1D</option>
-            </select>
+          <div class="header-interval-control" id="interval-selector">
+            <div class="interval-quick-options" role="group" aria-label="Quick intervals">
+              <button class="interval-quick-button selected" type="button" data-interval="1" aria-pressed="true">1m</button>
+              <button class="interval-quick-button" type="button" data-interval="2" aria-pressed="false">2m</button>
+              <button class="interval-quick-button" type="button" data-interval="3" aria-pressed="false">3m</button>
+              <button class="interval-quick-button" type="button" data-interval="5" aria-pressed="false">5m</button>
+              <button class="interval-quick-button" type="button" data-interval="15" aria-pressed="false">15m</button>
+            </div>
+            <button
+              id="interval-picker-toggle"
+              class="interval-picker-toggle"
+              type="button"
+              aria-label="More intervals"
+              title="Select interval"
+              aria-haspopup="true"
+              aria-expanded="false"
+              aria-controls="interval-popover"
+            >
+              <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+                <path d="m5 7.5 5 5 5-5" />
+              </svg>
+            </button>
+            <div id="interval-popover" class="toolbar-popover interval-popover" hidden>
+              <button
+                class="interval-custom-button"
+                type="button"
+                disabled
+                title="Custom intervals are not supported by the current market data provider"
+                aria-label="Add custom interval, unavailable"
+              >
+                <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+                  <path d="M10 3v14M3 10h14" />
+                </svg>
+                <span>Add custom interval...</span>
+              </button>
+              <details class="interval-group">
+                <summary>Ticks</summary>
+              </details>
+              <details class="interval-group" open>
+                <summary>Seconds</summary>
+                <div class="interval-option-list" role="group" aria-label="Second intervals, unavailable">
+                  <button class="interval-option unavailable" type="button" disabled title="Seconds are not supported by the current market data provider">1 second</button>
+                  <button class="interval-option unavailable" type="button" disabled title="Seconds are not supported by the current market data provider">5 seconds</button>
+                  <button class="interval-option unavailable" type="button" disabled title="Seconds are not supported by the current market data provider">10 seconds</button>
+                  <button class="interval-option unavailable" type="button" disabled title="Seconds are not supported by the current market data provider">15 seconds</button>
+                  <button class="interval-option unavailable" type="button" disabled title="Seconds are not supported by the current market data provider">30 seconds</button>
+                  <button class="interval-option unavailable" type="button" disabled title="Seconds are not supported by the current market data provider">45 seconds</button>
+                </div>
+              </details>
+              <details class="interval-group" open>
+                <summary>Minutes</summary>
+                <div class="interval-option-list" role="group" aria-label="Minute intervals">
+                  <button class="interval-option" type="button" data-interval="1" aria-pressed="true">1 minute</button>
+                  <button class="interval-option" type="button" data-interval="2" aria-pressed="false">2 minutes</button>
+                  <button class="interval-option" type="button" data-interval="3" aria-pressed="false">3 minutes</button>
+                  <button class="interval-option" type="button" data-interval="5" aria-pressed="false">5 minutes</button>
+                  <button class="interval-option" type="button" data-interval="10" aria-pressed="false">10 minutes</button>
+                  <button class="interval-option" type="button" data-interval="15" aria-pressed="false">15 minutes</button>
+                  <button class="interval-option" type="button" data-interval="20" aria-pressed="false">20 minutes</button>
+                  <button class="interval-option" type="button" data-interval="30" aria-pressed="false">30 minutes</button>
+                  <button class="interval-option" type="button" data-interval="45" aria-pressed="false">45 minutes</button>
+                </div>
+              </details>
+              <details class="interval-group">
+                <summary>Hours</summary>
+                <div class="interval-option-list" role="group" aria-label="Hour intervals">
+                  <button class="interval-option" type="button" data-interval="60" aria-pressed="false">1 hour</button>
+                  <button class="interval-option" type="button" data-interval="120" aria-pressed="false">2 hours</button>
+                  <button class="interval-option" type="button" data-interval="180" aria-pressed="false">3 hours</button>
+                  <button class="interval-option" type="button" data-interval="240" aria-pressed="false">4 hours</button>
+                </div>
+              </details>
+              <details class="interval-group">
+                <summary>Days</summary>
+                <div class="interval-option-list" role="group" aria-label="Day intervals">
+                  <button class="interval-option" type="button" data-interval="D" aria-pressed="false">1 day</button>
+                </div>
+              </details>
+              <details class="interval-group">
+                <summary>Ranges</summary>
+              </details>
+            </div>
           </div>
+          <span class="toolbar-divider" aria-hidden="true"></span>
           <div class="range-control header-history-control">
-            <label for="range">History</label>
-            <select id="range" aria-label="History range" title="History range">
-              <option value="1" selected>1 day</option>
-              <option value="5">5 days</option>
-              <option value="30">1 month</option>
-              <option value="90">3 months</option>
-            </select>
+            <div id="range" class="interval-quick-options history-quick-options" role="group" aria-label="History range">
+              <button class="interval-quick-button selected" type="button" data-history-range="1" aria-label="1 day" title="1 day" aria-pressed="true">1D</button>
+              <button class="interval-quick-button" type="button" data-history-range="5" aria-label="5 days" title="5 days" aria-pressed="false">5D</button>
+              <button class="interval-quick-button" type="button" data-history-range="30" aria-label="1 month" title="1 month" aria-pressed="false">1M</button>
+              <button class="interval-quick-button" type="button" data-history-range="90" aria-label="3 months" title="3 months" aria-pressed="false">3M</button>
+            </div>
           </div>
           <div class="header-chart-type" role="group" aria-label="Chart type">
             <button id="candles-type" class="selected" type="button" aria-label="Candles" aria-pressed="true" title="Candles">
@@ -102,6 +172,22 @@
               <span id="draw-hint" class="draw-hint" aria-live="polite"></span>
             </div>
           </div>
+        </div>
+
+        <div class="toolbar-group toolbar-end-group">
+          <button id="fullscreen-toggle" class="toolbar-icon-button" type="button" aria-label="Fullscreen" aria-pressed="false" title="Enter fullscreen"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 7V3h4m6 0h4v4m0 6v4h-4m-6 0H3v-4" /></svg></button>
+          <label class="toggle-control demo-mode-toggle" title="Practice mode only; no trades are submitted">
+            <input id="demo-mode-toggle" type="checkbox" aria-label="Demo trading mode" aria-describedby="demo-mode-help">
+            <span class="switch" aria-hidden="true"></span>
+            <span>Demo</span>
+          </label>
+          <span id="demo-mode-help" class="visually-hidden">Demo orders stay in this browser and are never sent to Fyers.</span>
+          <span id="fullscreen-status" class="visually-hidden" role="status" aria-live="polite"></span>
+        </div>
+        <div class="toolbar-spacer"></div>
+        <span class="toolbar-divider" aria-hidden="true"></span>
+        <div class="toolbar-group toolbar-disabled-group" role="group" aria-label="Unavailable tools">
+          <button class="toolbar-icon-button unavailable" type="button" aria-label="Add item, unavailable" title="Add item is unavailable" disabled>+</button>
           <button class="toolbar-action unavailable" type="button" aria-label="Alert, unavailable" title="Price alerts are not available yet" disabled>
             <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2a6 6 0 0 0-6 6c0 6-2 6-2 7h16c0-1-2-1-2-7a6 6 0 0 0-6-6zm-2 15a2 2 0 0 0 4 0" /></svg>
             <span>Alert</span>
@@ -110,37 +196,18 @@
             <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8 4 2 10l6 6M3 10h8a6 6 0 0 1 6 6" /></svg>
             <span>Replay</span>
           </button>
-        </div>
-
-        <span class="toolbar-divider" aria-hidden="true"></span>
-        <div class="toolbar-group">
           <button class="toolbar-icon-button unavailable" type="button" aria-label="Undo, unavailable" title="Undo is not available yet" disabled><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8 5 3 9l5 4M4 9h7a6 6 0 0 1 6 6" /></svg></button>
           <button class="toolbar-icon-button unavailable" type="button" aria-label="Redo, unavailable" title="Redo is not available yet" disabled><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m12 5 5 4-5 4m4-4H9a6 6 0 0 0-6 6" /></svg></button>
-        </div>
-
-        <span class="toolbar-divider" aria-hidden="true"></span>
-        <div class="toolbar-group toolbar-layout-group">
           <button class="toolbar-action unavailable" type="button" aria-label="Unnamed layout, unavailable" title="Saved chart layouts are not available yet" disabled>
             <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2 3h16v13H2zm0 4h16M6 3v4m8-4v4" /></svg>
             <span>Unnamed</span>
             <svg class="toolbar-chevron" viewBox="0 0 12 12" aria-hidden="true"><path d="m3 4.5 3 3 3-3" /></svg>
           </button>
           <button class="toolbar-text-button unavailable" type="button" aria-label="Save layout, unavailable" title="Saving layouts is not available yet" disabled>Save</button>
-        </div>
-        <div class="toolbar-spacer"></div>
-        <div class="toolbar-group toolbar-end-group">
           <button class="toolbar-icon-button unavailable" type="button" aria-label="Search, unavailable" title="Search is not available yet" disabled><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" /><path d="m13 13 4 4" /></svg></button>
           <button class="toolbar-icon-button unavailable" type="button" aria-label="Settings, unavailable" title="Settings are not available yet" disabled><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m8 2-.5 2a6 6 0 0 0-1.6.9L4 4.2l-2 3.4 1.7 1.3a6 6 0 0 0 0 1.9L2 12.1l2 3.4 1.9-.7a6 6 0 0 0 1.6.9l.5 2h4l.5-2a6 6 0 0 0 1.6-.9l1.9.7 2-3.4-1.7-1.3a6 6 0 0 0 0-1.9L18 7.6l-2-3.4-1.9.7a6 6 0 0 0-1.6-.9L12 2z" /><circle cx="10" cy="9.5" r="2.5" /></svg></button>
-          <button id="fullscreen-toggle" class="toolbar-icon-button" type="button" aria-label="Fullscreen" aria-pressed="false" title="Enter fullscreen"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 7V3h4m6 0h4v4m0 6v4h-4m-6 0H3v-4" /></svg></button>
           <button class="toolbar-icon-button unavailable" type="button" aria-label="Snapshot, unavailable" title="Chart snapshots are not available yet" disabled><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2 6h4l1.5-2h5L14 6h4v10H2z" /><circle cx="10" cy="11" r="3" /></svg></button>
           <button class="toolbar-icon-button unavailable" type="button" aria-label="More chart tools, unavailable" title="More chart tools are not available yet" disabled>＋</button>
-          <label class="toggle-control demo-mode-toggle" title="Practice mode only; no trades are submitted">
-            <input id="demo-mode-toggle" type="checkbox" aria-label="Demo trading mode" aria-describedby="demo-mode-help">
-            <span class="switch" aria-hidden="true"></span>
-            <span>Demo</span>
-          </label>
-          <span id="demo-mode-help" class="visually-hidden">Demo orders stay in this browser and are never sent to Fyers.</span>
-          <span id="fullscreen-status" class="visually-hidden" role="status" aria-live="polite"></span>
           <button class="toolbar-text-button unavailable" type="button" aria-label="Trade, unavailable" title="Trading is not available yet" disabled>Trade</button>
           <button class="toolbar-upgrade unavailable" type="button" aria-label="Upgrade, unavailable" title="Upgrade is not available yet" disabled>Upgrade</button>
         </div>

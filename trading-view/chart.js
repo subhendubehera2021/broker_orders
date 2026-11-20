@@ -28,7 +28,10 @@ const chartMessage = document.querySelector("#chart-message");
 const chartMessageText = document.querySelector("#chart-message-text");
 const chartLogin = document.querySelector("#chart-login");
 const symbolInput = document.querySelector("#symbol");
-const rangeSelect = document.querySelector("#range");
+const rangeSelector = document.querySelector("#range");
+const intervalSelector = document.querySelector("#interval-selector");
+const intervalPickerToggle = document.querySelector("#interval-picker-toggle");
+const intervalPopover = document.querySelector("#interval-popover");
 const optionChainToggle = document.querySelector("#nifty-options-toggle");
 const optionChainModal = document.querySelector("#option-chain-modal");
 const optionChainPanel = document.querySelector("#option-chain-panel");
@@ -70,7 +73,22 @@ const orderPreviewType = document.querySelector("#order-preview-type");
 const orderPreviewPrice = document.querySelector("#order-preview-price");
 const orderPreviewNotice = document.querySelector("#order-preview-notice");
 const orderPreviewSubmit = document.querySelector("#submit-order-preview");
-const intervalSeconds = { "1": 60, "2": 120, "3": 180, "5": 300, "15": 900, "60": 3600, D: 86400 };
+const intervalSeconds = {
+  "1": 60,
+  "2": 120,
+  "3": 180,
+  "5": 300,
+  "10": 600,
+  "15": 900,
+  "20": 1200,
+  "30": 1800,
+  "45": 2700,
+  "60": 3600,
+  "120": 7200,
+  "180": 10800,
+  "240": 14400,
+  D: 86400,
+};
 const livePriceLabelHeight = 18;
 const liveCountdownHeight = 20;
 const axisTickKinds = {
@@ -136,6 +154,7 @@ chart.priceScale("").applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
 
 let candles = [];
 let currentResolution = "1";
+let currentHistoryRange = "1";
 let chartType = "candles";
 let activeTool = "cursor";
 let pendingTrendStart;
@@ -1246,7 +1265,7 @@ async function loadChart() {
   updateDemoOrderPositions();
   showMessage("Loading historical candles…", { loading: true });
   setConnectionStatus("Loading", "");
-  const { from, to } = rangeDates(rangeSelect.value);
+  const { from, to } = rangeDates(currentHistoryRange);
   const query = new URLSearchParams({
     symbol,
     resolution: currentResolution,
@@ -1339,7 +1358,10 @@ async function loadChart() {
 }
 
 function intervalLabel(resolution) {
-  if (resolution === "60") return "1 hour";
+  if (Number(resolution) >= 60) {
+    const hours = Number(resolution) / 60;
+    return `${hours} hour${hours === 1 ? "" : "s"}`;
+  }
   if (resolution === "D") return "1 day";
   return `${resolution} minute${resolution === "1" ? "" : "s"}`;
 }
@@ -1626,6 +1648,12 @@ document.addEventListener("pointerdown", (event) => {
 
 document.addEventListener("keydown", (event) => {
   if (event.key !== "Escape") return;
+  if (!intervalPopover.hidden) {
+    intervalPopover.hidden = true;
+    intervalPickerToggle.setAttribute("aria-expanded", "false");
+    intervalPickerToggle.focus();
+    return;
+  }
   if (!indicatorPopover.hidden) {
     indicatorPopover.hidden = true;
     indicatorsToggle.setAttribute("aria-expanded", "false");
@@ -1658,19 +1686,22 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
-document.querySelector("#intervals").addEventListener("change", (event) => {
-  const resolution = event.target.value;
-  if (resolution === currentResolution) return;
-  currentResolution = resolution;
-  void loadChart();
-});
-
 document.querySelector("#load-chart").addEventListener("click", () => void loadChart());
 symbolInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter") void loadChart();
 });
 symbolInput.addEventListener("input", updateDemoTradeButtons);
-rangeSelect.addEventListener("change", () => void loadChart());
+rangeSelector.addEventListener("click", (event) => {
+  const rangeButton = event.target.closest("[data-history-range]");
+  if (!rangeButton || rangeButton.dataset.historyRange === currentHistoryRange) return;
+  currentHistoryRange = rangeButton.dataset.historyRange;
+  rangeSelector.querySelectorAll("[data-history-range]").forEach((button) => {
+    const selected = button.dataset.historyRange === currentHistoryRange;
+    button.classList.toggle("selected", selected);
+    button.setAttribute("aria-pressed", String(selected));
+  });
+  void loadChart();
+});
 function updateFullscreenControl() {
   const isFullscreen = document.fullscreenElement === main;
   fullscreenToggle.setAttribute("aria-pressed", String(isFullscreen));
@@ -1725,6 +1756,34 @@ const positionToolbarPopover = (popover, trigger) => {
   popover.style.left = `${left}px`;
   popover.style.top = `${top}px`;
 };
+function updateIntervalControl() {
+  intervalSelector.querySelectorAll("[data-interval]").forEach((button) => {
+    const selected = button.dataset.interval === currentResolution;
+    button.setAttribute("aria-pressed", String(selected));
+    if (button.classList.contains("interval-quick-button")) {
+      button.classList.toggle("selected", selected);
+    }
+  });
+}
+function selectInterval(resolution) {
+  if (resolution === currentResolution) return;
+  currentResolution = resolution;
+  updateIntervalControl();
+  void loadChart();
+}
+intervalSelector.addEventListener("click", (event) => {
+  const intervalButton = event.target.closest("[data-interval]");
+  if (!intervalButton) return;
+  selectInterval(intervalButton.dataset.interval);
+  intervalPopover.hidden = true;
+  intervalPickerToggle.setAttribute("aria-expanded", "false");
+});
+intervalPickerToggle.addEventListener("click", () => {
+  const expanded = intervalPickerToggle.getAttribute("aria-expanded") !== "true";
+  intervalPopover.hidden = !expanded;
+  intervalPickerToggle.setAttribute("aria-expanded", String(expanded));
+  positionToolbarPopover(intervalPopover, intervalPickerToggle);
+});
 indicatorsToggle.addEventListener("click", () => {
   const expanded = indicatorsToggle.getAttribute("aria-expanded") !== "true";
   indicatorPopover.hidden = !expanded;
@@ -1738,13 +1797,26 @@ drawToggle.addEventListener("click", () => {
   positionToolbarPopover(drawPopover, drawToggle);
 });
 window.addEventListener("resize", () => {
+  positionToolbarPopover(intervalPopover, intervalPickerToggle);
   positionToolbarPopover(indicatorPopover, indicatorsToggle);
   positionToolbarPopover(drawPopover, drawToggle);
 });
 window.addEventListener("scroll", () => {
+  positionToolbarPopover(intervalPopover, intervalPickerToggle);
   positionToolbarPopover(indicatorPopover, indicatorsToggle);
   positionToolbarPopover(drawPopover, drawToggle);
 }, true);
+document.addEventListener("pointerdown", (event) => {
+  if (
+    intervalPopover.hidden ||
+    intervalPopover.contains(event.target) ||
+    intervalSelector.contains(event.target)
+  ) {
+    return;
+  }
+  intervalPopover.hidden = true;
+  intervalPickerToggle.setAttribute("aria-expanded", "false");
+});
 document.addEventListener("pointerdown", (event) => {
   if (
     indicatorPopover.hidden ||

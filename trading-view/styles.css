@@ -102,19 +102,111 @@ main:fullscreen {
   background: var(--tv-background);
 }
 .header-symbol-control .icon-button { margin-left: 0; border-radius: 0 18px 18px 0; }
-.chart-toolbar .header-interval-control select {
-  width: 54px;
-  height: 28px;
-  padding: 0 15px 0 8px;
-  border: 1px solid var(--tv-border);
-  border-radius: 6px;
-  background-color: var(--tv-panel-raised);
-  font-size: 11px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: border-color .15s ease, background-color .15s ease;
+.header-interval-control { position: relative; display: flex; flex: 0 0 auto; align-items: center; }
+.interval-quick-options { display: flex; align-items: center; }
+.interval-quick-button {
+  min-width: 38px;
+  height: 32px;
+  padding: 0 7px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--tv-muted-light);
+  font-size: 12px;
 }
-.chart-toolbar .header-interval-control select:hover { border-color: var(--tv-border-strong); }
+.interval-quick-button:hover,
+.interval-quick-button.selected { background: var(--tv-panel-raised); color: var(--tv-text); }
+.interval-picker-toggle {
+  display: grid;
+  width: 25px;
+  height: 32px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-left: 1px solid var(--tv-border);
+  background: transparent;
+  color: var(--tv-muted-light);
+}
+.interval-picker-toggle:hover,
+.interval-picker-toggle[aria-expanded="true"] { color: var(--tv-text); }
+.interval-picker-toggle svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; }
+.interval-popover {
+  width: min(260px, calc(100vw - 8px));
+  min-width: min(220px, calc(100vw - 8px));
+  max-height: calc(100vh - 16px);
+  gap: 0;
+  overflow: auto;
+  padding: 4px 11px;
+  border-color: #303030;
+  border-radius: 10px;
+  background: #121212;
+  box-shadow: 0 12px 30px rgb(0 0 0 / 48%);
+  scrollbar-width: none;
+}
+.interval-popover::-webkit-scrollbar { display: none; }
+.interval-popover[hidden] { display: none; }
+.interval-custom-button {
+  display: flex;
+  width: 100%;
+  min-height: 58px;
+  align-items: center;
+  gap: 12px;
+  padding: 0 10px;
+  border: 0;
+  border-bottom: 1px solid var(--tv-border-strong);
+  background: transparent;
+  color: #b7b7b7;
+  font-size: 14px;
+  text-align: left;
+  white-space: nowrap;
+}
+.interval-custom-button:disabled { cursor: not-allowed; opacity: 1; }
+.interval-custom-button svg { width: 20px; height: 20px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-linecap: round; stroke-width: 1.4; }
+.interval-group { border-bottom: 1px solid var(--tv-border-strong); }
+.interval-group:last-child { border-bottom: 0; }
+.interval-group summary {
+  display: flex;
+  min-height: 47px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  color: #929292;
+  cursor: pointer;
+  font-size: 13px;
+  letter-spacing: .07em;
+  list-style: none;
+  text-transform: uppercase;
+}
+.interval-group summary::-webkit-details-marker { display: none; }
+.interval-group summary::after {
+  width: 8px;
+  height: 8px;
+  margin-right: 3px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  content: "";
+  transform: rotate(45deg) translateY(-2px);
+}
+.interval-group[open] summary::after { transform: rotate(225deg) translate(-2px, -1px); }
+.interval-option-list { display: grid; padding: 0 0 6px; }
+.interval-option {
+  min-height: 43px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #bcbcbc;
+  cursor: pointer;
+  font-size: 15px;
+  text-align: left;
+}
+.interval-option:hover:not([aria-pressed="true"]) { background: #252525; color: #d1d1d1; }
+.interval-option[aria-pressed="true"] { background: #f1f1f1; color: #111; }
+.interval-option:disabled { color: #aaa; cursor: not-allowed; }
+.interval-option.unavailable:hover { background: transparent; }
+.interval-option:focus-visible,
+.interval-quick-button:focus-visible,
+.interval-picker-toggle:focus-visible { outline: 2px solid var(--tv-blue); outline-offset: 1px; }
 .header-history-control { display: flex; align-items: center; gap: 6px; color: var(--tv-muted-light); font-size: 11px; }
 .chart-toolbar .header-history-control label {
   display: inline;
