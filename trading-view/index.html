@@ -81,12 +81,8 @@
               </label>
               <label class="lookback-control" for="lookback">
                 <span>Pivot</span>
-                <select id="lookback">
-                  <option value="5" selected>5</option>
-                  <option value="10">10</option>
-                  <option value="14">14</option>
-                  <option value="20">20</option>
-                </select>
+                <input id="lookback" type="range" min="5" max="20" step="1" value="5">
+                <output id="lookback-value" for="lookback">5</output>
               </label>
             </div>
           </div>

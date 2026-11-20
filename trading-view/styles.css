@@ -194,7 +194,7 @@ main {
   box-shadow: 0 8px 24px rgb(0 0 0 / 40%);
 }
 .toolbar-popover[hidden] { display: none; }
-.toolbar-popover .lookback-control { justify-content: space-between; }
+.toolbar-popover .lookback-control { grid-template-columns: auto minmax(100px, 1fr) 24px; }
 .draw-popover { width: max-content; min-width: 0; gap: 8px; padding: 8px; }
 .draw-popover .button-row { flex-wrap: nowrap; }
 .draw-hint:empty { display: none; }
@@ -288,8 +288,9 @@ main {
 .demo-mode-toggle .switch::after { width: 10px; height: 10px; }
 .demo-mode-toggle input:checked + .switch { background: var(--tv-green); }
 .demo-mode-toggle input:checked + .switch::after { transform: translateX(10px); }
-.lookback-control { display: flex; align-items: center; gap: 6px; color: var(--tv-muted-light); font-size: 11px; }
-.lookback-control select { height: 28px; padding: 0 7px; }
+.lookback-control { display: grid; align-items: center; gap: 8px; color: var(--tv-muted-light); font-size: 11px; }
+.lookback-control input[type="range"] { width: 100%; min-width: 0; accent-color: var(--tv-blue); cursor: pointer; }
+.lookback-control output { color: var(--tv-text); font-variant-numeric: tabular-nums; text-align: right; }
 .toolbar-divider { width: 1px; height: 24px; background: var(--tv-border); }
 .draw-hint { color: var(--tv-blue); font-size: 11px; }
 

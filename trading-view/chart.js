@@ -39,7 +39,8 @@ const indicatorsToggle = document.querySelector("#indicators-toggle");
 const indicatorPopover = document.querySelector("#indicator-popover");
 const drawToggle = document.querySelector("#draw-toggle");
 const drawPopover = document.querySelector("#draw-popover");
-const lookbackSelect = document.querySelector("#lookback");
+const lookbackSlider = document.querySelector("#lookback");
+const lookbackValue = document.querySelector("#lookback-value");
 const connectionStatus = document.querySelector("#connection-status");
 const feedStatus = document.querySelector("#feed-status");
 const priceActionTrigger = document.querySelector("#price-action-trigger");
@@ -876,8 +877,8 @@ function updateCurrentCandleVolumeMarker() {
 
 function renderSwings() {
   clearSwings();
-  if (swingToggle.checked && candles.length >= Number(lookbackSelect.value) * 2 + 1) {
-    activeSwings = findLiquiditySwings(candles, Number(lookbackSelect.value));
+  if (swingToggle.checked && candles.length >= Number(lookbackSlider.value) * 2 + 1) {
+    activeSwings = findLiquiditySwings(candles, Number(lookbackSlider.value));
     for (const swing of activeSwings) {
       const isHigh = swing.side === "high";
       const color = isHigh ? chartColors.down : chartColors.up;
@@ -1702,7 +1703,10 @@ swingToggle.addEventListener("change", () => {
   indicatorsToggle.setAttribute("aria-pressed", String(swingToggle.checked));
   renderSwings();
 });
-lookbackSelect.addEventListener("change", renderSwings);
+lookbackSlider.addEventListener("input", () => {
+  lookbackValue.value = lookbackSlider.value;
+  renderSwings();
+});
 
 document.querySelector("#candles-type").addEventListener("click", () => {
   chartType = "candles";
