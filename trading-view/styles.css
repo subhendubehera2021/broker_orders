@@ -668,8 +668,10 @@ main {
   border-radius: 0 0 3px 3px;
   color: #fff;
   font-size: 11px;
+  font-variant-numeric: tabular-nums;
   line-height: 16px;
   text-align: center;
+  white-space: nowrap;
   pointer-events: none;
 }
 .live-countdown[hidden] { display: none; }

@@ -996,10 +996,13 @@ function updateLiveCountdown() {
 
   const minutes = Math.floor(remaining / 60).toString().padStart(2, "0");
   const seconds = (remaining % 60).toString().padStart(2, "0");
-  timer.textContent = `${minutes}:${seconds}`;
-  timer.dataset.direction = latest.close >= latest.open ? "up" : "down";
-  timer.style.top = `${Math.round(y + 10)}px`;
-  timer.hidden = false;
+  const text = `${minutes}:${seconds}`;
+  const direction = latest.close >= latest.open ? "up" : "down";
+  const top = `${Math.round(y + 10)}px`;
+  if (timer.textContent !== text) timer.textContent = text;
+  if (timer.dataset.direction !== direction) timer.dataset.direction = direction;
+  if (timer.style.top !== top) timer.style.top = top;
+  if (timer.hidden) timer.hidden = false;
 }
 
 async function fetchJson(url, options = {}) {
@@ -1379,7 +1382,6 @@ function applyLiveQuote(sequence, symbol, quote) {
   processDemoOrderFills(symbol, price);
   updateDemoPositionPnl(symbol, price);
   updateCurrentCandleVolumeMarker();
-  updateLiveCountdown();
   updateLatestSwingActionTrigger();
   updateDemoOrderPositions();
   setConnectionStatus(socketConnected ? "Fyers live" : "Fyers polling", "connected");
