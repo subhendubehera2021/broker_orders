@@ -711,6 +711,17 @@ function createOptionContractButton(option) {
   return button;
 }
 
+function centerAtmStrike() {
+  const atmRow = optionChainRows.querySelector("tr.atm");
+  const tableWrap = optionChainRows.closest(".option-chain-table-wrap");
+  if (!atmRow || !tableWrap) return;
+
+  const rowBounds = atmRow.getBoundingClientRect();
+  const tableBounds = tableWrap.getBoundingClientRect();
+  tableWrap.scrollTop +=
+    rowBounds.top - tableBounds.top - (tableWrap.clientHeight - rowBounds.height) / 2;
+}
+
 function renderOptionChain(optionChain, requestedTimestamp) {
   optionExpirySelect.replaceChildren();
   for (const expiry of optionChain.expiries) {
@@ -759,6 +770,8 @@ function renderOptionChain(optionChain, requestedTimestamp) {
     addOptionChainCell(row, formatVolume(contracts.PE?.openInterest), "put-oi");
     optionChainRows.append(row);
   }
+
+  centerAtmStrike();
 
   const underlying = Number.isFinite(optionChain.underlyingPrice)
     ? `NIFTY ${formatPrice(optionChain.underlyingPrice)}`
