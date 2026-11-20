@@ -976,6 +976,22 @@ function renderSwings() {
           { time: swing.zoneEndTime, value: swing.zoneTop },
         ]);
         swingSeries.push(zone);
+
+        if (!isHigh && Number.isFinite(swing.endTime) && swing.endTime > swing.startTime) {
+          const zoneTopLine = chart.addLineSeries({
+            color: chartColors.up,
+            lineWidth: 1,
+            lineStyle: LineStyle.Solid,
+            lastValueVisible: false,
+            priceLineVisible: false,
+            crosshairMarkerVisible: false,
+          });
+          zoneTopLine.setData([
+            { time: swing.startTime, value: swing.zoneTop },
+            { time: swing.endTime, value: swing.zoneTop },
+          ]);
+          swingSeries.push(zoneTopLine);
+        }
       }
 
       const series = chart.addLineSeries({
