@@ -55,6 +55,15 @@ main {
   margin: 12px auto 28px;
 }
 
+main:fullscreen {
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  margin: 0;
+  padding: 12px;
+  background: var(--tv-background);
+}
+
 .chart-toolbar {
   display: flex;
   flex: 0 0 auto;

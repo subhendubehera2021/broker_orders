@@ -8,6 +8,7 @@ import {
 } from "/trading-view/demo-trading.js";
 
 const { CrosshairMode, LineStyle, TickMarkType, createChart } = window.LightweightCharts;
+const main = document.querySelector("main");
 const chartColors = {
   background: "#0f0f0f",
   text: "#787b86",
@@ -41,6 +42,8 @@ const drawToggle = document.querySelector("#draw-toggle");
 const drawPopover = document.querySelector("#draw-popover");
 const lookbackSlider = document.querySelector("#lookback");
 const lookbackValue = document.querySelector("#lookback-value");
+const fullscreenToggle = document.querySelector("#fullscreen-toggle");
+const fullscreenStatus = document.querySelector("#fullscreen-status");
 const connectionStatus = document.querySelector("#connection-status");
 const feedStatus = document.querySelector("#feed-status");
 const priceActionTrigger = document.querySelector("#price-action-trigger");
@@ -1646,6 +1649,12 @@ document.addEventListener("keydown", (event) => {
   if (!priceActionMenu.hidden) {
     closePriceActionMenu();
     priceActionTrigger.focus();
+    return;
+  }
+  if (document.fullscreenElement === main) {
+    void document.exitFullscreen().catch((error) => {
+      fullscreenStatus.textContent = `Could not exit fullscreen: ${error.message}`;
+    });
   }
 });
 
@@ -1662,6 +1671,28 @@ symbolInput.addEventListener("keydown", (event) => {
 });
 symbolInput.addEventListener("input", updateDemoTradeButtons);
 rangeSelect.addEventListener("change", () => void loadChart());
+function updateFullscreenControl() {
+  const isFullscreen = document.fullscreenElement === main;
+  fullscreenToggle.setAttribute("aria-pressed", String(isFullscreen));
+  fullscreenToggle.setAttribute("aria-label", isFullscreen ? "Exit fullscreen" : "Fullscreen");
+  fullscreenToggle.title = isFullscreen ? "Exit fullscreen" : "Enter fullscreen";
+  fullscreenStatus.textContent = isFullscreen ? "Fullscreen mode enabled" : "Fullscreen mode exited";
+}
+
+document.addEventListener("fullscreenchange", updateFullscreenControl);
+fullscreenToggle.addEventListener("click", async () => {
+  if (!document.fullscreenElement && typeof main.requestFullscreen !== "function") {
+    fullscreenStatus.textContent = "Fullscreen is not supported in this browser.";
+    return;
+  }
+  try {
+    if (document.fullscreenElement === main) await document.exitFullscreen();
+    else await main.requestFullscreen();
+  } catch (error) {
+    fullscreenStatus.textContent = `Could not change fullscreen mode: ${error.message}`;
+  }
+});
+
 optionChainToggle.addEventListener("click", () => {
   if (optionChainModal.open) {
     closeOptionChainModal();

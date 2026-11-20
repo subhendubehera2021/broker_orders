@@ -131,7 +131,7 @@
         <div class="toolbar-group toolbar-end-group">
           <button class="toolbar-icon-button unavailable" type="button" aria-label="Search, unavailable" title="Search is not available yet" disabled><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" /><path d="m13 13 4 4" /></svg></button>
           <button class="toolbar-icon-button unavailable" type="button" aria-label="Settings, unavailable" title="Settings are not available yet" disabled><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m8 2-.5 2a6 6 0 0 0-1.6.9L4 4.2l-2 3.4 1.7 1.3a6 6 0 0 0 0 1.9L2 12.1l2 3.4 1.9-.7a6 6 0 0 0 1.6.9l.5 2h4l.5-2a6 6 0 0 0 1.6-.9l1.9.7 2-3.4-1.7-1.3a6 6 0 0 0 0-1.9L18 7.6l-2-3.4-1.9.7a6 6 0 0 0-1.6-.9L12 2z" /><circle cx="10" cy="9.5" r="2.5" /></svg></button>
-          <button class="toolbar-icon-button unavailable" type="button" aria-label="Fullscreen, unavailable" title="Fullscreen mode is not available yet" disabled><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 7V3h4m6 0h4v4m0 6v4h-4m-6 0H3v-4" /></svg></button>
+          <button id="fullscreen-toggle" class="toolbar-icon-button" type="button" aria-label="Fullscreen" aria-pressed="false" title="Enter fullscreen"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 7V3h4m6 0h4v4m0 6v4h-4m-6 0H3v-4" /></svg></button>
           <button class="toolbar-icon-button unavailable" type="button" aria-label="Snapshot, unavailable" title="Chart snapshots are not available yet" disabled><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2 6h4l1.5-2h5L14 6h4v10H2z" /><circle cx="10" cy="11" r="3" /></svg></button>
           <button class="toolbar-icon-button unavailable" type="button" aria-label="More chart tools, unavailable" title="More chart tools are not available yet" disabled>＋</button>
           <label class="toggle-control demo-mode-toggle" title="Practice mode only; no trades are submitted">
@@ -140,6 +140,7 @@
             <span>Demo</span>
           </label>
           <span id="demo-mode-help" class="visually-hidden">Demo orders stay in this browser and are never sent to Fyers.</span>
+          <span id="fullscreen-status" class="visually-hidden" role="status" aria-live="polite"></span>
           <button class="toolbar-text-button unavailable" type="button" aria-label="Trade, unavailable" title="Trading is not available yet" disabled>Trade</button>
           <button class="toolbar-upgrade unavailable" type="button" aria-label="Upgrade, unavailable" title="Upgrade is not available yet" disabled>Upgrade</button>
         </div>

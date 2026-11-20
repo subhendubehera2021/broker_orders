@@ -542,6 +542,8 @@ test("serves the TradingView-inspired chart and local charting assets", async ()
   assert.match(toolbar, /id="range"/);
   assert.match(toolbar, /id="draw-popover"/);
   assert.match(toolbar, /data-tool="horizontal"/);
+  assert.match(toolbar, /<button id="fullscreen-toggle"[^>]*aria-pressed="false"[^>]*>/);
+  assert.match(toolbar, /id="fullscreen-status"/);
   const demoModeToggle = toolbar.match(/<input id="demo-mode-toggle"[^>]*>/)?.[0];
   assert.ok(demoModeToggle);
   assert.doesNotMatch(demoModeToggle, /\bchecked\b/);
