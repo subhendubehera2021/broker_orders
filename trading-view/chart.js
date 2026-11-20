@@ -977,20 +977,21 @@ function renderSwings() {
         ]);
         swingSeries.push(zone);
 
-        if (!isHigh && Number.isFinite(swing.endTime) && swing.endTime > swing.startTime) {
-          const zoneTopLine = chart.addLineSeries({
-            color: chartColors.up,
+        const zoneBoundaryPrice = isHigh ? swing.zoneBottom : swing.zoneTop;
+        if (Number.isFinite(swing.endTime) && swing.endTime > swing.startTime) {
+          const zoneBoundaryLine = chart.addLineSeries({
+            color,
             lineWidth: 1,
             lineStyle: LineStyle.Solid,
             lastValueVisible: false,
             priceLineVisible: false,
             crosshairMarkerVisible: false,
           });
-          zoneTopLine.setData([
-            { time: swing.startTime, value: swing.zoneTop },
-            { time: swing.endTime, value: swing.zoneTop },
+          zoneBoundaryLine.setData([
+            { time: swing.startTime, value: zoneBoundaryPrice },
+            { time: swing.endTime, value: zoneBoundaryPrice },
           ]);
-          swingSeries.push(zoneTopLine);
+          swingSeries.push(zoneBoundaryLine);
         }
       }
 
