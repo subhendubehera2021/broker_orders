@@ -5,7 +5,7 @@ import {
 } from "./fyers-auth.js";
 import {
   fetchFyersCandles,
-  fetchFyersNiftyOptionChain,
+  fetchFyersOptionChain,
   fetchFyersQuote,
   FyersMarketDataError,
 } from "./fyers-market-data.js";
@@ -83,14 +83,15 @@ export function registerFyersChartRoutes(app) {
 
     const accessToken = getFyersSessionToken(request, config);
     if (!accessToken) {
-      return reply.code(401).send({ error: "Log in with Fyers to load the NIFTY option chain" });
+      return reply.code(401).send({ error: "Log in with Fyers to load an option chain" });
     }
 
     const query = request.query ?? {};
     try {
-      const optionChain = await fetchFyersNiftyOptionChain({
+      const optionChain = await fetchFyersOptionChain({
         appId: config.appId,
         accessToken,
+        symbol: query.symbol ?? "NSE:NIFTY50-INDEX",
         strikeCount: query.strikecount === undefined ? 10 : Number(query.strikecount),
         timestamp: query.timestamp ?? "",
       });
@@ -103,7 +104,7 @@ export function registerFyersChartRoutes(app) {
         return reply.code(error.statusCode).send({ error: error.message });
       }
       console.error("[fyers-chart] Option-chain request failed", error);
-      return reply.code(502).send({ error: "Unable to load the NIFTY option chain" });
+      return reply.code(502).send({ error: "Unable to load the option chain" });
     }
   });
 }

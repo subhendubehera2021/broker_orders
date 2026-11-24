@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   fetchFyersCandles,
-  fetchFyersNiftyOptionChain,
+  fetchFyersOptionChain,
   fetchFyersQuote,
   FyersMarketDataError,
 } from "../src/fyers-market-data.js";
@@ -147,7 +147,7 @@ test("rejects null candle and quote values instead of coercing them to zero", as
 
 test("requests and normalizes the Fyers NIFTY option chain", async () => {
   let requestUrl;
-  const optionChain = await fetchFyersNiftyOptionChain({
+  const optionChain = await fetchFyersOptionChain({
     appId: "test-app-id",
     accessToken: "test-access-token",
     strikeCount: 1,
@@ -230,6 +230,43 @@ test("requests and normalizes the Fyers NIFTY option chain", async () => {
   });
 });
 
+test("requests Crude Oil option chains and uses the futures price as the reference", async () => {
+  let requestUrl;
+  const optionChain = await fetchFyersOptionChain({
+    appId: "test-app-id",
+    accessToken: "test-access-token",
+    symbol: "MCX:CRUDEOIL-INDEX",
+    strikeCount: 2,
+  }, async (url, options) => {
+    requestUrl = url;
+    assert.equal(options.headers.Authorization, "test-app-id:test-access-token");
+    return Response.json({
+      s: "ok",
+      data: {
+        expiryData: [{ date: "19-12-2026", expiry: "1797681600" }],
+        optionsChain: [
+          { symbol: "MCX:CRUDEOIL-INDEX", option_type: "", strike_price: -1, ltp: 5200, fp: 5225 },
+          { symbol: "MCX:CRUDEOIL26DEC5225CE", option_type: "CE", strike_price: 5225, ltp: 120 },
+          { symbol: "MCX:CRUDEOIL26DEC5225PE", option_type: "PE", strike_price: 5225, ltp: 105 },
+        ],
+      },
+    });
+  });
+
+  assert.equal(requestUrl.searchParams.get("symbol"), "MCX:CRUDEOIL-INDEX");
+  assert.equal(optionChain.symbol, "MCX:CRUDEOIL-INDEX");
+  assert.equal(optionChain.underlyingPrice, 5225);
+  assert.deepEqual(optionChain.expiries, [{ date: "19-12-2026", timestamp: "1797681600" }]);
+  assert.deepEqual(optionChain.options.map(({ symbol, optionType, strikePrice }) => ({
+    symbol,
+    optionType,
+    strikePrice,
+  })), [
+    { symbol: "MCX:CRUDEOIL26DEC5225CE", optionType: "CE", strikePrice: 5225 },
+    { symbol: "MCX:CRUDEOIL26DEC5225PE", optionType: "PE", strikePrice: 5225 },
+  ]);
+});
+
 test("rejects malformed symbols and ranges before making a request", async () => {
   let requests = 0;
   const fetchImpl = async () => {
@@ -259,10 +296,18 @@ test("rejects malformed symbols and ranges before making a request", async () =>
     /supports up to 100 days/,
   );
   await assert.rejects(
-    fetchFyersNiftyOptionChain({
+    fetchFyersOptionChain({
       appId: "test-app-id",
       accessToken: "test-access-token",
       strikeCount: 51,
+    }, fetchImpl),
+    (error) => error instanceof FyersMarketDataError && error.statusCode === 400,
+  );
+  await assert.rejects(
+    fetchFyersOptionChain({
+      appId: "test-app-id",
+      accessToken: "test-access-token",
+      symbol: "MCX:GOLD-INDEX",
     }, fetchImpl),
     (error) => error instanceof FyersMarketDataError && error.statusCode === 400,
   );

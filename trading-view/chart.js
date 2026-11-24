@@ -37,11 +37,13 @@ const rangeSelector = document.querySelector("#range");
 const intervalSelector = document.querySelector("#interval-selector");
 const intervalPickerToggle = document.querySelector("#interval-picker-toggle");
 const intervalPopover = document.querySelector("#interval-popover");
-const optionChainToggle = document.querySelector("#nifty-options-toggle");
+const optionChainToggle = document.querySelector("#option-chain-toggle");
 const optionChainModal = document.querySelector("#option-chain-modal");
 const optionChainPanel = document.querySelector("#option-chain-panel");
 const optionChainStatus = document.querySelector("#option-chain-status");
 const optionChainRows = document.querySelector("#option-chain-rows");
+const optionChainTitle = document.querySelector("#option-chain-title");
+const optionChainUnderlyingSelect = document.querySelector("#option-underlying");
 const optionExpirySelect = document.querySelector("#option-expiry");
 const swingToggle = document.querySelector("#swing-toggle");
 const smcToggles = [...document.querySelectorAll("[data-smc-toggle]")];
@@ -872,18 +874,26 @@ function renderOptionChain(optionChain, requestedTimestamp) {
 
   centerAtmStrike();
 
+  const underlyingName = optionChainUnderlyingSelect.selectedOptions[0]?.textContent
+    ?? optionChain.symbol;
   const underlying = Number.isFinite(optionChain.underlyingPrice)
-    ? `NIFTY ${formatPrice(optionChain.underlyingPrice)}`
-    : "NIFTY";
+    ? `${underlyingName} ${formatPrice(optionChain.underlyingPrice)}`
+    : underlyingName;
   optionChainStatus.textContent =
     `${underlying} · Call OI ${formatVolume(optionChain.callOpenInterest)} · ` +
     `Put OI ${formatVolume(optionChain.putOpenInterest)} · Click a contract to open its chart.`;
 }
 
-async function loadNiftyOptionChain(timestamp = optionExpirySelect.value) {
+async function loadOptionChain(timestamp = optionExpirySelect.value) {
   const sequence = ++optionChainSequence;
-  const query = new URLSearchParams({ strikecount: "10", timestamp });
-  optionChainStatus.textContent = "Loading NIFTY option chain…";
+  const underlyingName = optionChainUnderlyingSelect.selectedOptions[0]?.textContent
+    ?? "option";
+  const query = new URLSearchParams({
+    symbol: optionChainUnderlyingSelect.value,
+    strikecount: "10",
+    timestamp,
+  });
+  optionChainStatus.textContent = `Loading ${underlyingName} option chain…`;
   try {
     const optionChain = await fetchJson(`/api/fyers/options-chain?${query}`);
     if (sequence !== optionChainSequence) return;
@@ -2179,13 +2189,20 @@ optionChainToggle.addEventListener("click", () => {
   optionChainModal.showModal();
   optionChainToggle.setAttribute("aria-expanded", "true");
   document.querySelector("#close-option-chain").focus();
-  void loadNiftyOptionChain(optionExpirySelect.value);
+  void loadOptionChain(optionExpirySelect.value);
 });
 document.querySelector("#refresh-option-chain").addEventListener("click", () => {
-  void loadNiftyOptionChain(optionExpirySelect.value);
+  void loadOptionChain(optionExpirySelect.value);
 });
 optionExpirySelect.addEventListener("change", () => {
-  void loadNiftyOptionChain(optionExpirySelect.value);
+  void loadOptionChain(optionExpirySelect.value);
+});
+optionChainUnderlyingSelect.addEventListener("change", () => {
+  const underlyingName = optionChainUnderlyingSelect.selectedOptions[0]?.textContent ?? "Option";
+  optionChainTitle.textContent = `${underlyingName} Option Chain`;
+  optionChainPanel.setAttribute("aria-label", `${underlyingName} option chain`);
+  optionExpirySelect.replaceChildren();
+  void loadOptionChain("");
 });
 document.querySelector("#close-option-chain").addEventListener("click", () => {
   closeOptionChainModal();

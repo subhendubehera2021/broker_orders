@@ -21,11 +21,11 @@
             <span id="symbol-help" class="visually-hidden">Enter a Fyers symbol, for example NSE:SBIN-EQ.</span>
           </div>
           <button
-            id="nifty-options-toggle"
+            id="option-chain-toggle"
             class="option-chain-toggle"
             type="button"
-            aria-label="NIFTY Options"
-            title="NIFTY Options"
+            aria-label="Option chain"
+            title="NIFTY and Crude Oil option chains"
             aria-expanded="false"
           >
             <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
@@ -240,13 +240,18 @@
       </section>
 
       <dialog id="option-chain-modal" class="option-chain-modal" aria-labelledby="option-chain-title">
-        <section id="option-chain-panel" class="option-chain-panel" aria-label="NIFTY option chain">
+        <section id="option-chain-panel" class="option-chain-panel" aria-label="Option chain">
           <div class="option-chain-header">
             <div>
               <h2 id="option-chain-title">NIFTY Option Chain</h2>
               <span id="option-chain-underlying">Call and put contracts</span>
             </div>
             <div class="option-chain-actions">
+              <label for="option-underlying">Underlying</label>
+              <select id="option-underlying">
+                <option value="NSE:NIFTY50-INDEX">NIFTY</option>
+                <option value="MCX:CRUDEOIL-INDEX">Crude Oil</option>
+              </select>
               <label for="option-expiry">Expiry</label>
               <select id="option-expiry"></select>
               <button id="refresh-option-chain" type="button">Refresh</button>

@@ -2,6 +2,7 @@ const fyersDataBaseUrl = "https://api-t1.fyers.in/data";
 const intradayResolutions = new Set(["1", "2", "3", "5", "10", "15", "20", "30", "45", "60", "120", "180", "240"]);
 const dailyResolutions = new Set(["D", "1D", "1W", "1M"]);
 const validResolutions = new Set([...intradayResolutions, ...dailyResolutions]);
+const optionChainSymbols = new Set(["NSE:NIFTY50-INDEX", "MCX:CRUDEOIL-INDEX"]);
 
 function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -121,10 +122,13 @@ export async function fetchFyersQuote({ appId, accessToken, symbol }, fetchImpl 
   };
 }
 
-export async function fetchFyersNiftyOptionChain(
-  { appId, accessToken, strikeCount = 10, timestamp = "" },
+export async function fetchFyersOptionChain(
+  { appId, accessToken, symbol = "NSE:NIFTY50-INDEX", strikeCount = 10, timestamp = "" },
   fetchImpl = fetch,
 ) {
+  if (!optionChainSymbols.has(symbol)) {
+    throw new FyersMarketDataError(400, "Unsupported option-chain underlying");
+  }
   if (!Number.isSafeInteger(strikeCount) || strikeCount < 1 || strikeCount > 50) {
     throw new FyersMarketDataError(400, "Option-chain strike count must be between 1 and 50");
   }
@@ -133,7 +137,7 @@ export async function fetchFyersNiftyOptionChain(
   }
 
   const url = new URL(`${fyersDataBaseUrl}/options-chain-v3`);
-  url.searchParams.set("symbol", "NSE:NIFTY50-INDEX");
+  url.searchParams.set("symbol", symbol);
   url.searchParams.set("strikecount", String(strikeCount));
   url.searchParams.set("timestamp", timestamp);
   url.searchParams.set("greeks", "1");
@@ -141,7 +145,7 @@ export async function fetchFyersNiftyOptionChain(
   const payload = await requestFyers(url, appId, accessToken, fetchImpl);
   const data = payload.data;
   if (payload.s !== "ok" || !isRecord(data) || !Array.isArray(data.optionsChain)) {
-    throw new FyersMarketDataError(502, "Fyers did not return a valid NIFTY option chain");
+    throw new FyersMarketDataError(502, "Fyers did not return a valid option chain");
   }
 
   const options = [];
@@ -151,7 +155,9 @@ export async function fetchFyersNiftyOptionChain(
     const optionType = typeof entry.option_type === "string" ? entry.option_type.toUpperCase() : "";
     const symbol = entry.symbol;
     if (optionType === "" && underlyingPrice === undefined) {
-      underlyingPrice = optionalNumber(entry.ltp);
+      underlyingPrice = typeof symbol === "string" && symbol.startsWith("MCX:")
+        ? optionalNumber(entry.fp) ?? optionalNumber(entry.ltp)
+        : optionalNumber(entry.ltp);
       continue;
     }
 
@@ -182,7 +188,7 @@ export async function fetchFyersNiftyOptionChain(
   }
 
   if (!options.length) {
-    throw new FyersMarketDataError(502, "Fyers returned no NIFTY call or put contracts");
+    throw new FyersMarketDataError(502, "Fyers returned no call or put contracts");
   }
 
   const expiries = Array.isArray(data.expiryData)
@@ -200,7 +206,7 @@ export async function fetchFyersNiftyOptionChain(
     : [];
 
   return {
-    symbol: "NSE:NIFTY50-INDEX",
+    symbol,
     underlyingPrice,
     callOpenInterest: optionalNumber(data.callOi),
     putOpenInterest: optionalNumber(data.putOi),

@@ -311,17 +311,28 @@ test("Fyers OAuth validates state and issues an encrypted session cookie", async
     }
     if (requestUrl.pathname.endsWith("/options-chain-v3")) {
       fyersAuthRequest = { url: String(url), options };
+      const underlyingSymbol = requestUrl.searchParams.get("symbol");
+      const optionsChain = underlyingSymbol === "MCX:CRUDEOIL-INDEX"
+        ? [
+            { symbol: "MCX:CRUDEOIL-INDEX", option_type: "", strike_price: -1, ltp: 5200, fp: 5225 },
+            { symbol: "MCX:CRUDEOIL26DEC5225CE", option_type: "CE", strike_price: 5225, ltp: 120, oi: 500 },
+            { symbol: "MCX:CRUDEOIL26DEC5225PE", option_type: "PE", strike_price: 5225, ltp: 105, oi: 700 },
+          ]
+        : [
+            { symbol: "NSE:NIFTY50-INDEX", option_type: "", strike_price: -1, ltp: 24600 },
+            { symbol: "NSE:NIFTY26NOV24600CE", option_type: "CE", strike_price: 24600, ltp: 210, oi: 500 },
+            { symbol: "NSE:NIFTY26NOV24600PE", option_type: "PE", strike_price: 24600, ltp: 180, oi: 700 },
+          ];
       return Response.json({
         s: "ok",
         data: {
           callOi: 1200,
           putOi: 1400,
-          expiryData: [{ date: "26-11-2026", expiry: "1795300000" }],
-          optionsChain: [
-            { symbol: "NSE:NIFTY50-INDEX", option_type: "", strike_price: -1, ltp: 24600 },
-            { symbol: "NSE:NIFTY26NOV24600CE", option_type: "CE", strike_price: 24600, ltp: 210, oi: 500 },
-            { symbol: "NSE:NIFTY26NOV24600PE", option_type: "PE", strike_price: 24600, ltp: 180, oi: 700 },
-          ],
+          expiryData: [{
+            date: underlyingSymbol.startsWith("MCX:") ? "19-12-2026" : "26-11-2026",
+            expiry: underlyingSymbol.startsWith("MCX:") ? "1797681600" : "1795300000",
+          }],
+          optionsChain,
         },
       });
     }
@@ -472,6 +483,25 @@ test("Fyers OAuth validates state and issues an encrypted session cookie", async
     const optionChainUrl = new URL(fyersAuthRequest.url);
     assert.equal(optionChainUrl.pathname, "/data/options-chain-v3");
     assert.equal(optionChainUrl.searchParams.get("timestamp"), "1795300000");
+    assert.equal(optionChainUrl.searchParams.get("symbol"), "NSE:NIFTY50-INDEX");
+
+    const crudeOilOptionChain = await app.inject({
+      method: "GET",
+      url: "/api/fyers/options-chain?symbol=MCX%3ACRUDEOIL-INDEX&strikecount=1",
+      headers: { cookie: sessionCookie },
+    });
+    assert.equal(crudeOilOptionChain.statusCode, 200);
+    assert.equal(crudeOilOptionChain.json().symbol, "MCX:CRUDEOIL-INDEX");
+    assert.equal(crudeOilOptionChain.json().underlyingPrice, 5225);
+    assert.deepEqual(crudeOilOptionChain.json().options.map(({ symbol, optionType, strikePrice }) => ({
+      symbol,
+      optionType,
+      strikePrice,
+    })), [
+      { symbol: "MCX:CRUDEOIL26DEC5225CE", optionType: "CE", strikePrice: 5225 },
+      { symbol: "MCX:CRUDEOIL26DEC5225PE", optionType: "PE", strikePrice: 5225 },
+    ]);
+    assert.equal(new URL(fyersAuthRequest.url).searchParams.get("symbol"), "MCX:CRUDEOIL-INDEX");
 
     const logout = await app.inject({
       method: "POST",
@@ -600,8 +630,11 @@ test("serves the TradingView-inspired chart and local charting assets", async ()
   assert.doesNotMatch(swingHighAction, />Buy</);
   assert.doesNotMatch(page.body, /id="chart-controls"/);
   assert.doesNotMatch(page.body, /id="controls-toggle"/);
-  assert.match(page.body, /NIFTY Options/);
+  assert.match(page.body, /NIFTY and Crude Oil option chains/);
   assert.match(page.body, /option-chain-panel/);
+  assert.match(page.body, /value="MCX:CRUDEOIL-INDEX">Crude Oil<\/option>/);
+  assert.match(client.body, /optionChainUnderlyingSelect\.value/);
+  assert.match(client.body, /Loading \$\{underlyingName\} option chain/);
   assert.doesNotMatch(page.body, /class="topbar"/);
   assert.match(page.body, /Fyers account/);
   assert.match(page.body, /fyers-web-sdk-v3/);
