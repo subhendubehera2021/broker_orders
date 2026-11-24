@@ -937,8 +937,8 @@ function renderSmartMoneyConcepts() {
       enabled: swingEnabled,
       blocks: result.orderBlocks.swing,
       colors: {
-        bullish: "rgba(24, 72, 204, 0.28)",
-        bearish: "rgba(178, 40, 51, 0.28)",
+        bullish: "rgba(24, 72, 204, 0.45)",
+        bearish: "rgba(178, 40, 51, 0.45)",
       },
     },
   ];
