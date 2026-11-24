@@ -232,12 +232,24 @@ test("requests and normalizes the Fyers NIFTY option chain", async () => {
 
 test("requests Crude Oil option chains and uses the futures price as the reference", async () => {
   let requestUrl;
+  const now = Math.floor(Date.now() / 1000);
+  const masterRow = (expiry, symbol) =>
+    `token,CRUDEOIL FUT,30,1,1.0,,0900-2355,2026-11-24,${expiry},${symbol},11,20,576264,CRUDEOIL,294,-1.0,XX`;
   const optionChain = await fetchFyersOptionChain({
     appId: "test-app-id",
     accessToken: "test-access-token",
-    symbol: "MCX:CRUDEOIL-INDEX",
+    symbol: "MCX:CRUDEOIL",
     strikeCount: 2,
   }, async (url, options) => {
+    const requestPath = new URL(url);
+    if (requestPath.pathname.endsWith("/MCX_COM.csv")) {
+      return new Response([
+        masterRow(now + 86400 * 30, "MCX:CRUDEOIL27JANFUT"),
+        masterRow(now - 60, "MCX:CRUDEOIL26NOVFUT"),
+        masterRow(now + 86400, "MCX:CRUDEOIL26DECFUT"),
+      ].join("\n"));
+    }
+
     requestUrl = url;
     assert.equal(options.headers.Authorization, "test-app-id:test-access-token");
     return Response.json({
@@ -245,7 +257,7 @@ test("requests Crude Oil option chains and uses the futures price as the referen
       data: {
         expiryData: [{ date: "19-12-2026", expiry: "1797681600" }],
         optionsChain: [
-          { symbol: "MCX:CRUDEOIL-INDEX", option_type: "", strike_price: -1, ltp: 5200, fp: 5225 },
+          { symbol: "MCX:CRUDEOIL26DECFUT", option_type: "", strike_price: -1, ltp: 5200, fp: 5225 },
           { symbol: "MCX:CRUDEOIL26DEC5225CE", option_type: "CE", strike_price: 5225, ltp: 120 },
           { symbol: "MCX:CRUDEOIL26DEC5225PE", option_type: "PE", strike_price: 5225, ltp: 105 },
         ],
@@ -253,8 +265,8 @@ test("requests Crude Oil option chains and uses the futures price as the referen
     });
   });
 
-  assert.equal(requestUrl.searchParams.get("symbol"), "MCX:CRUDEOIL-INDEX");
-  assert.equal(optionChain.symbol, "MCX:CRUDEOIL-INDEX");
+  assert.equal(requestUrl.searchParams.get("symbol"), "MCX:CRUDEOIL26DECFUT");
+  assert.equal(optionChain.symbol, "MCX:CRUDEOIL26DECFUT");
   assert.equal(optionChain.underlyingPrice, 5225);
   assert.deepEqual(optionChain.expiries, [{ date: "19-12-2026", timestamp: "1797681600" }]);
   assert.deepEqual(optionChain.options.map(({ symbol, optionType, strikePrice }) => ({

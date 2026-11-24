@@ -84,7 +84,7 @@ Do not put credentials in source files or expose them in logs. The endpoint uses
 - `GET /auth/fyers/login` and `GET /auth/fyers/callback`: start and complete Fyers OAuth login.
 - `GET /api/fyers/session` and `POST /api/fyers/logout`: report or clear the Fyers login state.
 - `GET /trading-view`: interactive Fyers candlestick/bar chart with volume, liquidity-swing levels, drawing tools, NIFTY and Crude Oil option-chain selection, and periodic quote updates.
-- `GET /api/fyers/candles`, `GET /api/fyers/quote`, and `GET /api/fyers/options-chain`: authenticated chart data endpoints; the option-chain endpoint supports NIFTY and `MCX:CRUDEOIL-INDEX`.
+- `GET /api/fyers/candles`, `GET /api/fyers/quote`, and `GET /api/fyers/options-chain`: authenticated chart data endpoints; the option-chain endpoint supports NIFTY and resolves Crude Oil to its nearest active MCX futures contract from the FYERS symbol master.
 - `/swagger.html`: interactive Swagger UI.
 - `/openapi.json`: OpenAPI 3.1 definition.
 

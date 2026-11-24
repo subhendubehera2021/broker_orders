@@ -2,7 +2,12 @@ const fyersDataBaseUrl = "https://api-t1.fyers.in/data";
 const intradayResolutions = new Set(["1", "2", "3", "5", "10", "15", "20", "30", "45", "60", "120", "180", "240"]);
 const dailyResolutions = new Set(["D", "1D", "1W", "1M"]);
 const validResolutions = new Set([...intradayResolutions, ...dailyResolutions]);
-const optionChainSymbols = new Set(["NSE:NIFTY50-INDEX", "MCX:CRUDEOIL-INDEX"]);
+const optionChainSymbols = new Set(["NSE:NIFTY50-INDEX", "MCX:CRUDEOIL"]);
+const crudeOilSymbolMasterUrl = "https://public.fyers.in/sym_details/MCX_COM.csv";
+const crudeOilSymbolCacheDurationMs = 5 * 60 * 1000;
+let cachedCrudeOilFuture;
+let cachedCrudeOilFutureExpiry = 0;
+let cachedCrudeOilSymbolMasterAt = 0;
 
 function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -136,8 +141,11 @@ export async function fetchFyersOptionChain(
     throw new FyersMarketDataError(400, "Option-chain expiry timestamp is invalid");
   }
 
+  const chainSymbol = symbol === "MCX:CRUDEOIL"
+    ? await resolveCrudeOilFuture(fetchImpl)
+    : symbol;
   const url = new URL(`${fyersDataBaseUrl}/options-chain-v3`);
-  url.searchParams.set("symbol", symbol);
+  url.searchParams.set("symbol", chainSymbol);
   url.searchParams.set("strikecount", String(strikeCount));
   url.searchParams.set("timestamp", timestamp);
   url.searchParams.set("greeks", "1");
@@ -155,7 +163,7 @@ export async function fetchFyersOptionChain(
     const optionType = typeof entry.option_type === "string" ? entry.option_type.toUpperCase() : "";
     const symbol = entry.symbol;
     if (optionType === "" && underlyingPrice === undefined) {
-      underlyingPrice = typeof symbol === "string" && symbol.startsWith("MCX:")
+      underlyingPrice = chainSymbol.startsWith("MCX:")
         ? optionalNumber(entry.fp) ?? optionalNumber(entry.ltp)
         : optionalNumber(entry.ltp);
       continue;
@@ -206,13 +214,60 @@ export async function fetchFyersOptionChain(
     : [];
 
   return {
-    symbol,
+    symbol: chainSymbol,
     underlyingPrice,
     callOpenInterest: optionalNumber(data.callOi),
     putOpenInterest: optionalNumber(data.putOi),
     expiries,
     options,
   };
+}
+
+async function resolveCrudeOilFuture(fetchImpl) {
+  const now = Math.floor(Date.now() / 1000);
+  if (
+    cachedCrudeOilFuture &&
+    cachedCrudeOilFutureExpiry > now &&
+    Date.now() - cachedCrudeOilSymbolMasterAt < crudeOilSymbolCacheDurationMs
+  ) {
+    return cachedCrudeOilFuture;
+  }
+
+  const response = await fetchImpl(crudeOilSymbolMasterUrl);
+  if (!response.ok) {
+    throw new FyersMarketDataError(
+      502,
+      `FYERS MCX symbol master request failed with HTTP ${response.status}`,
+    );
+  }
+
+  const contracts = (await response.text())
+    .split(/\r?\n/)
+    .flatMap((line) => {
+      const fields = line.split(",");
+      const expiry = Number(fields[8]);
+      const symbol = fields[9];
+      return (
+        /^MCX:CRUDEOIL\d{2}[A-Z]{3}FUT$/.test(symbol) &&
+        Number.isSafeInteger(expiry) &&
+        expiry > now
+      )
+        ? [{ symbol, expiry }]
+        : [];
+    })
+    .sort((left, right) => left.expiry - right.expiry);
+  const nearestContract = contracts[0];
+  if (!nearestContract) {
+    throw new FyersMarketDataError(
+      502,
+      "No active Crude Oil futures contract was found in the FYERS MCX symbol master",
+    );
+  }
+
+  cachedCrudeOilFuture = nearestContract.symbol;
+  cachedCrudeOilFutureExpiry = nearestContract.expiry;
+  cachedCrudeOilSymbolMasterAt = Date.now();
+  return cachedCrudeOilFuture;
 }
 
 async function requestFyers(url, appId, accessToken, fetchImpl) {

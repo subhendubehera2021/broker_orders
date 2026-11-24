@@ -291,6 +291,12 @@ test("Fyers OAuth validates state and issues an encrypted session cookie", async
   });
   globalThis.fetch = async (url, options) => {
     const requestUrl = new URL(url);
+    if (requestUrl.pathname.endsWith("/MCX_COM.csv")) {
+      const expiry = Math.floor(Date.now() / 1000) + 86400 * 30;
+      return new Response(
+        `token,CRUDEOIL FUT,30,1,1.0,,0900-2355,2026-11-24,${expiry},MCX:CRUDEOIL26DECFUT,11,20,576264,CRUDEOIL,294,-1.0,XX`,
+      );
+    }
     if (requestUrl.pathname.endsWith("/validate-authcode")) {
       fyersAuthRequest = { url: String(url), options };
       return Response.json({ s: "ok", access_token: "private-fyers-access-token" });
@@ -312,9 +318,9 @@ test("Fyers OAuth validates state and issues an encrypted session cookie", async
     if (requestUrl.pathname.endsWith("/options-chain-v3")) {
       fyersAuthRequest = { url: String(url), options };
       const underlyingSymbol = requestUrl.searchParams.get("symbol");
-      const optionsChain = underlyingSymbol === "MCX:CRUDEOIL-INDEX"
+      const optionsChain = underlyingSymbol.startsWith("MCX:CRUDEOIL")
         ? [
-            { symbol: "MCX:CRUDEOIL-INDEX", option_type: "", strike_price: -1, ltp: 5200, fp: 5225 },
+            { symbol: "MCX:CRUDEOIL26DECFUT", option_type: "", strike_price: -1, ltp: 5200, fp: 5225 },
             { symbol: "MCX:CRUDEOIL26DEC5225CE", option_type: "CE", strike_price: 5225, ltp: 120, oi: 500 },
             { symbol: "MCX:CRUDEOIL26DEC5225PE", option_type: "PE", strike_price: 5225, ltp: 105, oi: 700 },
           ]
@@ -487,11 +493,11 @@ test("Fyers OAuth validates state and issues an encrypted session cookie", async
 
     const crudeOilOptionChain = await app.inject({
       method: "GET",
-      url: "/api/fyers/options-chain?symbol=MCX%3ACRUDEOIL-INDEX&strikecount=1",
+      url: "/api/fyers/options-chain?symbol=MCX%3ACRUDEOIL&strikecount=1",
       headers: { cookie: sessionCookie },
     });
     assert.equal(crudeOilOptionChain.statusCode, 200);
-    assert.equal(crudeOilOptionChain.json().symbol, "MCX:CRUDEOIL-INDEX");
+    assert.equal(crudeOilOptionChain.json().symbol, "MCX:CRUDEOIL26DECFUT");
     assert.equal(crudeOilOptionChain.json().underlyingPrice, 5225);
     assert.deepEqual(crudeOilOptionChain.json().options.map(({ symbol, optionType, strikePrice }) => ({
       symbol,
@@ -501,7 +507,7 @@ test("Fyers OAuth validates state and issues an encrypted session cookie", async
       { symbol: "MCX:CRUDEOIL26DEC5225CE", optionType: "CE", strikePrice: 5225 },
       { symbol: "MCX:CRUDEOIL26DEC5225PE", optionType: "PE", strikePrice: 5225 },
     ]);
-    assert.equal(new URL(fyersAuthRequest.url).searchParams.get("symbol"), "MCX:CRUDEOIL-INDEX");
+    assert.equal(new URL(fyersAuthRequest.url).searchParams.get("symbol"), "MCX:CRUDEOIL26DECFUT");
 
     const logout = await app.inject({
       method: "POST",
@@ -632,7 +638,7 @@ test("serves the TradingView-inspired chart and local charting assets", async ()
   assert.doesNotMatch(page.body, /id="controls-toggle"/);
   assert.match(page.body, /NIFTY and Crude Oil option chains/);
   assert.match(page.body, /option-chain-panel/);
-  assert.match(page.body, /value="MCX:CRUDEOIL-INDEX">Crude Oil<\/option>/);
+  assert.match(page.body, /value="MCX:CRUDEOIL">Crude Oil<\/option>/);
   assert.match(client.body, /optionChainUnderlyingSelect\.value/);
   assert.match(client.body, /Loading \$\{underlyingName\} option chain/);
   assert.doesNotMatch(page.body, /class="topbar"/);
