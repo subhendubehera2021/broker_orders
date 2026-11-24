@@ -643,6 +643,78 @@ describe("app routes", () => {
     });
   });
 
+  it("places simplified SELL SL-Limit orders with the limit below the trigger", async () => {
+    const expiryEpoch = String(Date.UTC(2030, 0, 30) / 1000 - 315_511_200);
+    const csv = [
+      "pSymbol,pInstType,pSymbolName,pTrdSymbol,pOptionType,pExpiryDate,dStrikePrice;,lLotSize",
+      `123,OPTIDX,NIFTY,NIFTY30JAN2030CE,CE,${expiryEpoch},2500000,25`,
+    ].join("\n");
+    const submittedInputs: PlaceNiftyOptionOrderInput[] = [];
+    const app = buildApp({
+      config,
+      authClient: {
+        async login() {
+          return authenticatedSession;
+        },
+        async placeNiftyOptionOrder(_session, input) {
+          submittedInputs.push(input);
+          return { stat: "Ok" };
+        },
+      },
+      optionChainCsvLoader: async () => csv,
+    });
+    apps.push(app);
+
+    await app.inject({ method: "POST", url: "/api/auth/login", payload: { totp: "123456" } });
+    const triggerResponse = await app.inject({
+      method: "POST",
+      url: "/api/orders/sell-sl-limit",
+      payload: {
+        tradingSymbol: "NIFTY30JAN2030CE",
+        quantity: "25",
+        triggerPrice: "105",
+        amo: "NO",
+      },
+    });
+    const priceResponse = await app.inject({
+      method: "POST",
+      url: "/api/orders/sell-sl-limit",
+      payload: {
+        tradingSymbol: "NIFTY30JAN2030CE",
+        quantity: "25",
+        price: "102.50",
+        amo: "NO",
+      },
+    });
+
+    assert.equal(triggerResponse.statusCode, 200, triggerResponse.body);
+    assert.equal(priceResponse.statusCode, 200, priceResponse.body);
+    assert.deepEqual(
+      submittedInputs.map(({ transactionType, orderType, price, triggerPrice }) => ({
+        transactionType,
+        orderType,
+        price,
+        triggerPrice,
+      })),
+      [
+        { transactionType: "S", orderType: "SL", price: "104.90", triggerPrice: "105.00" },
+        { transactionType: "S", orderType: "SL", price: "102.50", triggerPrice: "102.60" },
+      ],
+    );
+
+    const invalidResponse = await app.inject({
+      method: "POST",
+      url: "/api/orders/sell-sl-limit",
+      payload: {
+        tradingSymbol: "NIFTY30JAN2030CE",
+        quantity: "25",
+        triggerPrice: "0.05",
+      },
+    });
+    assert.equal(invalidResponse.statusCode, 400);
+    assert.equal(submittedInputs.length, 2);
+  });
+
   it("requires authentication before cancelling an order", async () => {
     let cancelCalls = 0;
     const app = buildApp({

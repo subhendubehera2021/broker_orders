@@ -63,6 +63,16 @@ interface BuySlLimitOrderBody {
   tag?: string;
 }
 
+interface SellSlLimitOrderBody {
+  tradingSymbol: string;
+  quantity: string;
+  price?: string;
+  triggerPrice?: string;
+  product?: "MIS" | "NRML";
+  amo?: "YES" | "NO";
+  tag?: string;
+}
+
 interface CancelOrderBody {
   orderNumber?: string;
   on?: string;
@@ -777,6 +787,149 @@ export function buildApp({
               : error instanceof KotakNeoError
                 ? error.message
                 : "BUY SL-Limit order could not be prepared",
+          });
+        }
+      },
+    );
+
+    api.post<{ Body: SellSlLimitOrderBody }>(
+      "/api/orders/sell-sl-limit",
+      {
+        schema: {
+          tags: ["Orders"],
+          summary: "Place a simplified SELL SL-Limit order with auto 0.10 price difference and auto-AMO",
+          description:
+            "Places a SELL Stop-Limit (SL) order with minimal required body parameters (tradingSymbol, quantity, and either triggerPrice or price). If triggerPrice is provided, price is automatically calculated as triggerPrice - 0.10. Auto-detects After Market Orders (AMO: YES) outside regular Indian market hours (3:30 PM – 9:00 AM IST and weekends).",
+          body: {
+            type: "object",
+            required: ["tradingSymbol", "quantity"],
+            additionalProperties: false,
+            properties: {
+              tradingSymbol: { type: "string", minLength: 1, maxLength: 64 },
+              quantity: { type: "string", pattern: "^[1-9]\\d{0,7}$" },
+              triggerPrice: {
+                type: "string",
+                pattern: "^\\d+(\\.\\d{1,4})?$",
+                description: "Stop trigger price (limit price is automatically calculated as triggerPrice - 0.10 if price is omitted)",
+              },
+              price: {
+                type: "string",
+                pattern: "^\\d+(\\.\\d{1,4})?$",
+                description: "Limit price (optional; if omitted, computed automatically from triggerPrice)",
+              },
+              product: { type: "string", enum: ["MIS", "NRML"], default: "MIS" },
+              amo: {
+                type: "string",
+                enum: ["YES", "NO"],
+                description: "Auto-detected if omitted (YES after 3:30 PM, before 9:00 AM IST, or weekends)",
+              },
+              tag: { type: "string", minLength: 1, maxLength: 20 },
+            },
+          },
+          response: {
+            200: {
+              type: "object",
+              additionalProperties: true,
+              description: "Kotak Neo order submission response.",
+            },
+            400: errorResponseSchema,
+            401: errorResponseSchema,
+            429: errorResponseSchema,
+            502: errorResponseSchema,
+            503: errorResponseSchema,
+            504: errorResponseSchema,
+          },
+        },
+      },
+      async (request, reply) => {
+        if (!session) {
+          return reply.code(401).send({ error: "Authenticate with Kotak Neo before placing an order" });
+        }
+        if (
+          !client?.placeNiftyOptionOrder ||
+          !config.kotakNeo.placeOrderPath ||
+          !config.kotakNeo.orderSource
+        ) {
+          return reply.code(503).send({
+            error:
+              "Kotak Neo order API is not configured; set KOTAK_NEO_PLACE_ORDER_PATH and KOTAK_NEO_ORDER_SOURCE",
+          });
+        }
+        const authenticatedSession = session;
+        const body = request.body;
+        let triggerNum: number;
+        let priceNum: number;
+
+        if (body.triggerPrice !== undefined && Number(body.triggerPrice) > 0) {
+          triggerNum = Number(body.triggerPrice);
+          priceNum = Math.round((triggerNum - 0.10) * 100) / 100;
+        } else if (body.price !== undefined && Number(body.price) > 0) {
+          priceNum = Number(body.price);
+          triggerNum = Math.round((priceNum + 0.10) * 100) / 100;
+        } else {
+          return reply.code(400).send({
+            error: "Provide either triggerPrice or price for the SELL SL-Limit order",
+          });
+        }
+
+        if (triggerNum <= 0 || priceNum <= 0) {
+          return reply.code(400).send({ error: "Trigger price and price must be positive numbers" });
+        }
+
+        let brokerRequestStarted = false;
+        try {
+          const contract = (await getNiftyContracts()).find(
+            ({ tradingSymbol }) => tradingSymbol.toUpperCase() === body.tradingSymbol.toUpperCase(),
+          );
+          if (!contract) {
+            return reply.code(400).send({
+              error: `Contract for trading symbol ${body.tradingSymbol} was not found in Scrip Master`,
+            });
+          }
+          const quantity = Number(body.quantity);
+          const lotSize = Number(contract.lotSize);
+          if (!Number.isSafeInteger(lotSize) || lotSize < 1 || quantity % lotSize !== 0) {
+            return reply.code(400).send({
+              error: "Order quantity must be a whole number of lots for this contract",
+            });
+          }
+
+          brokerRequestStarted = true;
+          const amo = body.amo ?? (isAfterMarketHours() ? "YES" : "NO");
+          return await client.placeNiftyOptionOrder(authenticatedSession, {
+            tradingSymbol: contract.tradingSymbol,
+            instrumentToken: contract.instrumentToken,
+            transactionType: "S",
+            quantity: body.quantity,
+            product: body.product ?? "MIS",
+            orderType: "SL",
+            price: priceNum.toFixed(2),
+            validity: "DAY",
+            amo,
+            disclosedQuantity: "0",
+            marketProtection: "0",
+            triggerPrice: triggerNum.toFixed(2),
+            ...(body.tag ? { tag: body.tag } : {}),
+          });
+        } catch (error) {
+          const statusCode = orderRequestStatus(error);
+          const outcomeUncertain =
+            brokerRequestStarted &&
+            (statusCode === 502 || statusCode === 503 || statusCode === 504);
+          request.log.error(
+            {
+              statusCode,
+              errorName: error instanceof Error ? error.name : "UnknownError",
+              ...(error instanceof Error ? { errorMessage: error.message } : {}),
+            },
+            "Kotak Neo SELL SL-Limit order failed",
+          );
+          return reply.code(statusCode).send({
+            error: outcomeUncertain
+              ? "Order outcome could not be confirmed; check your Kotak Neo order book before retrying"
+              : error instanceof KotakNeoError
+                ? error.message
+                : "SELL SL-Limit order could not be prepared",
           });
         }
       },
