@@ -14,6 +14,7 @@ export class AutoSellManager {
   }
 
   schedule(message) {
+    console.log("[auto-sell] Scheduling automatic sell for buy order", message);
     if (this.env.AUTO_SELL_ENABLED === "false") return;
     const data = message.data;
     if (
