@@ -8,8 +8,6 @@
 const BULLISH = 1;
 const BEARISH = -1;
 const ATR_LENGTH = 200;
-const INTERNAL_PIVOT_LENGTH = 5;
-const SWING_PIVOT_LENGTH = 50;
 const DEFAULT_ORDER_BLOCK_COUNT = 11;
 const MAX_ORDER_BLOCK_COUNT = 20;
 
@@ -41,6 +39,7 @@ function findStructureEvents(bars, pivots, length, kind) {
   const latest = { high: undefined, low: undefined };
   const crossed = new Set();
   const events = [];
+  let bias = 0;
 
   for (let index = 0; index < bars.length; index += 1) {
     for (const pivot of confirmedAt.get(index) ?? []) latest[pivot.side] = pivot;
@@ -57,12 +56,14 @@ function findStructureEvents(bars, pivots, length, kind) {
         direction,
         index,
         pivotIndex: pivot.index,
+        time: bars[index].time,
       });
       crossed.add(pivot);
+      bias = direction;
     }
   }
 
-  return events;
+  return { events, bias };
 }
 
 function getParsedExtremes(bars) {
@@ -118,18 +119,43 @@ function findOrderBlocks(bars, events, count, parsedHighs, parsedLows) {
     const bottom = parsedLows[originIndex];
     if (!(top > bottom)) continue;
 
-    let mitigated = false;
-    for (let index = event.index; index < bars.length; index += 1) {
-      if (event.direction === BULLISH ? bars[index].low < bottom : bars[index].high > top) {
-        mitigated = true;
+    let status = "fresh";
+    let touchTime;
+    let statusTime = bars[event.index].time;
+    for (let index = event.index + 1; index < bars.length; index += 1) {
+      const bar = bars[index];
+      if (bar.high >= bottom && bar.low <= top) {
+        status = "retested";
+        touchTime = bar.time;
+        statusTime = bar.time;
+      }
+
+      const invalidated = event.direction === BULLISH
+        ? bar.close < bottom
+        : bar.close > top;
+      if (invalidated) {
+        status = "invalidated";
+        statusTime = bar.time;
+        break;
+      }
+
+      const mitigated = event.direction === BULLISH
+        ? bar.low < bottom
+        : bar.high > top;
+      if (mitigated) {
+        status = "mitigated";
+        statusTime = bar.time;
         break;
       }
     }
-    if (mitigated) continue;
 
     blocks.push({
       startTime: bars[originIndex].time,
+      createdTime: bars[event.index].time,
       endTime: bars.at(-1).time,
+      touchTime,
+      statusTime,
+      status,
       top,
       bottom,
       direction: event.direction,
@@ -138,12 +164,6 @@ function findOrderBlocks(bars, events, count, parsedHighs, parsedLows) {
   }
 
   return blocks.slice(-count);
-}
-
-function validateCount(name, value) {
-  if (!Number.isInteger(value) || value < 1 || value > MAX_ORDER_BLOCK_COUNT) {
-    throw new RangeError(`${name} must be an integer between 1 and ${MAX_ORDER_BLOCK_COUNT}`);
-  }
 }
 
 export function calculateSmartMoneyConcepts(bars, options = {}) {
@@ -160,18 +180,18 @@ export function calculateSmartMoneyConcepts(bars, options = {}) {
     throw new TypeError("Candles must be valid and sorted by time");
   }
 
-  const internalPivotLength = options.internalPivotLength ?? INTERNAL_PIVOT_LENGTH;
-  const swingPivotLength = options.swingPivotLength ?? SWING_PIVOT_LENGTH;
-  const internalCount = options.internalOrderBlockCount ?? DEFAULT_ORDER_BLOCK_COUNT;
-  const swingCount = options.swingOrderBlockCount ?? DEFAULT_ORDER_BLOCK_COUNT;
-  if (!Number.isInteger(internalPivotLength) || internalPivotLength < 1) {
-    throw new RangeError("Internal pivot length must be a positive integer");
+  const internalPivotLength = options.internalPivotLength ?? 11;
+  const swingPivotLength = options.swingPivotLength ?? 11;
+  const orderBlockCount = options.orderBlockCount ?? DEFAULT_ORDER_BLOCK_COUNT;
+  if (!Number.isInteger(internalPivotLength) || internalPivotLength < 2 || internalPivotLength > 50) {
+    throw new RangeError("Internal pivot length must be an integer between 2 and 50");
   }
-  if (!Number.isInteger(swingPivotLength) || swingPivotLength < 2) {
-    throw new RangeError("Swing pivot length must be an integer greater than or equal to 2");
+  if (!Number.isInteger(swingPivotLength) || swingPivotLength < 2 || swingPivotLength > 50) {
+    throw new RangeError("Swing pivot length must be an integer between 2 and 50");
   }
-  validateCount("Internal order-block length", internalCount);
-  validateCount("Swing order-block length", swingCount);
+  if (!Number.isInteger(orderBlockCount) || orderBlockCount < 1 || orderBlockCount > MAX_ORDER_BLOCK_COUNT) {
+    throw new RangeError(`Order-block count must be an integer between 1 and ${MAX_ORDER_BLOCK_COUNT}`);
+  }
 
   const internalPivots = findPivots(bars, internalPivotLength);
   const swingPivots = findPivots(bars, swingPivotLength);
@@ -180,9 +200,191 @@ export function calculateSmartMoneyConcepts(bars, options = {}) {
   const { parsedHighs, parsedLows } = getParsedExtremes(bars);
 
   return {
+    internal: internalEvents,
+    swing: swingEvents,
     orderBlocks: {
-      internal: findOrderBlocks(bars, internalEvents, internalCount, parsedHighs, parsedLows),
-      swing: findOrderBlocks(bars, swingEvents, swingCount, parsedHighs, parsedLows),
+      internal: findOrderBlocks(bars, internalEvents.events, orderBlockCount, parsedHighs, parsedLows),
+      swing: findOrderBlocks(bars, swingEvents.events, orderBlockCount, parsedHighs, parsedLows),
     },
+  };
+}
+
+export function evaluateOrderBlockSetup({
+  swingBlocks,
+  swingBias,
+  internalEvents,
+  candles,
+}) {
+  const empty = {
+    state: "waiting",
+    summary: "Waiting for swing context",
+    direction: 0,
+    block: undefined,
+    checks: [],
+    plan: undefined,
+  };
+  if (!Array.isArray(candles) || candles.length === 0) return empty;
+
+  const latest = candles.at(-1);
+  const orderedBlocks = [...(swingBlocks ?? [])].sort((a, b) => b.createdTime - a.createdTime);
+  const matchingBlock = orderedBlocks.find((block) =>
+    block.direction === swingBias && block.status !== "mitigated" && block.status !== "invalidated"
+  );
+  const block = matchingBlock ?? orderedBlocks[0];
+  if (!block) {
+    return {
+      ...empty,
+      summary: swingBias ? "Waiting for a swing order block" : "Waiting for swing structure",
+      checks: [
+        { label: "Swing bias", state: swingBias ? "pass" : "wait", detail: describeBias(swingBias) },
+        { label: "Swing order block", state: "wait", detail: "No confirmed swing block in the loaded data" },
+      ],
+    };
+  }
+
+  let status = block.status;
+  let touchTime = block.touchTime;
+  let visibleRetest = false;
+  let liveStatusTime = block.statusTime;
+  const history = candles.filter((bar) => bar.time > block.createdTime);
+  for (const bar of history) {
+    const touched = bar.high >= block.bottom && bar.low <= block.top;
+    if (touched && status !== "invalidated" && status !== "mitigated") {
+      status = "retested";
+      touchTime = bar.time;
+      visibleRetest = true;
+      liveStatusTime = bar.time;
+    }
+
+    if (status === "invalidated" || status === "mitigated") continue;
+    const invalidated = block.direction === BULLISH
+      ? bar.close < block.bottom
+      : bar.close > block.top;
+    if (invalidated) {
+      status = "invalidated";
+      liveStatusTime = bar.time;
+      continue;
+    }
+    const mitigated = block.direction === BULLISH
+      ? bar.low < block.bottom
+      : bar.high > block.top;
+    if (mitigated) {
+      status = "mitigated";
+      liveStatusTime = bar.time;
+    }
+  }
+
+  const priceInZone = latest.high >= block.bottom && latest.low <= block.top;
+  if (latest.time > block.createdTime && priceInZone && status === "fresh") {
+    status = "retested";
+    touchTime = latest.time;
+    liveStatusTime = latest.time;
+    visibleRetest = true;
+  }
+  const retestIndex = touchTime === undefined
+    ? -1
+    : candles.findIndex((bar) => bar.time === touchTime);
+  const retestInHistory = visibleRetest && retestIndex >= 0;
+  const confirmation = (internalEvents ?? []).findLast((event) =>
+    event.direction === block.direction &&
+    event.time > touchTime &&
+    event.time < latest.time
+  );
+  const biasAligned = swingBias === block.direction;
+  const zoneActive = status !== "invalidated" && status !== "mitigated";
+  const confirmationAfterRetest = Boolean(confirmation);
+  const plan = buildReferencePlan(block, latest.close, swingBlocks ?? []);
+  const checks = [
+    { label: "Swing bias", state: biasAligned ? "pass" : "wait", detail: describeBias(swingBias) },
+    {
+      label: "Swing zone",
+      state: zoneActive ? status === "retested" ? "pass" : "wait" : "fail",
+      detail: describeZone(block.direction, status),
+    },
+    {
+      label: "Retest in chart history",
+      state: retestInHistory ? "pass" : "wait",
+      detail: retestInHistory
+        ? "Retest found in the selected chart history"
+        : "Wait for price to revisit the zone",
+    },
+    {
+      label: "Internal confirmation",
+      state: confirmationAfterRetest ? "pass" : "wait",
+      detail: confirmation
+        ? `${confirmation.direction === BULLISH ? "Bullish" : "Bearish"} structure break`
+        : "Wait for a same-direction internal break after the retest",
+    },
+    {
+      label: "Risk/target references",
+      state: plan.riskReward === undefined ? "wait" : "pass",
+      detail: plan.riskReward === undefined
+        ? "No valid opposing-zone target in the loaded data"
+        : `Reference R:R ${plan.riskReward.toFixed(2)}; apply your own risk rules`,
+    },
+  ];
+  const conditionsMet = checks.every((check) => check.state === "pass");
+  const state = !zoneActive
+    ? "invalid"
+    : conditionsMet
+      ? "review"
+      : "waiting";
+
+  return {
+    state,
+    summary: status === "invalidated"
+      ? "Zone invalidated · wait for a new setup"
+      : status === "mitigated"
+        ? "Zone mitigated · wait for a new setup"
+      : conditionsMet
+        ? "Conditions met · review manually"
+        : "Waiting · checklist incomplete",
+    direction: block.direction,
+    block: { ...block, status, touchTime, statusTime: liveStatusTime },
+    checks,
+    plan,
+  };
+}
+
+function describeBias(bias) {
+  if (bias === BULLISH) return "Bullish swing structure";
+  if (bias === BEARISH) return "Bearish swing structure";
+  return "No confirmed swing direction";
+}
+
+function describeZone(direction, status) {
+  const label = direction === BULLISH ? "Bullish demand" : "Bearish supply";
+  if (status === "invalidated") return `${label} zone invalidated`;
+  if (status === "mitigated") return `${label} zone mitigated`;
+  if (status === "retested") return `${label} zone retested`;
+  return `${label} zone is fresh`;
+}
+
+function buildReferencePlan(block, entry, swingBlocks) {
+  const stop = block.direction === BULLISH ? block.bottom : block.top;
+  const opposingBlocks = swingBlocks.filter((candidate) =>
+    candidate.direction !== block.direction &&
+    candidate.status !== "mitigated" &&
+    candidate.status !== "invalidated"
+  );
+  const targetBlock = block.direction === BULLISH
+    ? opposingBlocks
+      .filter((candidate) => candidate.bottom > entry)
+      .sort((a, b) => a.bottom - b.bottom)[0]
+    : opposingBlocks
+      .filter((candidate) => candidate.top < entry)
+      .sort((a, b) => b.top - a.top)[0];
+  const target = targetBlock
+    ? block.direction === BULLISH ? targetBlock.bottom : targetBlock.top
+    : undefined;
+  const risk = Math.abs(entry - stop);
+  const reward = target === undefined
+    ? undefined
+    : block.direction === BULLISH ? target - entry : entry - target;
+  return {
+    entry,
+    stop,
+    target,
+    riskReward: risk > 0 && reward > 0 ? reward / risk : undefined,
   };
 }

@@ -1,5 +1,8 @@
 import { findLiquiditySwings } from "/trading-view/liquidity-swings.js";
-import { calculateSmartMoneyConcepts } from "/trading-view/smart-money-concepts.js";
+import {
+  calculateSmartMoneyConcepts,
+  evaluateOrderBlockSetup,
+} from "/trading-view/smart-money-concepts.js";
 import { formatIndiaAxisTick, formatIndiaTime } from "/trading-view/time-format.js";
 import {
   calculateDemoPnl,
@@ -43,8 +46,19 @@ const optionExpirySelect = document.querySelector("#option-expiry");
 const swingToggle = document.querySelector("#swing-toggle");
 const smcToggles = [...document.querySelectorAll("[data-smc-toggle]")];
 const smcLengthInputs = [...document.querySelectorAll("[data-smc-length]")];
+const swingTimeframeSelector = document.querySelector("#smc-swing-timeframe");
 const indicatorsToggle = document.querySelector("#indicators-toggle");
 const indicatorPopover = document.querySelector("#indicator-popover");
+const orderBlockSetupPanel = document.querySelector("#order-block-setup-panel");
+const orderBlockSetupSummary = document.querySelector("#order-block-setup-summary");
+const orderBlockSetupContext = document.querySelector("#order-block-setup-context");
+const orderBlockSetupChecks = document.querySelector("#order-block-setup-checks");
+const orderBlockEntry = document.querySelector("#order-block-entry");
+const orderBlockStop = document.querySelector("#order-block-stop");
+const orderBlockTarget = document.querySelector("#order-block-target");
+const orderBlockRiskReward = document.querySelector("#order-block-risk-reward");
+const orderBlockDemoButton = document.querySelector("#order-block-demo-button");
+const orderBlockRetryButton = document.querySelector("#order-block-retry-context");
 const drawToggle = document.querySelector("#draw-toggle");
 const drawPopover = document.querySelector("#draw-popover");
 const lookbackSlider = document.querySelector("#lookback");
@@ -92,6 +106,7 @@ const intervalSeconds = {
   "180": 10800,
   "240": 14400,
   D: 86400,
+  "1W": 604800,
 };
 const livePriceLabelHeight = 18;
 const liveCountdownHeight = 20;
@@ -167,6 +182,12 @@ let swingSeries = [];
 let swingMarkers = [];
 let activeSwings = [];
 let smartMoneySeries = [];
+let swingContextCandles = [];
+let swingContextKey;
+let swingContextLoadingKey;
+let swingContextError;
+let swingContextRequest = 0;
+let smartMoneyAnalysis;
 let quoteTimer;
 let countdownTimer;
 let quoteInFlight = false;
@@ -667,6 +688,26 @@ function rangeDates(days) {
   return { from: from.toISOString().slice(0, 10), to };
 }
 
+function updateSwingTimeframeOptions() {
+  const chartSeconds = intervalSeconds[currentResolution] ?? Infinity;
+  const options = [...swingTimeframeSelector.options];
+  const available = options.filter((option) =>
+    option.value && intervalSeconds[option.value] > chartSeconds
+  );
+  for (const option of options) {
+    option.disabled = !available.includes(option);
+  }
+  const current = available.find((option) => option.value === swingTimeframeSelector.value);
+  const selected = current ?? available[0];
+  swingTimeframeSelector.value = selected?.value ?? "";
+  swingTimeframeSelector.disabled = !selected;
+  return selected?.value;
+}
+
+function swingContextRange(resolution) {
+  return rangeDates(resolution === "D" || resolution === "1W" ? 365 : 90);
+}
+
 function formatPrice(value) {
   return Number.isFinite(value)
     ? new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 }).format(value)
@@ -888,7 +929,7 @@ function clearSmartMoneyConcepts() {
   smartMoneySeries = [];
 }
 
-function addSmartMoneyZone({ startTime, endTime, top, bottom, color }) {
+function addSmartMoneyZone({ startTime, endTime, top, bottom, color, lineColor = color }) {
   if (
     !Number.isFinite(startTime) || !Number.isFinite(endTime) || endTime <= startTime ||
     !Number.isFinite(top) || !Number.isFinite(bottom) || top <= bottom
@@ -897,7 +938,7 @@ function addSmartMoneyZone({ startTime, endTime, top, bottom, color }) {
     baseValue: { type: "price", price: bottom },
     topFillColor1: color,
     topFillColor2: color,
-    topLineColor: color,
+    topLineColor: lineColor,
     topLineVisible: true,
     topLineWidth: 1,
     bottomFillColor1: color,
@@ -918,16 +959,37 @@ function renderSmartMoneyConcepts() {
   clearSmartMoneyConcepts();
   const internalEnabled = document.querySelector("#smc-internal-ob").checked;
   const swingEnabled = document.querySelector("#smc-swing-ob").checked;
-  if (!candles.length || (!internalEnabled && !swingEnabled)) return;
+  if (!internalEnabled && !swingEnabled) {
+    orderBlockSetupPanel.hidden = true;
+    smartMoneyAnalysis = undefined;
+    return;
+  }
 
-  const result = calculateSmartMoneyConcepts(candles, {
-    internalOrderBlockCount: Number(document.querySelector("#smc-internal-length").value),
-    swingOrderBlockCount: Number(document.querySelector("#smc-swing-length").value),
-  });
+  if (orderBlockSetupPanel.hidden) orderBlockSetupPanel.open = true;
+  orderBlockSetupPanel.hidden = false;
+  if (!candles.length) {
+    smartMoneyAnalysis = undefined;
+    updateOrderBlockSetup();
+    return;
+  }
+
+  const options = {
+    internalPivotLength: Number(document.querySelector("#smc-internal-length").value),
+    swingPivotLength: Number(document.querySelector("#smc-swing-length").value),
+  };
+  const chartAnalysis = calculateSmartMoneyConcepts(candles, options);
+  const expectedContextKey = activeChartSymbol && swingTimeframeSelector.value
+    ? `${activeChartSymbol}:${swingTimeframeSelector.value}`
+    : undefined;
+  const contextAnalysis = swingContextKey === expectedContextKey && swingContextCandles.length
+    ? calculateSmartMoneyConcepts(swingContextCandles, options)
+    : undefined;
+  smartMoneyAnalysis = { chartAnalysis, contextAnalysis };
+
   const blockSets = [
     {
       enabled: internalEnabled,
-      blocks: result.orderBlocks.internal,
+      blocks: chartAnalysis.orderBlocks.internal,
       colors: {
         bullish: "rgba(49, 121, 245, 0.20)",
         bearish: "rgba(247, 124, 128, 0.20)",
@@ -935,7 +997,7 @@ function renderSmartMoneyConcepts() {
     },
     {
       enabled: swingEnabled,
-      blocks: result.orderBlocks.swing,
+      blocks: contextAnalysis?.orderBlocks.swing ?? [],
       colors: {
         bullish: "rgba(24, 72, 204, 0.45)",
         bearish: "rgba(178, 40, 51, 0.45)",
@@ -946,10 +1008,288 @@ function renderSmartMoneyConcepts() {
   for (const { enabled, blocks, colors } of blockSets) {
     if (!enabled) continue;
     for (const block of blocks) {
+      const stateAlpha = block.status === "invalidated"
+        ? "0.07"
+        : block.status === "mitigated"
+          ? "0.12"
+          : block.status === "retested"
+            ? "0.52"
+            : undefined;
+      const sourceColor = block.direction === 1 ? colors.bullish : colors.bearish;
+      const color = stateAlpha
+        ? sourceColor.replace(/[\d.]+\)$/, `${stateAlpha})`)
+        : sourceColor;
       addSmartMoneyZone({
         ...block,
-        color: block.direction === 1 ? colors.bullish : colors.bearish,
+        color,
+        lineColor: block.status === "invalidated"
+          ? "rgba(135, 139, 148, 0.28)"
+          : sourceColor.replace(/[\d.]+\)$/, "0.9)"),
       });
+    }
+  }
+
+  if (!contextAnalysis && activeChartSymbol && swingTimeframeSelector.value) {
+    void loadSwingContext(activeChartSymbol);
+  }
+  updateOrderBlockSetup();
+}
+
+function updateOrderBlockSetup() {
+  const active = smcToggles.some((toggle) => toggle.checked);
+  orderBlockSetupPanel.hidden = !active;
+  if (!active) return;
+  orderBlockDemoButton.textContent = demoModeToggle.checked
+    ? "Demo controls enabled"
+    : "Enable demo controls";
+  orderBlockDemoButton.disabled = demoModeToggle.checked;
+  orderBlockRetryButton.hidden = true;
+
+  const resolution = swingTimeframeSelector.value;
+  const contextKey = resolution && activeChartSymbol
+    ? `${activeChartSymbol}:${resolution}`
+    : undefined;
+  if (!candles.length) {
+    orderBlockSetupSummary.textContent = "Load chart data to begin";
+    orderBlockSetupContext.textContent = "Waiting for chart candles and higher-timeframe swing context.";
+    renderSetupChecks([{ label: "Market data", state: "wait", detail: "Connect a Fyers account and load candles" }]);
+    clearOrderBlockReferencePlan();
+    orderBlockSetupPanel.dataset.state = "waiting";
+    return;
+  }
+  if (!resolution) {
+    orderBlockSetupSummary.textContent = "No higher timeframe available";
+    orderBlockSetupContext.textContent = "No higher supported interval is available for this chart timeframe.";
+    renderSetupChecks([{ label: "Swing context", state: "wait", detail: "The selected chart interval has no higher supported timeframe" }]);
+    clearOrderBlockReferencePlan();
+    orderBlockSetupPanel.dataset.state = "waiting";
+    return;
+  }
+  if (swingContextLoadingKey === contextKey) {
+    orderBlockSetupSummary.textContent = `Loading ${intervalLabel(resolution)} context`;
+    orderBlockSetupContext.textContent = "Fetching higher-timeframe candles for swing analysis.";
+    renderSetupChecks([{ label: "Swing context", state: "wait", detail: "Waiting for the market-data response" }]);
+    clearOrderBlockReferencePlan();
+    orderBlockSetupPanel.dataset.state = "waiting";
+    return;
+  }
+  if (swingContextError && swingContextKey === contextKey) {
+    orderBlockSetupSummary.textContent = "Swing context unavailable";
+    orderBlockSetupContext.textContent = swingContextError;
+    renderSetupChecks([{ label: "Swing context", state: "fail", detail: "Retry or check the Fyers session and selected interval" }]);
+    clearOrderBlockReferencePlan();
+    orderBlockSetupPanel.dataset.state = "invalid";
+    orderBlockRetryButton.hidden = false;
+    return;
+  }
+  if (!smartMoneyAnalysis?.contextAnalysis) {
+    orderBlockSetupSummary.textContent = "Waiting for swing context";
+    orderBlockSetupContext.textContent = "Loading higher-timeframe data.";
+    renderSetupChecks([{ label: "Swing context", state: "wait", detail: "Higher-timeframe candles are not loaded yet" }]);
+    clearOrderBlockReferencePlan();
+    orderBlockSetupPanel.dataset.state = "waiting";
+    return;
+  }
+
+  const { chartAnalysis, contextAnalysis } = smartMoneyAnalysis;
+  const setup = evaluateOrderBlockSetup({
+    swingBlocks: contextAnalysis.orderBlocks.swing,
+    swingBias: contextAnalysis.swing.bias,
+    internalEvents: chartAnalysis.internal.events,
+    candles,
+  });
+  const internalMinimumBars = Number(document.querySelector("#smc-internal-length").value * 2 + 1);
+  const minimumBars = Number(document.querySelector("#smc-swing-length").value) * 2 + 1;
+  if (candles.length < internalMinimumBars) {
+    setup.state = "waiting";
+    setup.summary = `Need more ${intervalLabel(currentResolution)} chart candles`;
+    setup.checks = [{
+      label: "Internal history",
+      state: "wait",
+      detail: `Loaded ${candles.length}; need at least ${internalMinimumBars} for this pivot length`,
+    }];
+    setup.plan = undefined;
+  } else if (swingContextCandles.length < minimumBars) {
+    setup.state = "waiting";
+    setup.summary = `Need more ${intervalLabel(resolution)} candles`;
+    setup.checks = [{
+      label: "Swing history",
+      state: "wait",
+      detail: `Loaded ${swingContextCandles.length}; need at least ${minimumBars} for this pivot length`,
+    }];
+    setup.plan = undefined;
+  }
+
+  orderBlockSetupPanel.dataset.state = setup.state;
+  orderBlockSetupSummary.textContent = setup.summary;
+  const bias = contextAnalysis.swing.bias === 1
+    ? "Bullish"
+    : contextAnalysis.swing.bias === -1
+      ? "Bearish"
+      : "Unconfirmed";
+  orderBlockSetupContext.textContent =
+    `Swing context ${intervalLabel(resolution)} · chart ${intervalLabel(currentResolution)} · ${bias} bias`;
+  renderSetupChecks(setup.checks);
+  renderOrderBlockReferencePlan(setup.plan);
+}
+
+function renderSetupChecks(checks) {
+  orderBlockSetupChecks.replaceChildren(...checks.map((check) => {
+    const item = document.createElement("li");
+    item.dataset.status = check.state;
+    const label = document.createElement("span");
+    label.textContent = check.label;
+    const state = document.createElement("strong");
+    state.textContent = check.state === "pass" ? "Met" : check.state === "fail" ? "No" : "Waiting";
+    const detail = document.createElement("small");
+    detail.textContent = check.detail;
+    item.append(label, state, detail);
+    return item;
+  }));
+}
+
+function renderOrderBlockReferencePlan(plan) {
+  orderBlockEntry.textContent = plan ? formatPrice(plan.entry) : "—";
+  orderBlockStop.textContent = plan ? formatPrice(plan.stop) : "—";
+  orderBlockTarget.textContent = !plan
+    ? "—"
+    : plan.target === undefined ? "No opposing zone" : formatPrice(plan.target);
+  orderBlockRiskReward.textContent = plan?.riskReward === undefined
+    ? "Unavailable"
+    : `${plan.riskReward.toFixed(2)}R`;
+}
+
+function clearOrderBlockReferencePlan() {
+  renderOrderBlockReferencePlan(undefined);
+}
+
+function clearSwingContext() {
+  swingContextRequest += 1;
+  swingContextCandles = [];
+  swingContextKey = undefined;
+  swingContextLoadingKey = undefined;
+  swingContextError = undefined;
+  smartMoneyAnalysis = undefined;
+}
+
+function indiaWeekKey(time) {
+  const date = indiaDate(new Date(time * 1000));
+  const monday = new Date(`${date}T00:00:00.000Z`);
+  const daysSinceMonday = (monday.getUTCDay() + 6) % 7;
+  monday.setUTCDate(monday.getUTCDate() - daysSinceMonday);
+  return monday.toISOString().slice(0, 10);
+}
+
+function swingContextBucketKey(time, resolution, firstBarOfDay) {
+  const date = indiaDate(new Date(time * 1000));
+  if (resolution === "D") return date;
+  if (resolution === "1W") return indiaWeekKey(time);
+  const anchor = firstBarOfDay?.time ?? time;
+  const bucket = anchor + Math.floor((time - anchor) / intervalSeconds[resolution]) * intervalSeconds[resolution];
+  return `${date}:${bucket}`;
+}
+
+function updateSwingContextFromChart() {
+  const resolution = swingTimeframeSelector.value;
+  const latest = candles.at(-1);
+  if (!resolution || !latest || !swingContextCandles.length) return false;
+
+  const latestDate = indiaDate(new Date(latest.time * 1000));
+  const firstBarOfDay = candles.find((bar) => indiaDate(new Date(bar.time * 1000)) === latestDate);
+  const key = swingContextBucketKey(latest.time, resolution, firstBarOfDay);
+  const currentBars = [];
+  for (let index = candles.length - 1; index >= 0; index -= 1) {
+    const bar = candles[index];
+    const barKey = resolution === "1W"
+      ? indiaWeekKey(bar.time)
+      : swingContextBucketKey(bar.time, resolution, firstBarOfDay);
+    if (barKey !== key) break;
+    currentBars.push(bar);
+  }
+  currentBars.reverse();
+  if (!currentBars.length) return false;
+
+  const contextStart = resolution === "D" || resolution === "1W"
+    ? undefined
+    : firstBarOfDay.time +
+      Math.floor((latest.time - firstBarOfDay.time) / intervalSeconds[resolution]) *
+        intervalSeconds[resolution];
+  const contextBarIndex = swingContextCandles.findIndex((bar) => {
+    if (resolution === "D") return indiaDate(new Date(bar.time * 1000)) === key;
+    if (resolution === "1W") return indiaWeekKey(bar.time) === key;
+    return bar.time === contextStart;
+  });
+  const first = currentBars[0];
+  const last = currentBars.at(-1);
+  const aggregate = {
+    time: contextBarIndex >= 0
+      ? swingContextCandles[contextBarIndex].time
+      : contextStart ?? first.time,
+    open: currentBars[0].open,
+    high: Math.max(...currentBars.map((bar) => bar.high)),
+    low: Math.min(...currentBars.map((bar) => bar.low)),
+    close: last.close,
+    volume: currentBars.reduce((total, bar) => total + bar.volume, 0),
+  };
+
+  if (contextBarIndex >= 0) {
+    const existing = swingContextCandles[contextBarIndex];
+    swingContextCandles[contextBarIndex] = {
+      ...existing,
+      high: Math.max(existing.high, aggregate.high),
+      low: Math.min(existing.low, aggregate.low),
+      close: aggregate.close,
+      volume: Math.max(existing.volume, aggregate.volume),
+    };
+    return true;
+  }
+  if (aggregate.time <= swingContextCandles.at(-1).time) return false;
+  swingContextCandles.push(aggregate);
+  return true;
+}
+
+async function loadSwingContext(symbol = activeChartSymbol) {
+  const resolution = updateSwingTimeframeOptions();
+  if (!symbol || !resolution || !smcToggles.some((toggle) => toggle.checked)) {
+    updateOrderBlockSetup();
+    return;
+  }
+
+  const key = `${symbol}:${resolution}`;
+  if (swingContextKey === key || swingContextLoadingKey === key) return;
+  const request = ++swingContextRequest;
+  swingContextLoadingKey = key;
+  swingContextError = undefined;
+  swingContextCandles = [];
+  swingContextKey = undefined;
+  smartMoneyAnalysis = undefined;
+  updateOrderBlockSetup();
+
+  const { from, to } = swingContextRange(resolution);
+  const query = new URLSearchParams({ symbol, resolution, from, to });
+  try {
+    const result = await fetchJson(`/api/fyers/candles?${query}`);
+    if (request !== swingContextRequest) return;
+    if (
+      !Array.isArray(result.candles) ||
+      result.candles.some((bar, index) =>
+        !isValidCandle(bar) || (index > 0 && bar.time <= result.candles[index - 1].time)
+      )
+    ) {
+      throw new Error("Fyers returned invalid or out-of-order swing-context candles.");
+    }
+    if (!result.candles.length) throw new Error("Fyers returned no candles for swing context.");
+    swingContextCandles = result.candles;
+    swingContextKey = key;
+  } catch (error) {
+    if (request !== swingContextRequest) return;
+    swingContextCandles = [];
+    swingContextKey = key;
+    swingContextError = error.message;
+  } finally {
+    if (request === swingContextRequest) {
+      swingContextLoadingKey = undefined;
+      renderSwings();
     }
   }
 }
@@ -1327,17 +1667,21 @@ async function connectLiveSocket() {
 }
 
 async function loadChart() {
+  const previousSymbol = activeChartSymbol;
+  const symbol = symbolInput.value.trim().toUpperCase();
   stopQuotePolling();
   stopCountdownTimer();
   activeChartSymbol = undefined;
   updateDemoOrderPositions();
   const sequence = ++loadSequence;
-  const symbol = symbolInput.value.trim().toUpperCase();
+  if (previousSymbol && previousSymbol !== symbol) clearSwingContext();
+  updateSwingTimeframeOptions();
   if (demoOrders.length && symbol !== demoOrderSymbol) {
     clearDemoOrders("Chart symbol changed. Pending demo orders were canceled.");
   }
   updateDemoTradeButtons();
   if (!symbol) {
+    clearSwingContext();
     try {
       syncLiveSocketSubscription(undefined);
     } catch (error) {
@@ -1398,11 +1742,11 @@ async function loadChart() {
     document.querySelector("#price-change").textContent = "Last traded price";
     updateOhlc(candles.at(-1));
     updateDemoOrderPositions();
+    activeChartSymbol = symbol;
     renderSwings();
     updateLiveCountdown();
     hideMessage();
     lastQuoteVolume = undefined;
-    activeChartSymbol = symbol;
     updateDemoTradeButtons();
     updateDemoPositionPnl(symbol, candles.at(-1).close);
     let subscriptionError;
@@ -1433,6 +1777,9 @@ async function loadChart() {
   } catch (error) {
     if (sequence !== loadSequence) return;
     candles = [];
+    activeChartSymbol = undefined;
+    clearSwingContext();
+    renderSwings();
     clearDemoOrders("Chart data could not be loaded. Pending demo orders were canceled.");
     updateDemoTradeButtons();
     if (error.status === 401) {
@@ -1455,11 +1802,12 @@ async function loadChart() {
 }
 
 function intervalLabel(resolution) {
+  if (resolution === "D") return "1 day";
+  if (resolution === "1W") return "1 week";
   if (Number(resolution) >= 60) {
     const hours = Number(resolution) / 60;
     return `${hours} hour${hours === 1 ? "" : "s"}`;
   }
-  if (resolution === "D") return "1 day";
   return `${resolution} minute${resolution === "1" ? "" : "s"}`;
 }
 
@@ -1547,6 +1895,7 @@ function applyLiveQuote(sequence, symbol, quote) {
   if (volume !== undefined) lastQuoteVolume = volume;
   if (isNewBar) candles.push(next);
   else candles[candles.length - 1] = next;
+  updateSwingContextFromChart();
   candleSeries.update(next);
   barSeries.update(next);
   volumeSeries.update({
@@ -1562,6 +1911,7 @@ function applyLiveQuote(sequence, symbol, quote) {
   updateLiveCountdown();
   updateLatestSwingActionTrigger();
   updateDemoOrderPositions();
+  updateOrderBlockSetup();
   setConnectionStatus(socketConnected ? "Fyers live" : "Fyers polling", "connected");
   feedStatus.textContent = socketConnected
     ? `Fyers WebSocket update ${formatIndiaTime(quote.time)} IST`
@@ -1865,6 +2215,7 @@ function updateIntervalControl() {
 function selectInterval(resolution) {
   if (resolution === currentResolution) return;
   currentResolution = resolution;
+  updateSwingTimeframeOptions();
   updateIntervalControl();
   void loadChart();
 }
@@ -1965,6 +2316,19 @@ for (const input of smcLengthInputs) {
     renderSwings();
   });
 }
+swingTimeframeSelector.addEventListener("change", () => {
+  clearSwingContext();
+  renderSwings();
+});
+document.querySelector("#order-block-demo-button").addEventListener("click", () => {
+  if (demoModeToggle.checked) return;
+  demoModeToggle.checked = true;
+  demoModeToggle.dispatchEvent(new Event("change", { bubbles: true }));
+});
+orderBlockRetryButton.addEventListener("click", () => {
+  clearSwingContext();
+  renderSwings();
+});
 lookbackSlider.addEventListener("input", () => {
   lookbackValue.value = lookbackSlider.value;
   renderSwings();
@@ -2021,10 +2385,12 @@ demoModeToggle.addEventListener("change", () => {
       : "Preview only. No orders or alerts will be sent.";
   }
   updateDemoTradeButtons();
+  updateOrderBlockSetup();
 });
 demoBuyButton.addEventListener("click", () => placeDemoOrder("buy"));
 demoSellButton.addEventListener("click", () => placeDemoOrder("sell"));
 
+updateSwingTimeframeOptions();
 try {
   const session = await fetchJson("/api/fyers/session");
   if (!session.authenticated) {

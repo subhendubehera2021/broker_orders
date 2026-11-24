@@ -310,6 +310,16 @@ main:fullscreen {
 .smc-options .toggle-control { gap: 7px; font-size: 11px; }
 .smc-options .switch { flex: 0 0 auto; }
 .toolbar-popover .smc-length-control { padding-left: 23px; }
+.smc-timeframe-control { display: grid; gap: 6px; padding-left: 23px; color: var(--tv-muted-light); font-size: 11px; }
+.smc-timeframe-control select {
+  min-width: 0;
+  min-height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--tv-border-strong);
+  border-radius: 4px;
+  background: var(--tv-background);
+  color: var(--tv-text);
+}
 .draw-popover { width: max-content; min-width: 0; gap: 8px; padding: 8px; }
 .draw-popover .button-row { flex-wrap: nowrap; }
 .draw-hint:empty { display: none; }
@@ -528,6 +538,59 @@ main:fullscreen {
 
 .chart-wrap { position: relative; min-height: 0; flex: 1 1 auto; }
 #chart { position: absolute; z-index: 0; inset: 0; }
+.order-block-setup {
+  position: absolute;
+  z-index: 6;
+  top: 52px;
+  right: 12px;
+  width: min(320px, calc(100% - 24px));
+  max-height: min(58vh, 500px);
+  overflow: auto;
+  border: 1px solid var(--tv-border-strong);
+  border-radius: 6px;
+  background: rgb(15 15 15 / 96%);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 42%);
+  color: var(--tv-text);
+  font-size: 11px;
+}
+.order-block-setup[hidden] { display: none; }
+.order-block-setup > summary {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--tv-panel);
+  cursor: pointer;
+  list-style-position: inside;
+}
+.order-block-setup > summary strong { color: var(--tv-muted-light); font-size: 10px; text-align: right; }
+.order-block-setup[data-state="review"] > summary strong { color: var(--tv-green); }
+.order-block-setup[data-state="invalid"] > summary strong { color: var(--tv-red); }
+.order-block-setup-content { display: grid; gap: 10px; padding: 10px; }
+.order-block-setup-content > p { margin: 0; color: var(--tv-muted-light); line-height: 1.4; }
+#order-block-setup-checks { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; }
+#order-block-setup-checks li { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; }
+#order-block-setup-checks li span { color: var(--tv-muted-light); }
+#order-block-setup-checks li strong { font-size: 10px; font-weight: 600; }
+#order-block-setup-checks li small { grid-column: 1 / -1; color: var(--tv-muted); line-height: 1.35; }
+#order-block-setup-checks li[data-status="pass"] strong { color: var(--tv-green); }
+#order-block-setup-checks li[data-status="wait"] strong { color: #e6b450; }
+#order-block-setup-checks li[data-status="fail"] strong { color: var(--tv-red); }
+.order-block-reference-plan { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin: 0; padding-top: 8px; border-top: 1px solid var(--tv-border); }
+.order-block-reference-plan div { display: grid; gap: 2px; }
+.order-block-reference-plan dt { color: var(--tv-muted); font-size: 10px; }
+.order-block-reference-plan dd { margin: 0; color: var(--tv-text); font-variant-numeric: tabular-nums; }
+#order-block-demo-button,
+#order-block-retry-context { min-height: 30px; border: 1px solid var(--tv-border-strong); border-radius: 4px; background: var(--tv-panel); color: var(--tv-text); cursor: pointer; font-size: 11px; }
+#order-block-demo-button:hover,
+#order-block-retry-context:hover { border-color: var(--tv-blue); }
+#order-block-demo-button:disabled { opacity: .7; cursor: default; }
+.order-block-setup .order-block-setup-disclaimer { color: var(--tv-muted); font-size: 10px; }
 .demo-trading-controls {
   position: absolute;
   z-index: 11;
@@ -850,6 +913,7 @@ main:fullscreen {
   .last-price { order: 1; margin-left: 0; gap: 5px; }
   .last-price strong { font-size: 13px; }
   .demo-trading-controls { top: 68px; left: 6px; max-width: calc(100% - 12px); flex-wrap: wrap; }
+  .order-block-setup { top: 72px; right: 6px; width: min(310px, calc(100% - 12px)); max-height: min(54vh, 440px); }
   .demo-pnl-summary { white-space: normal; }
   .demo-order-widget { right: 76px; }
   .chart-footer { align-items: flex-start; flex-direction: column; justify-content: center; gap: 5px; padding: 8px 11px; }

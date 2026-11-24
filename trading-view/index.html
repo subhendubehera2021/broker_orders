@@ -158,15 +158,26 @@
                 <legend>Order blocks · LuxAlgo adaptation</legend>
                 <label class="toggle-control"><input id="smc-internal-ob" type="checkbox" data-smc-toggle><span class="switch" aria-hidden="true"></span><span>Internal order blocks</span></label>
                 <label class="lookback-control smc-length-control" for="smc-internal-length">
-                  <span>Internal length (blocks)</span>
-                  <input id="smc-internal-length" type="range" min="1" max="20" step="1" value="11" data-smc-length>
+                  <span>Internal pivot length</span>
+                  <input id="smc-internal-length" type="range" min="2" max="50" step="1" value="11" data-smc-length>
                   <output id="smc-internal-length-value" for="smc-internal-length">11</output>
                 </label>
                 <label class="toggle-control"><input id="smc-swing-ob" type="checkbox" data-smc-toggle><span class="switch" aria-hidden="true"></span><span>Swing order blocks</span></label>
                 <label class="lookback-control smc-length-control" for="smc-swing-length">
-                  <span>Swing length (blocks)</span>
-                  <input id="smc-swing-length" type="range" min="1" max="20" step="1" value="11" data-smc-length>
+                  <span>Swing pivot length</span>
+                  <input id="smc-swing-length" type="range" min="2" max="50" step="1" value="11" data-smc-length>
                   <output id="smc-swing-length-value" for="smc-swing-length">11</output>
+                </label>
+                <label class="smc-timeframe-control" for="smc-swing-timeframe">
+                  <span>Swing context timeframe</span>
+                  <select id="smc-swing-timeframe">
+                    <option value="5">5 minutes</option>
+                    <option value="15" selected>15 minutes</option>
+                    <option value="60">1 hour</option>
+                    <option value="240">4 hours</option>
+                    <option value="D">1 day</option>
+                    <option value="1W">1 week</option>
+                  </select>
                 </label>
               </fieldset>
             </div>
@@ -265,6 +276,27 @@
       <section class="chart-card" aria-label="Market chart">
         <div id="chart-wrap" class="chart-wrap">
           <div id="chart" role="img" aria-label="Interactive price and volume chart"></div>
+          <details id="order-block-setup-panel" class="order-block-setup" hidden>
+            <summary>
+              <span>Order-block checklist</span>
+              <strong id="order-block-setup-summary">Waiting for data</strong>
+            </summary>
+            <div class="order-block-setup-content">
+              <p id="order-block-setup-context">Analysis only. No trades are submitted.</p>
+              <ul id="order-block-setup-checks" aria-live="polite"></ul>
+              <dl class="order-block-reference-plan">
+                <div><dt>Price reference</dt><dd id="order-block-entry">—</dd></div>
+                <div><dt>Zone invalidation</dt><dd id="order-block-stop">—</dd></div>
+                <div><dt>Opposing zone</dt><dd id="order-block-target">—</dd></div>
+                <div><dt>Reference R:R</dt><dd id="order-block-risk-reward">—</dd></div>
+              </dl>
+              <button id="order-block-demo-button" type="button">Enable demo controls</button>
+              <button id="order-block-retry-context" type="button" hidden>Retry swing context</button>
+              <p class="order-block-setup-disclaimer">
+                Educational reference only—not a trade recommendation. Review risk before acting.
+              </p>
+            </div>
+          </details>
           <div class="instrument-summary">
             <h1 id="instrument-name" class="visually-hidden">NSE:NIFTY50-INDEX</h1>
             <span id="chart-subtitle">Fyers market data · 5 minute</span>

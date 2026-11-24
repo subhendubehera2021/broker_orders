@@ -96,6 +96,8 @@ The swing-high calculation is adapted from Liquidity Swings by LuxAlgo, licensed
 
 The chart's Smart Money Concepts modules are adapted from Smart Money Concepts [LuxAlgo], © LuxAlgo, under the same CC BY-NC-SA 4.0 license. These modifications retain the attribution, ShareAlike, and noncommercial requirements; commercial use requires permission from the rights holder. This project is not affiliated with or endorsed by LuxAlgo.
 
+The chart exposes internal and swing order blocks as independent overlays, with both pivot lengths defaulting to 11. Swing analysis can use a separate higher timeframe. Its setup checklist is an educational reference, not a trade recommendation; chart controls only create local demo orders and do not submit live trades.
+
 The chart uses TradingView Lightweight Charts under the Apache License 2.0 and includes its required attribution link in the chart footer.
 
 
