@@ -155,19 +155,19 @@
                 <output id="lookback-value" for="lookback">5</output>
               </label>
               <fieldset class="smc-options">
-                <legend>Smart Money Concepts · LuxAlgo adaptation</legend>
-                <label class="toggle-control"><input id="smc-internal-structure" type="checkbox" data-smc-toggle><span class="switch" aria-hidden="true"></span><span>Internal structure</span></label>
-                <label class="toggle-control"><input id="smc-swing-structure" type="checkbox" data-smc-toggle><span class="switch" aria-hidden="true"></span><span>Swing structure</span></label>
-                <label class="toggle-control"><input id="smc-swing-points" type="checkbox" data-smc-toggle><span class="switch" aria-hidden="true"></span><span>Swing point labels</span></label>
-                <label class="toggle-control"><input id="smc-strong-weak" type="checkbox" data-smc-toggle><span class="switch" aria-hidden="true"></span><span>Strong / weak highs and lows</span></label>
+                <legend>Order blocks · LuxAlgo adaptation</legend>
                 <label class="toggle-control"><input id="smc-internal-ob" type="checkbox" data-smc-toggle><span class="switch" aria-hidden="true"></span><span>Internal order blocks</span></label>
+                <label class="lookback-control smc-length-control" for="smc-internal-length">
+                  <span>Internal length (blocks)</span>
+                  <input id="smc-internal-length" type="range" min="1" max="20" step="1" value="11" data-smc-length>
+                  <output id="smc-internal-length-value" for="smc-internal-length">11</output>
+                </label>
                 <label class="toggle-control"><input id="smc-swing-ob" type="checkbox" data-smc-toggle><span class="switch" aria-hidden="true"></span><span>Swing order blocks</span></label>
-                <label class="toggle-control"><input id="smc-equal-levels" type="checkbox" data-smc-toggle><span class="switch" aria-hidden="true"></span><span>Equal highs / lows</span></label>
-                <label class="toggle-control"><input id="smc-fvg" type="checkbox" data-smc-toggle><span class="switch" aria-hidden="true"></span><span>Fair value gaps</span></label>
-                <label class="toggle-control"><input id="smc-premium-discount" type="checkbox" data-smc-toggle><span class="switch" aria-hidden="true"></span><span>Premium / discount zones</span></label>
-                <label class="toggle-control"><input id="smc-daily-levels" type="checkbox" data-smc-toggle><span class="switch" aria-hidden="true"></span><span>Previous day levels</span></label>
-                <label class="toggle-control"><input id="smc-weekly-levels" type="checkbox" data-smc-toggle><span class="switch" aria-hidden="true"></span><span>Previous week levels</span></label>
-                <label class="toggle-control"><input id="smc-monthly-levels" type="checkbox" data-smc-toggle><span class="switch" aria-hidden="true"></span><span>Previous month levels</span></label>
+                <label class="lookback-control smc-length-control" for="smc-swing-length">
+                  <span>Swing length (blocks)</span>
+                  <input id="smc-swing-length" type="range" min="1" max="20" step="1" value="11" data-smc-length>
+                  <output id="smc-swing-length-value" for="smc-swing-length">11</output>
+                </label>
               </fieldset>
             </div>
           </div>

@@ -309,6 +309,7 @@ main:fullscreen {
 .smc-options legend { padding: 0 6px 0 0; color: var(--tv-muted-light); font-size: 11px; }
 .smc-options .toggle-control { gap: 7px; font-size: 11px; }
 .smc-options .switch { flex: 0 0 auto; }
+.toolbar-popover .smc-length-control { padding-left: 23px; }
 .draw-popover { width: max-content; min-width: 0; gap: 8px; padding: 8px; }
 .draw-popover .button-row { flex-wrap: nowrap; }
 .draw-hint:empty { display: none; }

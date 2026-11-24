@@ -549,20 +549,14 @@ test("serves the TradingView-inspired chart and local charting assets", async ()
   assert.equal(smartMoneyClient.statusCode, 200);
   assert.match(smartMoneyClient.body, /calculateSmartMoneyConcepts/);
   for (const id of [
-    "smc-internal-structure",
-    "smc-swing-structure",
-    "smc-swing-points",
     "smc-internal-ob",
     "smc-swing-ob",
-    "smc-equal-levels",
-    "smc-fvg",
-    "smc-premium-discount",
-    "smc-daily-levels",
-    "smc-weekly-levels",
-    "smc-monthly-levels",
   ]) {
     assert.match(page.body, new RegExp(`id="${id}" type="checkbox" data-smc-toggle`));
   }
+  assert.equal((page.body.match(/data-smc-toggle/g) ?? []).length, 2);
+  assert.match(page.body, /id="smc-internal-length" type="range" min="1" max="20" step="1" value="11" data-smc-length/);
+  assert.match(page.body, /id="smc-swing-length" type="range" min="1" max="20" step="1" value="11" data-smc-length/);
   assert.match(styles.body, /html\s*\{[^}]*overflow:\s*hidden;/);
   assert.match(styles.body, /body\s*\{[^}]*height:\s*100vh;[^}]*height:\s*100dvh;[^}]*overflow:\s*hidden;/);
   assert.match(styles.body, /\.swing-high-action-trigger\s*\{[^}]*border-radius:\s*50%;/);
