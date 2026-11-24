@@ -995,7 +995,6 @@ function renderSmartMoneyConcepts() {
       addSmartMoneyZone({
         ...block,
         color: up ? `rgba(8, 153, 129, ${alpha})` : `rgba(242, 54, 69, ${alpha})`,
-        label: toggle === "smc-internal-ob" ? "Internal OB" : "Swing OB",
       });
     }
   }
@@ -1009,7 +1008,6 @@ function renderSmartMoneyConcepts() {
       addSmartMoneyZone({
         ...gap,
         color: gap.direction === 1 ? "rgba(8, 153, 129, 0.18)" : "rgba(242, 54, 69, 0.18)",
-        label: gap.direction === 1 ? "Bullish FVG" : "Bearish FVG",
       });
     }
   }

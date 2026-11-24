@@ -28,6 +28,9 @@ test("detects confirmed pivots and classifies a bullish structure break", () => 
   assert.ok(result.internal.events.some((event) =>
     event.side === "high" && event.type === "BOS" && event.time === 7
   ));
+  assert.ok(result.orderBlocks.internal.some((block) =>
+    block.direction === 1 && block.startTime === 4
+  ));
 });
 
 test("finds unfilled bullish fair value gaps and prior-period levels", () => {

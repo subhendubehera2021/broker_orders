@@ -149,8 +149,16 @@ function findEqualLevels(bars, pivots, thresholdRatio) {
 }
 
 function findFairValueGaps(bars, extendBars) {
-  const gaps = [];
+  const active = [];
   for (let index = 2; index < bars.length; index += 1) {
+    for (let gapIndex = active.length - 1; gapIndex >= 0; gapIndex -= 1) {
+      const gap = active[gapIndex];
+      const filled = gap.direction === BULLISH
+        ? bars[index].low <= gap.bottom
+        : bars[index].high >= gap.top;
+      if (filled) active.splice(gapIndex, 1);
+    }
+
     const first = bars[index - 2];
     const current = bars[index];
     let gap;
@@ -160,26 +168,18 @@ function findFairValueGaps(bars, extendBars) {
       gap = { top: first.low, bottom: current.high, direction: BEARISH };
     }
     if (!gap || gap.top - gap.bottom < averageRange(bars, index) * 0.05) continue;
-
-    let endIndex = Math.min(bars.length - 1, index + extendBars);
-    for (let check = index + 1; check < bars.length; check += 1) {
-      const filled = gap.direction === BULLISH
-        ? bars[check].low <= gap.bottom
-        : bars[check].high >= gap.top;
-      if (filled) {
-        endIndex = check;
-        break;
-      }
-    }
-    gaps.push({
+    active.push({
+      index,
       startTime: current.time,
-      endTime: bars[endIndex].time,
       top: gap.top,
       bottom: gap.bottom,
       direction: gap.direction,
     });
   }
-  return gaps.slice(-100);
+  return active.slice(-100).map((gap) => ({
+    ...gap,
+    endTime: bars[Math.min(bars.length - 1, gap.index + Math.max(1, extendBars))].time,
+  }));
 }
 
 function indiaDateParts(time) {
