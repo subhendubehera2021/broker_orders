@@ -82,54 +82,18 @@ describe("app routes", () => {
     assert.equal(openapi.info.title, "Kotak Neo API");
   });
 
-  it("serves the historical candlestick chart page", async () => {
+  it("does not expose the removed historical chart page or assets", async () => {
     const app = buildApp({ config });
     apps.push(app);
 
-    const page = await app.inject("/historical-chart");
-
-    assert.equal(page.statusCode, 200);
-    assert.match(String(page.headers["content-type"] ?? ""), /text\/html/);
-    assert.doesNotMatch(page.body, /<header|<footer|page-heading|chart-help|class="hint"/);
-    assert.match(page.body, /\/api\/market-data\/historical/);
-    assert.match(page.body, /\/assets\/lightweight-charts\.js/);
-    assert.match(page.body, /\/assets\/liquidity-swing\.js\?v=2/);
-    assert.match(page.body, /drawLiquiditySwing/);
-    assert.match(page.body, /id="indicator-settings"/);
-    assert.match(page.body, /id="indicator-lookback"[^>]+value="14"/);
-    assert.match(page.body, /id="indicator-show-low" type="checkbox" checked/);
-    assert.match(page.body, /id="chart-container"/);
-    assert.match(page.body, /aria-label="Symbol"/);
-    assert.match(page.body, /aria-label="Chart timeframe"/);
-    assert.match(page.body, /data-interval="1min"/);
-    assert.doesNotMatch(page.body, /type="date"|Load range/);
-    assert.match(page.body, /<form id="chart-form" hidden>/);
-    assert.match(page.body, /form\.requestSubmit\(\);\s*<\/script>/);
-  });
-
-  it("serves the local Lightweight Charts browser bundle", async () => {
-    const app = buildApp({ config });
-    apps.push(app);
-
-    const bundle = await app.inject("/assets/lightweight-charts.js");
-
-    assert.equal(bundle.statusCode, 200);
-    assert.match(String(bundle.headers["content-type"] ?? ""), /application\/javascript/);
-    assert.match(bundle.body, /CandlestickSeries/);
-  });
-
-  it("serves the shared liquidity-swing indicator logic", async () => {
-    const app = buildApp({ config });
-    apps.push(app);
-
-    const script = await app.inject("/assets/liquidity-swing.js");
-
-    assert.equal(script.statusCode, 200);
-    assert.match(String(script.headers["content-type"] ?? ""), /application\/javascript/);
-    assert.equal(script.headers["cache-control"], "no-store");
-    assert.match(script.body, /findLatestLiquiditySwingHigh/);
-    assert.match(script.body, /findLiquiditySwings/);
-    assert.match(script.body, /CC BY-NC-SA 4\.0/);
+    for (const path of [
+      "/historical-chart",
+      "/assets/lightweight-charts.js",
+      "/assets/liquidity-swing.js",
+    ]) {
+      const response = await app.inject(path);
+      assert.equal(response.statusCode, 404, path);
+    }
   });
 
   it("serves health status", async () => {

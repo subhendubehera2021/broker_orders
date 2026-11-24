@@ -258,8 +258,6 @@ const loginPageTemplate = `<!doctype html>
       <footer>
         <span>For your personal Kotak Neo account</span>
         <span>
-          <a href="/historical-chart">Historical chart</a>
-          &nbsp;·&nbsp;
           <a href="/docs/">API documentation</a>
         </span>
       </footer>

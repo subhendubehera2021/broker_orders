@@ -58,19 +58,9 @@ stays server-side; only the current TOTP is submitted by the browser.
   optional live index streaming after Kotak Neo sign-in.
 - `GET /auto-trade` — analyze historical Kotak Neo candles for NIFTY option
   liquidity swings; choose an instrument, interval, and date range.
-- `GET /historical-chart` — display historical Kotak Neo OHLCV data as an
-  interactive candlestick chart with zoom, pan, crosshair, and volume. It loads
-  recent candles automatically; panning back loads earlier candles in
-  interval-appropriate date chunks. Change the symbol or timeframe from the
-  chart header; historical swing-high and swing-low liquidity zones, levels,
-  and volume labels are plotted over the candles. Use Indicator settings to
-  configure lookback, area, filters, intrabar precision, and styles. Requires
-  an active Kotak Neo session to load data.
 - `GET /orders` — view the authenticated Kotak Neo order book, separated into
   all, open, and closed orders.
 - `GET /order-stream` — view live order lifecycle and position updates.
-- The historical chart uses TradingView Lightweight Charts™.
-  Copyright (c) 2025 TradingView, Inc. [TradingView](https://www.tradingview.com/).
 - `GET /api/orders` — retrieve the authenticated Kotak Neo order-book response.
 - `GET /api/positions` — retrieve current positions from Kotak Neo; the Live
   activity page loads this snapshot before applying streaming updates.

@@ -14,7 +14,6 @@ import {
   type PlaceNiftyOptionOrderInput,
 } from "./kotak-neo-client.js";
 import { renderLoginPage } from "./login-page.js";
-import { renderHistoricalChartPage } from "./historical-chart-page.js";
 import {
   parseNiftyOptionContracts,
   type NiftyOptionContract,
@@ -232,74 +231,6 @@ export function buildApp({
         authenticated: Boolean(session),
         orderReady: Boolean(session),
       }),
-    );
-
-    api.get(
-      "/historical-chart",
-      {
-        schema: {
-          tags: ["Market Data"],
-          summary: "View historical OHLCV candles",
-          response: {
-            200: { type: "string" },
-          },
-        },
-      },
-      async (_request, reply) => {
-        return reply
-          .header("Cache-Control", "no-store")
-          .type("text/html; charset=utf-8")
-          .send(renderHistoricalChartPage());
-      },
-    );
-
-    api.get(
-      "/assets/lightweight-charts.js",
-      {
-        schema: {
-          tags: ["Market Data"],
-          summary: "Serve the local Lightweight Charts browser bundle",
-          response: {
-            200: { type: "string" },
-          },
-        },
-      },
-      async (_request, reply) => {
-        const bundle = await readFile(
-          new URL(
-            "../node_modules/lightweight-charts/dist/lightweight-charts.standalone.production.js",
-            import.meta.url,
-          ),
-          "utf8",
-        );
-        return reply
-          .header("Cache-Control", "public, max-age=3600")
-          .type("application/javascript; charset=utf-8")
-          .send(bundle);
-      },
-    );
-
-    api.get(
-      "/assets/liquidity-swing.js",
-      {
-        schema: {
-          tags: ["Market Data"],
-          summary: "Serve the liquidity-swing chart indicator",
-          response: {
-            200: { type: "string" },
-          },
-        },
-      },
-      async (_request, reply) => {
-        const script = await readFile(
-          new URL("./liquidity-swing-v2/swing-logic.js", import.meta.url),
-          "utf8",
-        );
-        return reply
-          .header("Cache-Control", "no-store")
-          .type("application/javascript; charset=utf-8")
-          .send(script);
-      },
     );
 
     api.get(
