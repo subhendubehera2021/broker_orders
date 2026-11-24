@@ -61,6 +61,12 @@ npx wrangler secret put ORDER_STREAM_CONTROL_TOKEN
 
 Keep `LIQUIDITY_SWING_API_TOKEN` configured for the existing cron. Do not commit credentials. Session credentials expire; after each Kotak login, update the token, SID, base URL, and feed URL together. The Worker sends the broker's required authentication frame immediately after opening the connection.
 
+## Automatic sell after a completed buy
+
+Automatic sells are enabled by default with `AUTO_SELL_ENABLED` in `wrangler.jsonc`. For each completed BUY order update, the Worker submits a stop-limit SELL to `AUTO_SELL_API_URL` using the filled quantity (`fldQty`), the buy's product (`prod`), and `trdSym` (falling back to `sym`). Both `triggerPrice` and `price` are set to `avgPrc - 3.00`, and the tag is derived from the originating order number. Sell orders and non-completed BUY updates are ignored.
+
+Set `AUTO_SELL_ENABLED` to `"false"` to disable this behavior. The Worker records each originating order number in Durable Object storage before submitting it, preventing duplicate WebSocket updates from submitting another sell. If the request fails or its outcome is uncertain, it does not retry automatically; check the external order service and broker before manually retrying. The API endpoint treats any HTTP 2xx response as submitted.
+
 ## Deploy
 
 Authenticate Wrangler with your Cloudflare account, then deploy:

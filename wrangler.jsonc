@@ -3,6 +3,10 @@
 	"name": "nifty-cron",
 	"main": "src/index.js",
 	"compatibility_date": "2026-11-16",
+	"vars": {
+		"AUTO_SELL_ENABLED": "true",
+		"AUTO_SELL_API_URL": "https://trade.brinto.in/api/orders/sell-sl-limit"
+	},
 	"durable_objects": {
 		"bindings": [
 			{
