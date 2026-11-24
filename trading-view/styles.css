@@ -296,6 +296,19 @@ main:fullscreen {
 }
 .toolbar-popover[hidden] { display: none; }
 .toolbar-popover .lookback-control { grid-template-columns: auto minmax(100px, 1fr) 24px; }
+.indicator-control .toolbar-popover { max-height: min(78vh, 680px); overflow: auto; }
+.smc-options {
+  display: grid;
+  min-width: 0;
+  gap: 10px;
+  margin: 0;
+  padding: 10px 0 0;
+  border: 0;
+  border-top: 1px solid var(--tv-border-strong);
+}
+.smc-options legend { padding: 0 6px 0 0; color: var(--tv-muted-light); font-size: 11px; }
+.smc-options .toggle-control { gap: 7px; font-size: 11px; }
+.smc-options .switch { flex: 0 0 auto; }
 .draw-popover { width: max-content; min-width: 0; gap: 8px; padding: 8px; }
 .draw-popover .button-row { flex-wrap: nowrap; }
 .draw-hint:empty { display: none; }

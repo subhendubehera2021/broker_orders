@@ -1,4 +1,5 @@
 import { findLiquiditySwings } from "/trading-view/liquidity-swings.js";
+import { calculateSmartMoneyConcepts } from "/trading-view/smart-money-concepts.js";
 import { formatIndiaAxisTick, formatIndiaTime } from "/trading-view/time-format.js";
 import {
   calculateDemoPnl,
@@ -40,6 +41,7 @@ const optionChainStatus = document.querySelector("#option-chain-status");
 const optionChainRows = document.querySelector("#option-chain-rows");
 const optionExpirySelect = document.querySelector("#option-expiry");
 const swingToggle = document.querySelector("#swing-toggle");
+const smcToggles = [...document.querySelectorAll("[data-smc-toggle]")];
 const indicatorsToggle = document.querySelector("#indicators-toggle");
 const indicatorPopover = document.querySelector("#indicator-popover");
 const drawToggle = document.querySelector("#draw-toggle");
@@ -163,6 +165,8 @@ let drawings = [];
 let swingSeries = [];
 let swingMarkers = [];
 let activeSwings = [];
+let smartMoneySeries = [];
+let smartMoneyMarkers = [];
 let quoteTimer;
 let countdownTimer;
 let quoteInFlight = false;
@@ -879,10 +883,163 @@ function clearSwings() {
   barSeries.setMarkers([]);
 }
 
+function clearSmartMoneyConcepts() {
+  for (const series of smartMoneySeries) chart.removeSeries(series);
+  smartMoneySeries = [];
+  smartMoneyMarkers = [];
+}
+
+function addSmartMoneyLine(startTime, endTime, price, color, label, style = LineStyle.Solid) {
+  if (!Number.isFinite(startTime) || !Number.isFinite(endTime) || endTime <= startTime) return;
+  const series = chart.addLineSeries({
+    color,
+    lineWidth: 1,
+    lineStyle: style,
+    lastValueVisible: false,
+    priceLineVisible: false,
+    crosshairMarkerVisible: false,
+  });
+  series.setData([{ time: startTime, value: price }, { time: endTime, value: price }]);
+  smartMoneySeries.push(series);
+  if (label) {
+    smartMoneyMarkers.push({
+      time: endTime,
+      position: color === chartColors.up ? "belowBar" : "aboveBar",
+      color,
+      shape: "circle",
+      text: label,
+      size: 0,
+    });
+  }
+}
+
+function addSmartMoneyZone({ startTime, endTime, top, bottom, color, label }) {
+  if (
+    !Number.isFinite(startTime) || !Number.isFinite(endTime) || endTime <= startTime ||
+    !Number.isFinite(top) || !Number.isFinite(bottom) || top <= bottom
+  ) return;
+  const series = chart.addBaselineSeries({
+    baseValue: { type: "price", price: bottom },
+    topFillColor1: color,
+    topFillColor2: color,
+    topLineColor: color,
+    topLineVisible: true,
+    topLineWidth: 1,
+    bottomFillColor1: color,
+    bottomFillColor2: color,
+    bottomLineVisible: false,
+    baseLineVisible: false,
+    lineVisible: false,
+    pointMarkersVisible: false,
+    lastValueVisible: false,
+    priceLineVisible: false,
+    crosshairMarkerVisible: false,
+  });
+  series.setData([{ time: startTime, value: top }, { time: endTime, value: top }]);
+  smartMoneySeries.push(series);
+  if (label) {
+    smartMoneyMarkers.push({
+      time: endTime,
+      position: "aboveBar",
+      color: color.includes("242, 54, 69") ? chartColors.down : chartColors.up,
+      shape: "circle",
+      text: label,
+      size: 0,
+    });
+  }
+}
+
+function renderSmartMoneyConcepts() {
+  clearSmartMoneyConcepts();
+  if (!candles.length || !smcToggles.some((toggle) => toggle.checked)) return;
+  const result = calculateSmartMoneyConcepts(candles);
+  const enabled = (id) => document.querySelector(`#${id}`).checked;
+  const bullish = chartColors.up;
+  const bearish = chartColors.down;
+
+  if (enabled("smc-internal-structure")) {
+    for (const event of result.internal.events) {
+      addSmartMoneyLine(event.startTime, event.time, event.price, event.direction === 1 ? bullish : bearish, `I ${event.type}`, LineStyle.Dashed);
+    }
+  }
+  if (enabled("smc-swing-structure")) {
+    for (const event of result.swing.events) {
+      addSmartMoneyLine(event.startTime, event.time, event.price, event.direction === 1 ? bullish : bearish, event.type);
+    }
+  }
+  if (enabled("smc-swing-points")) {
+    for (const point of result.swing.swings) {
+      smartMoneyMarkers.push({
+        time: point.time,
+        position: point.side === "high" ? "aboveBar" : "belowBar",
+        color: point.side === "high" ? bearish : bullish,
+        shape: point.side === "high" ? "arrowDown" : "arrowUp",
+        text: point.label,
+        size: 1,
+      });
+    }
+  }
+  if (enabled("smc-strong-weak")) {
+    const high = result.swing.swings.filter((point) => point.side === "high").at(-1);
+    const low = result.swing.swings.filter((point) => point.side === "low").at(-1);
+    if (high) addSmartMoneyLine(high.time, candles.at(-1).time, high.price, bearish, result.swing.bias === -1 ? "Strong High" : "Weak High");
+    if (low) addSmartMoneyLine(low.time, candles.at(-1).time, low.price, bullish, result.swing.bias === 1 ? "Strong Low" : "Weak Low");
+  }
+  for (const [toggle, blocks, alpha] of [
+    ["smc-internal-ob", result.orderBlocks.internal, "0.20"],
+    ["smc-swing-ob", result.orderBlocks.swing, "0.28"],
+  ]) {
+    if (!enabled(toggle)) continue;
+    for (const block of blocks) {
+      const up = block.direction === 1;
+      addSmartMoneyZone({
+        ...block,
+        color: up ? `rgba(8, 153, 129, ${alpha})` : `rgba(242, 54, 69, ${alpha})`,
+        label: toggle === "smc-internal-ob" ? "Internal OB" : "Swing OB",
+      });
+    }
+  }
+  if (enabled("smc-equal-levels")) {
+    for (const level of result.equalLevels) {
+      addSmartMoneyLine(level.startTime, level.endTime, level.price, level.direction === 1 ? bullish : bearish, level.label, LineStyle.Dotted);
+    }
+  }
+  if (enabled("smc-fvg")) {
+    for (const gap of result.fairValueGaps) {
+      addSmartMoneyZone({
+        ...gap,
+        color: gap.direction === 1 ? "rgba(8, 153, 129, 0.18)" : "rgba(242, 54, 69, 0.18)",
+        label: gap.direction === 1 ? "Bullish FVG" : "Bearish FVG",
+      });
+    }
+  }
+  if (enabled("smc-premium-discount")) {
+    for (const zone of result.premiumDiscount) {
+      addSmartMoneyZone({
+        ...zone,
+        color: zone.label === "Premium"
+          ? "rgba(242, 54, 69, 0.12)"
+          : zone.label === "Discount"
+            ? "rgba(8, 153, 129, 0.12)"
+            : "rgba(135, 139, 148, 0.10)",
+        label: zone.label,
+      });
+    }
+  }
+  for (const level of result.previousLevels) {
+    const selected = level.label.startsWith("PD") ? enabled("smc-daily-levels")
+      : level.label.startsWith("PW") ? enabled("smc-weekly-levels")
+        : enabled("smc-monthly-levels");
+    if (selected) {
+      addSmartMoneyLine(level.startTime, level.endTime, level.price, level.direction === 1 ? bullish : bearish, level.label, LineStyle.Dashed);
+    }
+  }
+}
+
 function updateCurrentCandleVolumeMarker() {
   const latest = candles.at(-1);
   const volumeLabel = latest ? formatLiquidityVolume(latest.volume) : "";
-  const markers = [...swingMarkers];
+  const markers = [...swingMarkers, ...smartMoneyMarkers];
   const breaksByTime = new Map();
   const addBreak = (time, side, volume) => {
     const breakout = breaksByTime.get(time) ?? { sides: new Set(), volume };
@@ -944,6 +1101,7 @@ function updateCurrentCandleVolumeMarker() {
 
 function renderSwings() {
   clearSwings();
+  renderSmartMoneyConcepts();
   if (swingToggle.checked && candles.length >= Number(lookbackSlider.value) * 2 + 1) {
     activeSwings = findLiquiditySwings(candles, Number(lookbackSlider.value));
     for (const swing of activeSwings) {
@@ -1868,9 +2026,21 @@ optionChainRows.addEventListener("click", (event) => {
   void loadChart();
 });
 swingToggle.addEventListener("change", () => {
-  indicatorsToggle.setAttribute("aria-pressed", String(swingToggle.checked));
+  indicatorsToggle.setAttribute(
+    "aria-pressed",
+    String(swingToggle.checked || smcToggles.some((toggle) => toggle.checked)),
+  );
   renderSwings();
 });
+for (const toggle of smcToggles) {
+  toggle.addEventListener("change", () => {
+    indicatorsToggle.setAttribute(
+      "aria-pressed",
+      String(swingToggle.checked || smcToggles.some((item) => item.checked)),
+    );
+    renderSwings();
+  });
+}
 lookbackSlider.addEventListener("input", () => {
   lookbackValue.value = lookbackSlider.value;
   renderSwings();

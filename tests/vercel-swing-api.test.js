@@ -505,9 +505,10 @@ test("Fastify serves Swagger and OpenAPI documentation for the GET endpoint", as
 });
 
 test("serves the TradingView-inspired chart and local charting assets", async () => {
-  const [page, client, styles, timeFormat, demoTrading, chartingLibrary, license] = await Promise.all([
+  const [page, client, smartMoneyClient, styles, timeFormat, demoTrading, chartingLibrary, license] = await Promise.all([
     app.inject({ method: "GET", url: "/trading-view" }),
     app.inject({ method: "GET", url: "/trading-view/chart.js" }),
+    app.inject({ method: "GET", url: "/trading-view/smart-money-concepts.js" }),
     app.inject({ method: "GET", url: "/trading-view/styles.css" }),
     app.inject({ method: "GET", url: "/trading-view/time-format.js" }),
     app.inject({ method: "GET", url: "/trading-view/demo-trading.js" }),
@@ -545,6 +546,23 @@ test("serves the TradingView-inspired chart and local charting assets", async ()
   assert.match(client.body, /"3": 180/);
   assert.match(client.body, /resolution === "1" \? "" : "s"/);
   assert.equal(styles.statusCode, 200);
+  assert.equal(smartMoneyClient.statusCode, 200);
+  assert.match(smartMoneyClient.body, /calculateSmartMoneyConcepts/);
+  for (const id of [
+    "smc-internal-structure",
+    "smc-swing-structure",
+    "smc-swing-points",
+    "smc-internal-ob",
+    "smc-swing-ob",
+    "smc-equal-levels",
+    "smc-fvg",
+    "smc-premium-discount",
+    "smc-daily-levels",
+    "smc-weekly-levels",
+    "smc-monthly-levels",
+  ]) {
+    assert.match(page.body, new RegExp(`id="${id}" type="checkbox" data-smc-toggle`));
+  }
   assert.match(styles.body, /html\s*\{[^}]*overflow:\s*hidden;/);
   assert.match(styles.body, /body\s*\{[^}]*height:\s*100vh;[^}]*height:\s*100dvh;[^}]*overflow:\s*hidden;/);
   assert.match(styles.body, /\.swing-high-action-trigger\s*\{[^}]*border-radius:\s*50%;/);

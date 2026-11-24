@@ -1,10 +1,11 @@
 import { readFile } from "node:fs/promises";
 
-const [page, clientScript, styles, swingLogic, timeFormat, demoTrading, chartLibrary, chartLicense] = await Promise.all([
+const [page, clientScript, styles, swingLogic, smartMoneyLogic, timeFormat, demoTrading, chartLibrary, chartLicense] = await Promise.all([
   readFile(new URL("../trading-view/index.html", import.meta.url), "utf8"),
   readFile(new URL("../trading-view/chart.js", import.meta.url), "utf8"),
   readFile(new URL("../trading-view/styles.css", import.meta.url), "utf8"),
   readFile(new URL("../trading-view/liquidity-swings.js", import.meta.url), "utf8"),
+  readFile(new URL("../trading-view/smart-money-concepts.js", import.meta.url), "utf8"),
   readFile(new URL("../trading-view/time-format.js", import.meta.url), "utf8"),
   readFile(new URL("../trading-view/demo-trading.js", import.meta.url), "utf8"),
   readFile(
@@ -23,6 +24,9 @@ export function registerTradingViewRoutes(app) {
   });
   app.get("/trading-view/liquidity-swings.js", async (_request, reply) => {
     return reply.type("application/javascript; charset=utf-8").send(swingLogic);
+  });
+  app.get("/trading-view/smart-money-concepts.js", async (_request, reply) => {
+    return reply.type("application/javascript; charset=utf-8").send(smartMoneyLogic);
   });
   app.get("/trading-view/time-format.js", async (_request, reply) => {
     return reply.type("application/javascript; charset=utf-8").send(timeFormat);

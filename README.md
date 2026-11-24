@@ -8,11 +8,12 @@ Use Node.js 26, install dependencies, and start Fastify:
 
 ```sh
 npm install
-node --env-file=.env app.js
+npm run dev
 ```
 
 The server listens on port `3000` and prints its localhost and network URLs
-when it starts. To run tests:
+when it starts. Both `npm run dev` and `npm start` load variables from `.env`
+when that file exists. To run tests:
 
 ```sh
 npm test
@@ -92,6 +93,8 @@ Vercel detects the Fastify application from the root `app.js`. Deploy the `verce
 ## Swing algorithm attribution
 
 The swing-high calculation is adapted from Liquidity Swings by LuxAlgo, licensed under CC BY-NC-SA 4.0. The adaptation retains the same noncommercial restriction; commercial use requires permission from the rights holder.
+
+The chart's Smart Money Concepts modules are adapted from Smart Money Concepts [LuxAlgo], © LuxAlgo, under the same CC BY-NC-SA 4.0 license. These modifications retain the attribution, ShareAlike, and noncommercial requirements; commercial use requires permission from the rights holder. This project is not affiliated with or endorsed by LuxAlgo.
 
 The chart uses TradingView Lightweight Charts under the Apache License 2.0 and includes its required attribution link in the chart footer.
 
