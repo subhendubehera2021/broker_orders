@@ -1,5 +1,5 @@
 const DEFAULT_AUTO_SELL_API_URL = "https://trade.brinto.in/api/orders/sell-sl-limit";
-const AUTO_SELL_OFFSET = 3;
+const DEFAULT_AUTO_SELL_OFFSET_POINTS = 3;
 
 function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -92,7 +92,13 @@ export class AutoSellManager {
         cumulativeAveragePrice * reportedQuantity -
         previousAveragePrice * previousQuantity
       ) / incrementalQuantity;
-    const sellPrice = Math.round((incrementalAveragePrice - AUTO_SELL_OFFSET) * 100) / 100;
+    const offsetPoints = this.env.AUTO_SELL_OFFSET_POINTS === undefined
+      ? DEFAULT_AUTO_SELL_OFFSET_POINTS
+      : Number(this.env.AUTO_SELL_OFFSET_POINTS);
+    if (!Number.isFinite(offsetPoints) || offsetPoints < 0) {
+      throw new Error("AUTO_SELL_OFFSET_POINTS must be a non-negative number");
+    }
+    const sellPrice = Math.round((incrementalAveragePrice - offsetPoints) * 100) / 100;
     const tradingSymbol =
       [data.trdSym, data.sym, previous?.tradingSymbol]
         .find((value) => typeof value === "string" && value.trim() !== "") ?? "";

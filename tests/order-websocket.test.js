@@ -270,6 +270,31 @@ test("places one stop-limit sell for the filled quantity using average price min
   assert.equal(duplicateRequestCount, 0);
 });
 
+test("uses the configured automatic-sell offset", async () => {
+  const { stream, backgroundTasks } = createStream();
+  stream.env.AUTO_SELL_OFFSET_POINTS = "1.5";
+  let payload;
+  stream.autoSellManager.fetchImpl = async (_url, options) => {
+    payload = JSON.parse(options.body);
+    return Response.json({ accepted: true });
+  };
+
+  stream.autoSellManager.schedule({
+    data: {
+      nOrdNo: "buy-with-custom-offset",
+      trnsTp: "B",
+      fldQty: 1,
+      avgPrc: "35.88",
+      sym: "ITBEES",
+      prod: "MIS",
+    },
+  });
+  await Promise.all(backgroundTasks);
+
+  assert.equal(payload.triggerPrice, "34.38");
+  assert.equal(payload.price, "34.38");
+});
+
 test("submits a separate sell for each newly filled increment", async () => {
   FakeWebSocket.instances = [];
   const { stream, backgroundTasks } = createStream();
