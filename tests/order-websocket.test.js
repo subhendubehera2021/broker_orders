@@ -42,13 +42,19 @@ class FakeWebSocket extends EventTarget {
 }
 FakeWebSocket.instances = [];
 
-function createStream() {
+function createStream(storedValues = new Map()) {
   const alarms = [];
   const backgroundTasks = [];
   const ctx = {
     storage: {
       async setAlarm(timestamp) {
         alarms.push(timestamp);
+      },
+      async get(key) {
+        return storedValues.get(key);
+      },
+      async put(key, value) {
+        storedValues.set(key, value);
       },
     },
     waitUntil(promise) {
@@ -59,11 +65,13 @@ function createStream() {
     KOTAK_NEO_BASE_URL: "https://e21.kotaksecurities.com",
     KOTAK_WS_SESSION_TOKEN: "session-token",
     KOTAK_WS_SID: "session-id",
+    AUTO_SELL_API_URL: "https://trade.brinto.in/api/orders/sell-sl-limit",
   };
   return {
     stream: new KotakOrderStream(ctx, env, FakeWebSocket),
     alarms,
     backgroundTasks,
+    storedValues,
   };
 }
 
@@ -199,6 +207,153 @@ test("subscribes an order's exchange and token to live market prices", async () 
       options: { method: "POST" },
     },
   ]);
+});
+
+test("places one stop-limit sell for the filled quantity using average price minus three", async () => {
+  FakeWebSocket.instances = [];
+  const { stream, backgroundTasks, storedValues } = createStream();
+  const requests = [];
+  stream.autoSellManager.fetchImpl = async (url, options) => {
+    requests.push({ url, options });
+    return Response.json({ accepted: true });
+  };
+
+  await stream.start();
+  const socket = FakeWebSocket.instances[0];
+  const completedBuy = JSON.stringify({
+    type: "order",
+    data: {
+      nOrdNo: "260216000308219",
+      ordSt: "complete",
+      avgPrc: "35.88",
+      fldQty: 65,
+      sym: "NIFTY26D0125300PE",
+      trnsTp: "B",
+      prod: "MIS",
+    },
+  });
+  socket.receive(completedBuy);
+  socket.receive(completedBuy);
+  await Promise.all(backgroundTasks);
+
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].url, "https://trade.brinto.in/api/orders/sell-sl-limit");
+  assert.deepEqual(JSON.parse(requests[0].options.body), {
+    tradingSymbol: "NIFTY26D0125300PE",
+    quantity: "65",
+    triggerPrice: "32.88",
+    price: "32.88",
+    product: "MIS",
+    tag: "as3-260216000308219-65",
+  });
+  assert.equal(storedValues.get("autoSell:260216000308219").state, "submitted");
+  assert.equal(storedValues.get("autoSell:260216000308219").filledQty, 65);
+
+  const revived = createStream(storedValues);
+  let duplicateRequestCount = 0;
+  revived.stream.autoSellManager.fetchImpl = async () => {
+    duplicateRequestCount += 1;
+    return Response.json({ accepted: true });
+  };
+  revived.stream.autoSellManager.schedule({
+    data: {
+      nOrdNo: "260216000308219",
+      ordSt: "complete",
+      avgPrc: "35.88",
+      fldQty: 65,
+      sym: "NIFTY26D0125300PE",
+      trnsTp: "B",
+      prod: "MIS",
+    },
+  });
+  await Promise.all(revived.backgroundTasks);
+  assert.equal(duplicateRequestCount, 0);
+});
+
+test("submits a separate sell for each newly filled increment", async () => {
+  FakeWebSocket.instances = [];
+  const { stream, backgroundTasks } = createStream();
+  const requests = [];
+  stream.autoSellManager.fetchImpl = async (_url, options) => {
+    requests.push(JSON.parse(options.body));
+    return Response.json({ accepted: true });
+  };
+
+  await stream.start();
+  const socket = FakeWebSocket.instances[0];
+  const baseOrder = {
+    nOrdNo: "buy-order-1",
+    sym: "NIFTY26D0125300PE",
+    trnsTp: "B",
+    prod: "MIS",
+  };
+  socket.receive(JSON.stringify({
+    type: "order",
+    data: { ...baseOrder, ordSt: "open", avgPrc: "101.00", fldQty: 10 },
+  }));
+  socket.receive(JSON.stringify({
+    type: "order",
+    data: { ...baseOrder, ordSt: "open", avgPrc: "101.00", fldQty: 10 },
+  }));
+  socket.receive(JSON.stringify({
+    type: "order",
+    data: { ...baseOrder, ordSt: "complete", avgPrc: "102.00", fldQty: 15 },
+  }));
+  socket.receive(JSON.stringify({
+    type: "order",
+    data: { ...baseOrder, ordSt: "cancelled", avgPrc: "102.00", fldQty: 15 },
+  }));
+  await Promise.all(backgroundTasks);
+
+  assert.deepEqual(requests, [
+    {
+      tradingSymbol: "NIFTY26D0125300PE",
+      quantity: "10",
+      triggerPrice: "98.00",
+      price: "98.00",
+      product: "MIS",
+      tag: "as3-buy-order-1-10",
+    },
+    {
+      tradingSymbol: "NIFTY26D0125300PE",
+      quantity: "5",
+      triggerPrice: "101.00",
+      price: "101.00",
+      product: "MIS",
+      tag: "as3-buy-order-1-15",
+    },
+  ]);
+});
+
+test("does not submit sells for unfilled buys or sell orders", async () => {
+  FakeWebSocket.instances = [];
+  const { stream, backgroundTasks } = createStream();
+  let requestCount = 0;
+  stream.autoSellManager.fetchImpl = async () => {
+    requestCount += 1;
+    return Response.json({ accepted: true });
+  };
+
+  await stream.start();
+  const socket = FakeWebSocket.instances[0];
+  for (const data of [
+    { ordSt: "open", trnsTp: "B", fldQty: 0 },
+    { ordSt: "complete", trnsTp: "S" },
+  ]) {
+    socket.receive(JSON.stringify({
+      type: "order",
+      data: {
+        ...data,
+        nOrdNo: `order-${data.ordSt}-${data.trnsTp}`,
+        avgPrc: "35.88",
+        fldQty: data.fldQty ?? 1,
+        sym: "ITBEES",
+        prod: "MIS",
+      },
+    }));
+  }
+  await Promise.all(backgroundTasks);
+  assert.equal(requestCount, 0);
 });
 
 test("reconnects after a rejected authentication response", async () => {
