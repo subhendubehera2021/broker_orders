@@ -2,6 +2,7 @@ const LOGIN_URL = "https://login.paytmmoney.com/merchant-login";
 const API_BASE_URL = "https://developer.paytmmoney.com/";
 const ACCESS_TOKEN_PATH = "accounts/v2/gettoken";
 const USER_DETAILS_PATH = "accounts/v1/user/details";
+const REGULAR_ORDER_PATH = "orders/v1/place/regular";
 const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
 
 export interface PaytmMoneyClientOptions {
@@ -32,6 +33,29 @@ export interface PaytmMoneyUserDetails {
     message?: string;
     displayMessage?: string;
   };
+}
+
+export interface PaytmMoneyRegularOrderInput {
+  source?: "W" | "M" | "N" | "I" | "R" | "O";
+  txn_type: "B" | "S";
+  exchange: "NSE" | "BSE";
+  segment: "E" | "D";
+  product: "C" | "I" | "B" | "V" | "M";
+  security_id: string;
+  quantity: number;
+  validity: "DAY" | "IOC" | "GTC" | "GTD";
+  order_type: "LMT" | "SL" | "SLM";
+  price: number;
+  trigger_price?: number;
+  off_mkt_flag?: boolean | "true" | "false";
+  order_ltp?: number;
+}
+
+export interface PaytmMoneyRegularOrderResponse {
+  status: string;
+  message: string;
+  data: Array<{ order_no: string }>;
+  error_code?: string;
 }
 
 export class PaytmMoneyError extends Error {
@@ -153,6 +177,57 @@ export class PaytmMoneyClient {
     };
   }
 
+  async placeRegularOrder(
+    accessToken: string,
+    order: PaytmMoneyRegularOrderInput,
+  ): Promise<PaytmMoneyRegularOrderResponse> {
+    if (!accessToken.trim()) {
+      throw new PaytmMoneyError("Paytm Money access token must not be empty", 400);
+    }
+
+    const response = await this.requestJson(REGULAR_ORDER_PATH, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-jwt-token": accessToken,
+      },
+      body: JSON.stringify(order),
+    });
+
+    if (!isRecord(response)) {
+      throw new PaytmMoneyError("Paytm Money returned an invalid order response", 502);
+    }
+    throwIfRejected(response, "regular order");
+
+    const status = requireString(response.status, "status");
+    const message = requireString(response.message, "message");
+    if (!Array.isArray(response.data) || response.data.length === 0) {
+      throw new PaytmMoneyError("Paytm Money returned no regular order details", 502);
+    }
+
+    const data = response.data.map((item) => {
+      if (!isRecord(item)) {
+        throw new PaytmMoneyError("Paytm Money returned an invalid order number", 502);
+      }
+      const orderNumber = item.order_no;
+      if (
+        (typeof orderNumber !== "string" && typeof orderNumber !== "number") ||
+        String(orderNumber).length === 0
+      ) {
+        throw new PaytmMoneyError("Paytm Money returned an invalid order number", 502);
+      }
+      return { order_no: String(orderNumber) };
+    });
+
+    const errorCode = optionalString(response.error_code);
+    return {
+      status,
+      message,
+      data,
+      ...(errorCode ? { error_code: errorCode } : {}),
+    };
+  }
+
   private async requestJson(path: string, init: RequestInit): Promise<unknown> {
     let response: Response;
     try {
@@ -190,8 +265,8 @@ export class PaytmMoneyClient {
 }
 
 function throwIfRejected(response: Record<string, unknown>, operation: string): void {
-  const status =
-    typeof response.resultStatus === "string" ? response.resultStatus.toLowerCase() : undefined;
+  const rawStatus = response.resultStatus ?? response.status;
+  const status = typeof rawStatus === "string" ? rawStatus.toLowerCase() : undefined;
   if (status === "failure") {
     const code = upstreamCode(response);
     throw new PaytmMoneyError(
@@ -203,7 +278,7 @@ function throwIfRejected(response: Record<string, unknown>, operation: string): 
 }
 
 function upstreamCode(response: Record<string, unknown>): string | undefined {
-  const code = response.resultCode ?? response.code;
+  const code = response.resultCode ?? response.code ?? response.error_code;
   return typeof code === "string" || typeof code === "number" ? String(code) : undefined;
 }
 

@@ -13,6 +13,7 @@ export const openapiOptions: SwaggerOptions = {
       { name: "Health", description: "Service health" },
       { name: "Authentication", description: "Kotak Neo session authentication" },
       { name: "Paytm Money", description: "Paytm Money authentication and account details" },
+      { name: "Paytm Money Orders", description: "Paytm Money regular order placement" },
       { name: "Orders", description: "Kotak Neo order placement" },
       { name: "Market Data", description: "Kotak Neo market data APIs" },
     ],

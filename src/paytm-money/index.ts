@@ -3,6 +3,8 @@ export {
   PaytmMoneyError,
   type PaytmMoneyAccessTokens,
   type PaytmMoneyClientOptions,
+  type PaytmMoneyRegularOrderInput,
+  type PaytmMoneyRegularOrderResponse,
   type PaytmMoneyUserDetails,
 } from "./client.js";
 export {

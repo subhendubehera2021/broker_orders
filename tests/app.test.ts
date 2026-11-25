@@ -88,8 +88,13 @@ describe("app routes", () => {
     assert.ok(openapi.paths["/api/paytm-money/auth/login"]);
     assert.ok(openapi.paths["/api/paytm-money/auth/callback"]);
     assert.ok(openapi.paths["/api/paytm-money/user-details"]);
+    assert.ok(openapi.paths["/api/paytm-money/orders/regular"]);
     assert.deepEqual(
       openapi.paths["/api/paytm-money/user-details"].get.security,
+      [{ AppApiKey: [] }],
+    );
+    assert.deepEqual(
+      openapi.paths["/api/paytm-money/orders/regular"].post.security,
       [{ AppApiKey: [] }],
     );
 
@@ -162,12 +167,19 @@ describe("app routes", () => {
   it("documents and completes Paytm Money login without exposing broker tokens", async () => {
     let loginState: string | undefined;
     let usedAccessToken: string | undefined;
+    let usedOrderAccessToken: string | undefined;
+    let submittedOrder: unknown;
     const details = {
       data: {
         kycName: "Example User",
         userId: 123,
         activeSegments: ["CASH", "FO"],
       },
+    };
+    const regularOrderResponse = {
+      status: "success",
+      message: "Order submitted successfully",
+      data: [{ order_no: "order-123" }],
     };
     const app = buildApp({
       config,
@@ -190,6 +202,11 @@ describe("app routes", () => {
         async getUserDetails(accessToken) {
           usedAccessToken = accessToken;
           return details;
+        },
+        async placeRegularOrder(accessToken, order) {
+          usedOrderAccessToken = accessToken;
+          submittedOrder = order;
+          return regularOrderResponse;
         },
       },
     });
@@ -230,6 +247,46 @@ describe("app routes", () => {
     assert.equal(userDetails.statusCode, 200);
     assert.deepEqual(userDetails.json(), details);
     assert.equal(usedAccessToken, "private-read-token");
+
+    const order = {
+      txn_type: "B",
+      exchange: "NSE",
+      segment: "E",
+      product: "I",
+      security_id: "500570",
+      quantity: 2,
+      validity: "DAY",
+      order_type: "LMT",
+      price: 125,
+      off_mkt_flag: "false",
+    };
+    const unauthorizedOrder = await app.inject({
+      method: "POST",
+      url: "/api/paytm-money/orders/regular",
+      payload: order,
+    });
+    assert.equal(unauthorizedOrder.statusCode, 401);
+    assert.equal(usedOrderAccessToken, undefined);
+
+    const invalidStopOrder = await app.inject({
+      method: "POST",
+      url: "/api/paytm-money/orders/regular",
+      headers: { "x-api-key": "SKB9178" },
+      payload: { ...order, order_type: "SL" },
+    });
+    assert.equal(invalidStopOrder.statusCode, 400);
+    assert.equal(usedOrderAccessToken, undefined);
+
+    const orderResponse = await app.inject({
+      method: "POST",
+      url: "/api/paytm-money/orders/regular",
+      headers: { "x-api-key": "SKB9178" },
+      payload: order,
+    });
+    assert.equal(orderResponse.statusCode, 200);
+    assert.deepEqual(orderResponse.json(), regularOrderResponse);
+    assert.equal(usedOrderAccessToken, "private-access-token");
+    assert.deepEqual(submittedOrder, order);
 
     const logout = await app.inject({
       method: "POST",

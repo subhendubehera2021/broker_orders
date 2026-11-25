@@ -76,6 +76,71 @@ describe("PaytmMoneyClient", () => {
     assert.equal(new Headers(capturedInit?.headers).get("x-jwt-token"), "read-token");
   });
 
+  it("places a regular order with the authenticated access token", async () => {
+    let capturedUrl: URL | undefined;
+    let capturedInit: RequestInit | undefined;
+    const response = {
+      status: "success",
+      message: "Order submitted successfully",
+      data: [{ order_no: "order-123" }],
+    };
+    const client = new PaytmMoneyClient(clientOptions, async (input, init) => {
+      capturedUrl = new URL(input.toString());
+      capturedInit = init;
+      return Response.json(response);
+    });
+    const order = {
+      txn_type: "B" as const,
+      exchange: "NSE" as const,
+      segment: "E" as const,
+      product: "I" as const,
+      security_id: "500570",
+      quantity: 2,
+      validity: "DAY" as const,
+      order_type: "LMT" as const,
+      price: 125,
+      off_mkt_flag: "false" as const,
+    };
+
+    assert.deepEqual(await client.placeRegularOrder("access-token", order), response);
+    assert.equal(
+      capturedUrl?.href,
+      "https://developer.paytmmoney.com/orders/v1/place/regular",
+    );
+    assert.equal(capturedInit?.method, "POST");
+    assert.equal(new Headers(capturedInit?.headers).get("x-jwt-token"), "access-token");
+    assert.equal(new Headers(capturedInit?.headers).get("content-type"), "application/json");
+    assert.deepEqual(JSON.parse(String(capturedInit?.body)), order);
+  });
+
+  it("surfaces Paytm Money regular-order rejection details", async () => {
+    const client = new PaytmMoneyClient(clientOptions, async () =>
+      Response.json({
+        status: "failure",
+        message: "Order rejected",
+        error_code: "PM-ORDER-001",
+      }),
+    );
+
+    await assert.rejects(
+      client.placeRegularOrder("access-token", {
+        txn_type: "B",
+        exchange: "NSE",
+        segment: "E",
+        product: "I",
+        security_id: "500570",
+        quantity: 2,
+        validity: "DAY",
+        order_type: "LMT",
+        price: 125,
+      }),
+      (error: unknown) =>
+        error instanceof PaytmMoneyError &&
+        error.statusCode === 400 &&
+        error.upstreamCode === "PM-ORDER-001",
+    );
+  });
+
   it("surfaces documented access-token failures without returning a token-shaped result", async () => {
     const client = new PaytmMoneyClient(clientOptions, async () =>
       Response.json({

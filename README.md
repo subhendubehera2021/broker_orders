@@ -121,6 +121,10 @@ example, `/api/auth/login` is also available as
   stored server-side and not returned.
 - `GET /api/paytm-money/user-details` — get account details using the stored
   Paytm Money read token; requires this app's `x-api-key` header.
+- `POST /api/paytm-money/orders/regular` — submit a live Paytm Money regular
+  order using the authenticated Paytm Money session; requires this app's
+  `x-api-key` header. The API does not support `MKT` orders; use `LMT` for limit
+  orders.
 - `POST /api/paytm-money/auth/logout` — clear Paytm Money tokens stored in this
   process; requires this app's `x-api-key` header and does not revoke the
   broker-side session.
