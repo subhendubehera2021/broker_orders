@@ -22,7 +22,7 @@ export const highestVolumeOptionsModel = {
     highestVolume: {
       type: "object",
       required: ["CE", "PE"],
-      description: "Highest-volume matching call and put contracts; null when no contract matches.",
+      description: "Exactly one highest-volume matching call and put contract; a side is null when no contract matches.",
       properties: {
         CE: {
           type: "object",

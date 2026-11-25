@@ -47,6 +47,10 @@ test("selects the highest-volume CE and PE inside the inclusive LTP bounds", asy
   assert.equal(result.symbol, optionChainQuery.symbol);
   assert.equal(result.highestVolume.CE.symbol, "NSE:NIFTYCE-BEST");
   assert.equal(result.highestVolume.PE.symbol, "NSE:NIFTYPE-BEST");
+  assert.deepEqual(
+    Object.values(result.highestVolume).map(({ option_type }) => option_type).sort(),
+    ["CE", "PE"],
+  );
 });
 
 test("returns null when no contract of a side matches the LTP range", async () => {
