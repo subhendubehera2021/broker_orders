@@ -11,6 +11,8 @@ app.get("/", (_request, response) => {
     endpoints: {
       health: "/api/health",
       historicalData: "/api/market-data/historical-data",
+      optionChain: "/api/market-data/option-chain",
+      quotes: "/api/market-data/quotes",
     },
   });
 });

@@ -26,6 +26,8 @@ Set `PORT` to change the default port (`3000`).
 
 - Health check: `http://localhost:3000/api/health`
 - Historical data: `GET /api/market-data/historical-data`
+- Option chain: `GET /api/market-data/option-chain`
+- Quotes: `GET /api/market-data/quotes`
 - API index: `http://localhost:3000/`
 - Swagger UI: `http://localhost:3000/docs`
 
@@ -36,3 +38,15 @@ curl "http://localhost:3000/api/market-data/historical-data?symbol=NSE%3ASBIN-EQ
 ```
 
 `date_format=0` uses epoch timestamps; use `date_format=1` with `YYYY-MM-DD` dates instead. `cont_flag` and `oi_flag` are optional.
+
+Option-chain example:
+
+```sh
+curl "http://localhost:3000/api/market-data/option-chain?symbol=NSE%3ANIFTY50-INDEX&strikecount=1&timestamp=&greeks=1"
+```
+
+Quotes example (up to 50 comma-separated symbols):
+
+```sh
+curl "http://localhost:3000/api/market-data/quotes?symbols=NSE%3ASBIN-EQ%2CNSE%3ATCS-EQ"
+```
