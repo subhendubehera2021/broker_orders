@@ -9,7 +9,7 @@ Simple Express API with Swagger UI.
 - `src/api.routes.js` mounts the Fyers and internal API modules.
 - `src/fyers/` contains Fyers routes, controllers, validation, services, models, and constants.
 - `src/fyers/models/` describes Fyers response shapes such as the option chain.
-- `src/auto-trade-process/` contains the auto-trade-process route, controller, and service.
+- `src/auto-trade-process/` contains the auto-trade-process route, controllers, validation, response models, services, and candle aggregation.
 - `src/internal/` contains internal routes, controllers, validation, and liquidity-swing analysis.
 - `src/utils/` and `src/docs/` contain shared date helpers and Swagger documentation.
 
@@ -87,10 +87,34 @@ Find the highest-volume CE and PE contracts. LTP bounds are optional and inclusi
 curl "http://localhost:3000/api/internal/option-chain/highest-volume?symbol=NSE%3ANIFTY50-INDEX&strikecount=1&greeks=0&ltpMin=100&ltpMax=300"
 ```
 
-Pass the option-chain settings and inclusive LTP range to the auto-trade-process endpoint:
+Pass the option-chain settings and inclusive LTP range to the auto-trade-process endpoint. Set `resolution` and `pivotLookback` to configure the Step 2 liquidity-swing analysis; they default to `1` (one minute) and `5`:
 
 ```sh
-curl "http://localhost:3000/api/auto-trade-process?symbol=NSE%3ANIFTY50-INDEX&strikecount=50&greeks=0&ltpMin=100&ltpMax=140"
+curl "http://localhost:3000/api/auto-trade-process?symbol=NSE%3ANIFTY50-INDEX&strikecount=50&greeks=0&ltpMin=100&ltpMax=140&resolution=5&pivotLookback=8"
 ```
+
+For multiple configurations, send a JSON body with `POST`. Step 2 reuses one-minute data per selected symbol for all 1-minute configurations and to build 3-minute candles locally from three consecutive complete 1-minute candles. Other supported resolutions are fetched directly from Fyers:
+
+```sh
+curl -X POST "http://localhost:3000/api/auto-trade-process" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "symbol": "NSE:NIFTY50-INDEX",
+    "strikecount": 50,
+    "greeks": 0,
+    "ltpMin": 100,
+    "ltpMax": 140,
+    "swingConfigs": [
+      { "resolution": "1", "pivotLookback": 5 },
+      { "resolution": "1", "pivotLookback": 7 },
+      { "resolution": "1", "pivotLookback": 14 },
+      { "resolution": "3", "pivotLookback": 5 },
+      { "resolution": "3", "pivotLookback": 7 },
+      { "resolution": "3", "pivotLookback": 14 }
+    ]
+  }'
+```
+
+The response includes the selected CE/PE contracts and a Step 2 result for each requested liquidity-swing configuration. The endpoint does not place orders.
 
 This LuxAlgo-based adaptation is licensed CC BY-NC-SA 4.0 and is for noncommercial use with attribution and share-alike terms: https://creativecommons.org/licenses/by-nc-sa/4.0/

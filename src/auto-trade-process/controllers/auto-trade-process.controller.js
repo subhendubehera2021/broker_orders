@@ -5,6 +5,7 @@ export async function getAutoTradeProcess(_request, response) {
     const result = await getAutoTradeProcessData(
       response.locals.optionChainQuery,
       response.locals.ltpRange,
+      { swingConfigs: response.locals.liquiditySwingConfigs },
     );
     response.json(result);
   } catch (error) {

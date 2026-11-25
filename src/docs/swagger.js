@@ -4,7 +4,12 @@ import {
   optionChainInstrumentModel,
   optionChainModel,
 } from "../fyers/models/option-chain.model.js";
+import { FYERS_HISTORICAL_RESOLUTIONS } from "../fyers/constants/fyers-market-data.js";
 import { highestVolumeOptionsModel } from "../internal/models/highest-volume-options.model.js";
+import {
+  autoTradeProcessModel,
+  autoTradeProcessRequestModel,
+} from "../auto-trade-process/models/auto-trade-process.model.js";
 
 const router = Router();
 
@@ -25,6 +30,8 @@ const openapiSpecification = {
       OptionChainInstrument: optionChainInstrumentModel,
       OptionChainModel: optionChainModel,
       HighestVolumeOptions: highestVolumeOptionsModel,
+      AutoTradeProcess: autoTradeProcessModel,
+      AutoTradeProcessRequest: autoTradeProcessRequestModel,
     },
   },
   paths: {
@@ -358,7 +365,7 @@ const openapiSpecification = {
       get: {
         tags: ["Auto Trade Process"],
         summary: "Get auto-trade-process option data",
-        description: "Fetches the highest-volume CE and PE for the supplied symbol using the requested strike count, Greeks setting, and inclusive LTP range.",
+        description: "Fetches the highest-volume CE and PE, then analyzes liquidity swings for each selected option symbol using the recent three-day India date range and caller-selected resolution and pivot lookback.",
         parameters: [
           {
             name: "symbol",
@@ -394,21 +401,72 @@ const openapiSpecification = {
             description: "Optional inclusive maximum LTP.",
             schema: { type: "number", minimum: 0, example: 140 },
           },
+          {
+            name: "resolution",
+            in: "query",
+            required: false,
+            description: "Candle resolution for Step 2. Defaults to 1 (one minute); resolution 3 is aggregated from 1-minute data, and other supported intervals are fetched directly.",
+            schema: {
+              type: "string",
+              enum: [...FYERS_HISTORICAL_RESOLUTIONS],
+              default: "1",
+              example: "5",
+            },
+          },
+          {
+            name: "pivotLookback",
+            in: "query",
+            required: false,
+            description: "Number of bars on each side used to confirm a swing high. Defaults to 5.",
+            schema: { type: "integer", minimum: 1, default: 5, example: 8 },
+          },
         ],
         responses: {
           200: {
-            description: "Highest-volume CE and PE option contracts.",
+            description: "Highest-volume CE and PE contracts with Step 2 liquidity-swing analyses.",
             content: {
               "application/json": {
-                schema: { $ref: "#/components/schemas/HighestVolumeOptions" },
+                schema: { $ref: "#/components/schemas/AutoTradeProcess" },
               },
             },
           },
           400: {
-            description: "A single symbol is required.",
+            description: "Missing or invalid option-chain or liquidity-swing query parameters.",
           },
           502: {
             description: "Option-chain request failed.",
+          },
+          503: {
+            description: "Fyers credentials are not configured.",
+          },
+        },
+      },
+      post: {
+        tags: ["Auto Trade Process"],
+        summary: "Analyze multiple liquidity-swing configurations",
+        description: "Finds the highest-volume CE and PE and calculates every requested swing configuration. One-minute data is reused for 1-minute and aggregated 3-minute configurations; other supported intervals are fetched directly. Three-minute candles require complete consecutive one-minute candles.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/AutoTradeProcessRequest" },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: "Highest-volume CE and PE contracts with each requested liquidity-swing analysis.",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/AutoTradeProcess" },
+              },
+            },
+          },
+          400: {
+            description: "Invalid request body, option-chain settings, or swing configurations.",
+          },
+          502: {
+            description: "Option-chain or historical-data request failed.",
           },
           503: {
             description: "Fyers credentials are not configured.",

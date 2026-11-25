@@ -149,13 +149,12 @@ export function findLatestLiquiditySwingHigh(inputBars, options = {}) {
   return latest;
 }
 
-export async function fetchLiquiditySwings(
+export async function fetchHistoricalBars(
   symbol,
   {
     fromDate,
     toDate,
     resolution = DEFAULT_OPTIONS.resolution,
-    pivotLookback = DEFAULT_OPTIONS.pivotLookback,
     contFlag,
   } = {},
   getHistoryImpl = getHistoricalData,
@@ -168,9 +167,6 @@ export async function fetchLiquiditySwings(
   }
   if (!FYERS_HISTORICAL_RESOLUTIONS.has(resolution)) {
     throw new RangeError("Unsupported Fyers historical candle resolution");
-  }
-  if (!Number.isInteger(pivotLookback) || pivotLookback < 1) {
-    throw new RangeError("pivotLookback must be a positive integer");
   }
   if (contFlag !== undefined && !["0", "1"].includes(String(contFlag))) {
     throw new RangeError("contFlag must be 0 or 1");
@@ -197,7 +193,28 @@ export async function fetchLiquiditySwings(
     throw new Error("Fyers returned invalid historical candle data");
   }
 
-  const bars = payload.candles.map(parseCandle);
+  return payload.candles.map(parseCandle);
+}
+
+export async function fetchLiquiditySwings(
+  symbol,
+  {
+    fromDate,
+    toDate,
+    resolution = DEFAULT_OPTIONS.resolution,
+    pivotLookback = DEFAULT_OPTIONS.pivotLookback,
+    contFlag,
+  } = {},
+  getHistoryImpl = getHistoricalData,
+) {
+  if (!Number.isInteger(pivotLookback) || pivotLookback < 1) {
+    throw new RangeError("pivotLookback must be a positive integer");
+  }
+  const bars = await fetchHistoricalBars(
+    symbol,
+    { fromDate, toDate, resolution, contFlag },
+    getHistoryImpl,
+  );
   return {
     bars,
     swing: findLatestLiquiditySwingHigh(bars, { pivotLookback }) ?? null,
