@@ -27,6 +27,9 @@ npm run dev
 Set `PORT` to change the default port (`3000`).
 
 - Internal health check: `http://localhost:3000/api/internal/health`
+- Fyers expired F&O data: `GET /api/fyers/market-data/expired-fo-data`
+- Fyers expired contracts: `GET /api/fyers/market-data/expired-fo-data/contracts`
+- Fyers expired expiry dates: `GET /api/fyers/market-data/expired-fo-data/expiry-dates`
 - Fyers historical data: `GET /api/fyers/market-data/historical-data`
 - Fyers option chain: `GET /api/fyers/market-data/option-chain`
 - Fyers quotes: `GET /api/fyers/market-data/quotes`
@@ -42,6 +45,24 @@ Example:
 
 ```sh
 curl "http://localhost:3000/api/fyers/market-data/historical-data?symbol=NSE%3ASBIN-EQ&resolution=D&date_format=0&range_from=1690895316&range_to=1691068173"
+```
+
+Expired F&O historical data example:
+
+```sh
+curl "http://localhost:3000/api/fyers/market-data/expired-fo-data?symbol=NSE%3ANIFTY25MAR23000CE&resolution=60&date_format=1&range_from=2025-03-26&range_to=2025-03-27&include_oi=1&include_greeks=1"
+```
+
+Get NIFTY expired futures and options contracts for an expiry date:
+
+```sh
+curl "http://localhost:3000/api/fyers/market-data/expired-fo-data/contracts?symbol=NSE%3ANIFTY50-INDEX&expiry_date=2025-03-27"
+```
+
+Get NIFTY expiry dates in a date range:
+
+```sh
+curl "http://localhost:3000/api/fyers/market-data/expired-fo-data/expiry-dates?symbol=NSE%3ANIFTY50-INDEX&range_from=2025-01-01&range_to=2025-03-31&date_format=1"
 ```
 
 `date_format=0` uses epoch timestamps; use `date_format=1` with `YYYY-MM-DD` dates instead. `cont_flag` and `oi_flag` are optional.

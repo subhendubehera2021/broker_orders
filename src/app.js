@@ -10,6 +10,9 @@ app.get("/", (_request, response) => {
     docs: "/docs",
     endpoints: {
       fyers: {
+        expiredFoData: "/api/fyers/market-data/expired-fo-data",
+        expiredFoContracts: "/api/fyers/market-data/expired-fo-data/contracts",
+        expiredFoExpiryDates: "/api/fyers/market-data/expired-fo-data/expiry-dates",
         historicalData: "/api/fyers/market-data/historical-data",
         optionChain: "/api/fyers/market-data/option-chain",
         quotes: "/api/fyers/market-data/quotes",

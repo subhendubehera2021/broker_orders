@@ -67,6 +67,162 @@ const openapiSpecification = {
         },
       },
     },
+    "/api/fyers/market-data/expired-fo-data": {
+      get: {
+        tags: ["Fyers"],
+        summary: "Get expired F&O historical data",
+        description: "Fetch expired futures and options candle data from Fyers, optionally including open interest and Greeks.",
+        parameters: [
+          {
+            name: "symbol",
+            in: "query",
+            required: true,
+            schema: { type: "string", example: "NSE:NIFTY25MAR23000CE" },
+          },
+          {
+            name: "resolution",
+            in: "query",
+            required: true,
+            schema: {
+              type: "string",
+              enum: [...FYERS_HISTORICAL_RESOLUTIONS],
+              example: "60",
+            },
+          },
+          {
+            name: "date_format",
+            in: "query",
+            required: true,
+            description: "0 for epoch timestamps in seconds, 1 for YYYY-MM-DD dates.",
+            schema: { type: "string", enum: ["0", "1"], example: "1" },
+          },
+          {
+            name: "range_from",
+            in: "query",
+            required: true,
+            schema: { type: "string", example: "2025-03-26" },
+          },
+          {
+            name: "range_to",
+            in: "query",
+            required: true,
+            schema: { type: "string", example: "2025-03-27" },
+          },
+          {
+            name: "include_oi",
+            in: "query",
+            required: true,
+            description: "Set to 1 to include open interest.",
+            schema: { type: "string", enum: ["0", "1"], example: "1" },
+          },
+          {
+            name: "include_greeks",
+            in: "query",
+            required: true,
+            description: "Set to 1 to include option Greeks.",
+            schema: { type: "string", enum: ["0", "1"], example: "1" },
+          },
+        ],
+        responses: {
+          200: {
+            description: "Expired F&O candle data returned by Fyers.",
+          },
+          400: {
+            description: "Missing or invalid query parameters.",
+          },
+          502: {
+            description: "Fyers expired F&O data request failed.",
+          },
+          503: {
+            description: "Fyers credentials are not configured.",
+          },
+        },
+      },
+    },
+    "/api/fyers/market-data/expired-fo-data/contracts": {
+      get: {
+        tags: ["Fyers"],
+        summary: "Get expired F&O contracts",
+        description: "Fetch expired futures and options contracts for an underlying symbol and expiry date.",
+        parameters: [
+          {
+            name: "symbol",
+            in: "query",
+            required: true,
+            schema: { type: "string", example: "NSE:NIFTY50-INDEX" },
+          },
+          {
+            name: "expiry_date",
+            in: "query",
+            required: true,
+            description: "Expiry date in YYYY-MM-DD format.",
+            schema: { type: "string", format: "date", example: "2025-03-27" },
+          },
+        ],
+        responses: {
+          200: {
+            description: "Expired futures and options contracts returned by Fyers.",
+          },
+          400: {
+            description: "Missing or invalid query parameters.",
+          },
+          502: {
+            description: "Fyers expired contracts request failed.",
+          },
+          503: {
+            description: "Fyers credentials are not configured.",
+          },
+        },
+      },
+    },
+    "/api/fyers/market-data/expired-fo-data/expiry-dates": {
+      get: {
+        tags: ["Fyers"],
+        summary: "Get expired F&O expiry dates",
+        description: "Fetch expired futures and options expiry dates for an underlying symbol and date range.",
+        parameters: [
+          {
+            name: "symbol",
+            in: "query",
+            required: true,
+            schema: { type: "string", example: "NSE:NIFTY50-INDEX" },
+          },
+          {
+            name: "range_from",
+            in: "query",
+            required: true,
+            schema: { type: "string", example: "2025-01-01" },
+          },
+          {
+            name: "range_to",
+            in: "query",
+            required: true,
+            schema: { type: "string", example: "2025-03-31" },
+          },
+          {
+            name: "date_format",
+            in: "query",
+            required: true,
+            description: "0 for epoch timestamps in seconds, 1 for YYYY-MM-DD dates.",
+            schema: { type: "string", enum: ["0", "1"], example: "1" },
+          },
+        ],
+        responses: {
+          200: {
+            description: "Futures and options expiry dates returned by Fyers.",
+          },
+          400: {
+            description: "Missing or invalid query parameters.",
+          },
+          502: {
+            description: "Fyers expiry-dates request failed.",
+          },
+          503: {
+            description: "Fyers credentials are not configured.",
+          },
+        },
+      },
+    },
     "/api/fyers/market-data/historical-data": {
       get: {
         tags: ["Fyers"],
