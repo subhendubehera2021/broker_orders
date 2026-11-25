@@ -76,6 +76,35 @@ describe("PaytmMoneyClient", () => {
     assert.equal(new Headers(capturedInit?.headers).get("x-jwt-token"), "read-token");
   });
 
+  it("retrieves all orders with the read token and preserves order fields", async () => {
+    let capturedUrl: URL | undefined;
+    let capturedInit: RequestInit | undefined;
+    const response = {
+      status: "success",
+      message: "",
+      data: [
+        {
+          order_no: "order-123",
+          serial_no: "1",
+          group_id: "1",
+          order_status: "TRADED",
+          ext_info: { total_qty: 2, rem_qty: 0 },
+          broker_specific_field: { value: "preserved" },
+        },
+      ],
+    };
+    const client = new PaytmMoneyClient(clientOptions, async (input, init) => {
+      capturedUrl = new URL(input.toString());
+      capturedInit = init;
+      return Response.json(response);
+    });
+
+    assert.deepEqual(await client.getOrderBook("read-token"), response);
+    assert.equal(capturedUrl?.href, "https://developer.paytmmoney.com/orders/v1/user/orders");
+    assert.equal(capturedInit?.method, "GET");
+    assert.equal(new Headers(capturedInit?.headers).get("x-jwt-token"), "read-token");
+  });
+
   it("places a regular order with the authenticated access token", async () => {
     let capturedUrl: URL | undefined;
     let capturedInit: RequestInit | undefined;
@@ -139,6 +168,69 @@ describe("PaytmMoneyClient", () => {
         error.statusCode === 400 &&
         error.upstreamCode === "PM-ORDER-001",
     );
+  });
+
+  it("modifies a regular order with its broker identifiers and ext_info", async () => {
+    let capturedUrl: URL | undefined;
+    let capturedInit: RequestInit | undefined;
+    const response = {
+      status: "success",
+      message: "Order Modification request submitted successfully",
+      data: [{ order_no: "order-123", oms_error_code: "12345" }],
+      error_code: "RS-0023",
+    };
+    const client = new PaytmMoneyClient(clientOptions, async (input, init) => {
+      capturedUrl = new URL(input.toString());
+      capturedInit = init;
+      return Response.json(response);
+    });
+    const order = {
+      order_no: "order-123",
+      serial_no: "1",
+      group_id: "1",
+      price: 124,
+      ext_info: { total_qty: 2, rem_qty: 2 },
+    };
+
+    assert.deepEqual(await client.modifyRegularOrder("access-token", order), response);
+    assert.equal(
+      capturedUrl?.href,
+      "https://developer.paytmmoney.com/orders/v1/modify/regular",
+    );
+    assert.equal(capturedInit?.method, "POST");
+    assert.equal(new Headers(capturedInit?.headers).get("x-jwt-token"), "access-token");
+    assert.deepEqual(JSON.parse(String(capturedInit?.body)), order);
+  });
+
+  it("cancels a regular order using the required broker identifiers", async () => {
+    let capturedUrl: URL | undefined;
+    let capturedInit: RequestInit | undefined;
+    const response = {
+      status: "success",
+      message: "Order cancellation request submitted successfully",
+      data: [{ order_no: "order-123" }],
+    };
+    const client = new PaytmMoneyClient(clientOptions, async (input, init) => {
+      capturedUrl = new URL(input.toString());
+      capturedInit = init;
+      return Response.json(response);
+    });
+    const order = {
+      order_no: "order-123",
+      serial_no: "1",
+      group_id: "1",
+      order_type: "MKT" as const,
+      ext_info: { total_qty: 2, rem_qty: 2 },
+    };
+
+    assert.deepEqual(await client.cancelRegularOrder("access-token", order), response);
+    assert.equal(
+      capturedUrl?.href,
+      "https://developer.paytmmoney.com/orders/v1/cancel/regular",
+    );
+    assert.equal(capturedInit?.method, "POST");
+    assert.equal(new Headers(capturedInit?.headers).get("x-jwt-token"), "access-token");
+    assert.deepEqual(JSON.parse(String(capturedInit?.body)), order);
   });
 
   it("surfaces documented access-token failures without returning a token-shaped result", async () => {

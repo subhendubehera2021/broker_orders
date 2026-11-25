@@ -2,7 +2,10 @@ const LOGIN_URL = "https://login.paytmmoney.com/merchant-login";
 const API_BASE_URL = "https://developer.paytmmoney.com/";
 const ACCESS_TOKEN_PATH = "accounts/v2/gettoken";
 const USER_DETAILS_PATH = "accounts/v1/user/details";
+const ORDER_BOOK_PATH = "orders/v1/user/orders";
 const REGULAR_ORDER_PATH = "orders/v1/place/regular";
+const MODIFY_REGULAR_ORDER_PATH = "orders/v1/modify/regular";
+const CANCEL_REGULAR_ORDER_PATH = "orders/v1/cancel/regular";
 const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
 
 export interface PaytmMoneyClientOptions {
@@ -35,6 +38,21 @@ export interface PaytmMoneyUserDetails {
   };
 }
 
+export interface PaytmMoneyOrderBookEntry {
+  order_no?: string;
+  serial_no?: string | number;
+  group_id?: string | number;
+  status?: string;
+  ext_info?: Record<string, unknown>;
+  [field: string]: unknown;
+}
+
+export interface PaytmMoneyOrderBookResponse {
+  status: string;
+  message: string;
+  data: PaytmMoneyOrderBookEntry[];
+}
+
 export interface PaytmMoneyRegularOrderInput {
   source?: "W" | "M" | "N" | "I" | "R" | "O";
   txn_type: "B" | "S";
@@ -54,9 +72,28 @@ export interface PaytmMoneyRegularOrderInput {
 export interface PaytmMoneyRegularOrderResponse {
   status: string;
   message: string;
-  data: Array<{ order_no: string }>;
+  data: Array<{ order_no: string; oms_error_code?: string }>;
   error_code?: string;
 }
+
+interface PaytmMoneyOrderReference {
+  order_no: string;
+  serial_no: string | number;
+  group_id: string | number;
+  mkt_type?: "NL" | "OL" | "AU" | "SP" | "A1" | "A2";
+  ext_info?: Record<string, unknown>;
+}
+
+export type PaytmMoneyModifyRegularOrderInput = Partial<PaytmMoneyRegularOrderInput> &
+  PaytmMoneyOrderReference;
+
+export type PaytmMoneyCancelRegularOrderInput = Omit<
+  Partial<PaytmMoneyRegularOrderInput>,
+  "order_type"
+> &
+  PaytmMoneyOrderReference & {
+    order_type?: PaytmMoneyRegularOrderInput["order_type"] | "MKT";
+  };
 
 export class PaytmMoneyError extends Error {
   constructor(
@@ -177,15 +214,84 @@ export class PaytmMoneyClient {
     };
   }
 
+  async getOrderBook(accessToken: string): Promise<PaytmMoneyOrderBookResponse> {
+    if (!accessToken.trim()) {
+      throw new PaytmMoneyError("Paytm Money access token must not be empty", 400);
+    }
+
+    const response = await this.requestJson(ORDER_BOOK_PATH, {
+      method: "GET",
+      headers: { "x-jwt-token": accessToken },
+    });
+
+    if (!isRecord(response)) {
+      throw new PaytmMoneyError("Paytm Money returned an invalid order-book response", 502);
+    }
+    throwIfRejected(response, "order-book request");
+
+    const status = requireString(response.status, "status");
+    if (typeof response.message !== "string" || !Array.isArray(response.data)) {
+      throw new PaytmMoneyError("Paytm Money returned incomplete order-book data", 502);
+    }
+
+    const data: PaytmMoneyOrderBookEntry[] = [];
+    for (const entry of response.data) {
+      if (!isRecord(entry)) {
+        throw new PaytmMoneyError("Paytm Money returned an invalid order-book entry", 502);
+      }
+      data.push(entry);
+    }
+
+    return { status, message: response.message, data };
+  }
+
   async placeRegularOrder(
     accessToken: string,
     order: PaytmMoneyRegularOrderInput,
+  ): Promise<PaytmMoneyRegularOrderResponse> {
+    return this.submitRegularOrderAction(
+      REGULAR_ORDER_PATH,
+      accessToken,
+      order,
+      "regular order",
+    );
+  }
+
+  async modifyRegularOrder(
+    accessToken: string,
+    order: PaytmMoneyModifyRegularOrderInput,
+  ): Promise<PaytmMoneyRegularOrderResponse> {
+    return this.submitRegularOrderAction(
+      MODIFY_REGULAR_ORDER_PATH,
+      accessToken,
+      order,
+      "regular order modification",
+    );
+  }
+
+  async cancelRegularOrder(
+    accessToken: string,
+    order: PaytmMoneyCancelRegularOrderInput,
+  ): Promise<PaytmMoneyRegularOrderResponse> {
+    return this.submitRegularOrderAction(
+      CANCEL_REGULAR_ORDER_PATH,
+      accessToken,
+      order,
+      "regular order cancellation",
+    );
+  }
+
+  private async submitRegularOrderAction(
+    path: string,
+    accessToken: string,
+    order: object,
+    operation: string,
   ): Promise<PaytmMoneyRegularOrderResponse> {
     if (!accessToken.trim()) {
       throw new PaytmMoneyError("Paytm Money access token must not be empty", 400);
     }
 
-    const response = await this.requestJson(REGULAR_ORDER_PATH, {
+    const response = await this.requestJson(path, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -195,14 +301,14 @@ export class PaytmMoneyClient {
     });
 
     if (!isRecord(response)) {
-      throw new PaytmMoneyError("Paytm Money returned an invalid order response", 502);
+      throw new PaytmMoneyError(`Paytm Money returned an invalid ${operation} response`, 502);
     }
-    throwIfRejected(response, "regular order");
+    throwIfRejected(response, operation);
 
     const status = requireString(response.status, "status");
     const message = requireString(response.message, "message");
     if (!Array.isArray(response.data) || response.data.length === 0) {
-      throw new PaytmMoneyError("Paytm Money returned no regular order details", 502);
+      throw new PaytmMoneyError(`Paytm Money returned no ${operation} details`, 502);
     }
 
     const data = response.data.map((item) => {
@@ -214,9 +320,13 @@ export class PaytmMoneyClient {
         (typeof orderNumber !== "string" && typeof orderNumber !== "number") ||
         String(orderNumber).length === 0
       ) {
-        throw new PaytmMoneyError("Paytm Money returned an invalid order number", 502);
+        throw new PaytmMoneyError(`Paytm Money returned an invalid ${operation} order number`, 502);
       }
-      return { order_no: String(orderNumber) };
+      const omsErrorCode = optionalString(item.oms_error_code);
+      return {
+        order_no: String(orderNumber),
+        ...(omsErrorCode ? { oms_error_code: omsErrorCode } : {}),
+      };
     });
 
     const errorCode = optionalString(response.error_code);

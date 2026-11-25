@@ -5,6 +5,9 @@ import { errorResponseSchema, validateApiKey } from "../http-utils.js";
 import {
   PaytmMoneyError,
   type PaytmMoneyAccessTokens,
+  type PaytmMoneyCancelRegularOrderInput,
+  type PaytmMoneyModifyRegularOrderInput,
+  type PaytmMoneyOrderBookResponse,
   type PaytmMoneyRegularOrderInput,
   type PaytmMoneyRegularOrderResponse,
   type PaytmMoneyUserDetails,
@@ -21,9 +24,18 @@ export interface PaytmMoneyRouteClient {
   createLoginUrl(state: string): URL;
   generateAccessToken(requestToken: string): Promise<PaytmMoneyAccessTokens>;
   getUserDetails(accessToken: string): Promise<PaytmMoneyUserDetails>;
+  getOrderBook(accessToken: string): Promise<PaytmMoneyOrderBookResponse>;
   placeRegularOrder(
     accessToken: string,
     order: PaytmMoneyRegularOrderInput,
+  ): Promise<PaytmMoneyRegularOrderResponse>;
+  modifyRegularOrder(
+    accessToken: string,
+    order: PaytmMoneyModifyRegularOrderInput,
+  ): Promise<PaytmMoneyRegularOrderResponse>;
+  cancelRegularOrder(
+    accessToken: string,
+    order: PaytmMoneyCancelRegularOrderInput,
   ): Promise<PaytmMoneyRegularOrderResponse>;
 }
 
@@ -31,6 +43,67 @@ export interface PaytmMoneyRoutesOptions {
   config: AppConfig;
   paytmMoneyClient?: PaytmMoneyRouteClient;
 }
+
+const regularOrderBodyProperties = {
+  source: { type: "string", enum: ["W", "M", "N", "I", "R", "O"] },
+  txn_type: { type: "string", enum: ["B", "S"] },
+  exchange: { type: "string", enum: ["NSE", "BSE"] },
+  segment: { type: "string", enum: ["E", "D"] },
+  product: { type: "string", enum: ["C", "I", "B", "V", "M"] },
+  security_id: { type: "string", minLength: 1, maxLength: 128 },
+  quantity: { type: "integer", minimum: 1 },
+  validity: { type: "string", enum: ["DAY", "IOC", "GTC", "GTD"] },
+  order_type: { type: "string", enum: ["LMT", "SL", "SLM"] },
+  price: { type: "number", minimum: 0 },
+  trigger_price: { type: "number", minimum: 0 },
+  off_mkt_flag: {
+    anyOf: [
+      { type: "string", enum: ["true", "false"] },
+      { type: "boolean" },
+    ],
+  },
+  order_ltp: { type: "number", minimum: 0 },
+};
+
+const orderReferenceBodyProperties = {
+  order_no: { type: "string", minLength: 1, maxLength: 64 },
+  serial_no: {
+    anyOf: [
+      { type: "string", minLength: 1 },
+      { type: "integer", minimum: 0 },
+    ],
+  },
+  group_id: {
+    anyOf: [
+      { type: "string", minLength: 1 },
+      { type: "integer", minimum: 0 },
+    ],
+  },
+  mkt_type: { type: "string", enum: ["NL", "OL", "AU", "SP", "A1", "A2"] },
+  ext_info: { type: "object", additionalProperties: true },
+};
+
+const regularOrderResponseSchema = {
+  type: "object",
+  required: ["status", "message", "data"],
+  properties: {
+    status: { type: "string" },
+    message: { type: "string" },
+    data: {
+      type: "array",
+      minItems: 1,
+      items: {
+        type: "object",
+        required: ["order_no"],
+        properties: {
+          order_no: { type: "string" },
+          oms_error_code: { type: "string" },
+        },
+      },
+    },
+    error_code: { type: "string" },
+  },
+};
 
 export function registerPaytmMoneyRoutes(
   api: FastifyInstance,
@@ -157,6 +230,69 @@ export function registerPaytmMoneyRoutes(
       },
     );
 
+    api.get(
+      "/api/paytm-money/orders",
+      {
+        schema: {
+          tags: ["Paytm Money Orders"],
+          summary: "Get all Paytm Money orders for the day",
+          description:
+            "Retrieves the authenticated user's orders for the day across platforms. Requires the app's x-api-key and an active Paytm Money session.",
+          security: [{ AppApiKey: [] }],
+          response: {
+            200: {
+              type: "object",
+              required: ["status", "message", "data"],
+              properties: {
+                status: { type: "string" },
+                message: { type: "string" },
+                data: {
+                  type: "array",
+                  items: { type: "object", additionalProperties: true },
+                },
+              },
+            },
+            400: errorResponseSchema,
+            401: errorResponseSchema,
+            404: errorResponseSchema,
+            429: errorResponseSchema,
+            502: errorResponseSchema,
+            503: errorResponseSchema,
+            504: errorResponseSchema,
+          },
+        },
+      },
+      async (request, reply) => {
+        const apiKeyHeader = request.headers["x-api-key"];
+        const providedKey = typeof apiKeyHeader === "string" ? apiKeyHeader.trim() : undefined;
+        if (!providedKey || !validateApiKey(providedKey, config.apiKey)) {
+          return reply.code(401).send({ error: "Invalid or missing x-api-key header" });
+        }
+        if (!paytmClient) {
+          return reply.code(503).send({ error: "Paytm Money API credentials are not configured" });
+        }
+        if (!paytmAccessTokens) {
+          return reply.code(404).send({ error: "No active Paytm Money session found" });
+        }
+
+        try {
+          return await paytmClient.getOrderBook(paytmAccessTokens.read_access_token);
+        } catch (error) {
+          const statusCode = paytmMoneyRequestStatus(error);
+          request.log.error(
+            { statusCode, errorName: error instanceof Error ? error.name : "UnknownError" },
+            "Paytm Money order-book request failed",
+          );
+          return reply.code(statusCode).send({
+            error:
+              error instanceof PaytmMoneyError
+                ? error.message
+                : "Paytm Money order book could not be retrieved",
+          });
+        }
+      },
+    );
+
     api.post<{ Body: PaytmMoneyRegularOrderInput }>(
       "/api/paytm-money/orders/regular",
       {
@@ -180,26 +316,7 @@ export function registerPaytmMoneyRoutes(
               "price",
             ],
             additionalProperties: false,
-            properties: {
-              source: { type: "string", enum: ["W", "M", "N", "I", "R", "O"] },
-              txn_type: { type: "string", enum: ["B", "S"] },
-              exchange: { type: "string", enum: ["NSE", "BSE"] },
-              segment: { type: "string", enum: ["E", "D"] },
-              product: { type: "string", enum: ["C", "I", "B", "V", "M"] },
-              security_id: { type: "string", minLength: 1, maxLength: 128 },
-              quantity: { type: "integer", minimum: 1 },
-              validity: { type: "string", enum: ["DAY", "IOC", "GTC", "GTD"] },
-              order_type: { type: "string", enum: ["LMT", "SL", "SLM"] },
-              price: { type: "number", minimum: 0 },
-              trigger_price: { type: "number", minimum: 0 },
-              off_mkt_flag: {
-                anyOf: [
-                  { type: "string", enum: ["true", "false"] },
-                  { type: "boolean" },
-                ],
-              },
-              order_ltp: { type: "number", minimum: 0 },
-            },
+            properties: regularOrderBodyProperties,
             oneOf: [
               { properties: { order_type: { const: "LMT" } } },
               {
@@ -209,24 +326,7 @@ export function registerPaytmMoneyRoutes(
             ],
           },
           response: {
-            200: {
-              type: "object",
-              required: ["status", "message", "data"],
-              properties: {
-                status: { type: "string" },
-                message: { type: "string" },
-                data: {
-                  type: "array",
-                  minItems: 1,
-                  items: {
-                    type: "object",
-                    required: ["order_no"],
-                    properties: { order_no: { type: "string" } },
-                  },
-                },
-                error_code: { type: "string" },
-              },
-            },
+            200: regularOrderResponseSchema,
             400: errorResponseSchema,
             401: errorResponseSchema,
             404: errorResponseSchema,
@@ -266,6 +366,157 @@ export function registerPaytmMoneyRoutes(
               error instanceof PaytmMoneyError
                 ? error.message
                 : "Paytm Money regular order could not be submitted",
+          });
+        }
+      },
+    );
+
+    api.post<{ Body: PaytmMoneyModifyRegularOrderInput }>(
+      "/api/paytm-money/orders/regular/modify",
+      {
+        schema: {
+          tags: ["Paytm Money Orders"],
+          summary: "Modify a Paytm Money regular order",
+          description:
+            "Modifies a pending regular order. Provide order_no, serial_no, and group_id from the order response. Pass ext_info back unchanged when it was supplied by the order book or postback.",
+          security: [{ AppApiKey: [] }],
+          body: {
+            type: "object",
+            required: ["order_no", "serial_no", "group_id"],
+            anyOf: [
+              { required: ["source"] },
+              { required: ["txn_type"] },
+              { required: ["exchange"] },
+              { required: ["segment"] },
+              { required: ["product"] },
+              { required: ["security_id"] },
+              { required: ["quantity"] },
+              { required: ["validity"] },
+              { required: ["order_type"] },
+              { required: ["price"] },
+              { required: ["trigger_price"] },
+              { required: ["off_mkt_flag"] },
+              { required: ["mkt_type"] },
+              { required: ["order_ltp"] },
+            ],
+            additionalProperties: false,
+            properties: {
+              ...regularOrderBodyProperties,
+              ...orderReferenceBodyProperties,
+            },
+          },
+          response: {
+            200: regularOrderResponseSchema,
+            400: errorResponseSchema,
+            401: errorResponseSchema,
+            404: errorResponseSchema,
+            429: errorResponseSchema,
+            502: errorResponseSchema,
+            503: errorResponseSchema,
+            504: errorResponseSchema,
+          },
+        },
+      },
+      async (request, reply) => {
+        const apiKeyHeader = request.headers["x-api-key"];
+        const providedKey = typeof apiKeyHeader === "string" ? apiKeyHeader.trim() : undefined;
+        if (!providedKey || !validateApiKey(providedKey, config.apiKey)) {
+          return reply.code(401).send({ error: "Invalid or missing x-api-key header" });
+        }
+        if (!paytmClient) {
+          return reply.code(503).send({ error: "Paytm Money API credentials are not configured" });
+        }
+        if (!paytmAccessTokens) {
+          return reply.code(404).send({ error: "No active Paytm Money session found" });
+        }
+        if (
+          (request.body.order_type === "SL" || request.body.order_type === "SLM") &&
+          request.body.trigger_price === undefined
+        ) {
+          return reply.code(400).send({ error: "trigger_price is required for stop-loss orders" });
+        }
+
+        try {
+          return await paytmClient.modifyRegularOrder(
+            paytmAccessTokens.access_token,
+            request.body,
+          );
+        } catch (error) {
+          const statusCode = paytmMoneyRequestStatus(error);
+          request.log.error(
+            { statusCode, errorName: error instanceof Error ? error.name : "UnknownError" },
+            "Paytm Money regular order modification failed",
+          );
+          return reply.code(statusCode).send({
+            error:
+              error instanceof PaytmMoneyError
+                ? error.message
+                : "Paytm Money regular order could not be modified",
+          });
+        }
+      },
+    );
+
+    api.post<{ Body: PaytmMoneyCancelRegularOrderInput }>(
+      "/api/paytm-money/orders/regular/cancel",
+      {
+        schema: {
+          tags: ["Paytm Money Orders"],
+          summary: "Cancel a Paytm Money regular order",
+          description:
+            "Cancels a pending regular order. Provide order_no, serial_no, and group_id from the order response. Pass ext_info back unchanged when it was supplied by the order book or postback.",
+          security: [{ AppApiKey: [] }],
+          body: {
+            type: "object",
+            required: ["order_no", "serial_no", "group_id"],
+            additionalProperties: false,
+            properties: {
+              ...regularOrderBodyProperties,
+              ...orderReferenceBodyProperties,
+              order_type: { type: "string", enum: ["LMT", "SL", "SLM", "MKT"] },
+            },
+          },
+          response: {
+            200: regularOrderResponseSchema,
+            400: errorResponseSchema,
+            401: errorResponseSchema,
+            404: errorResponseSchema,
+            429: errorResponseSchema,
+            502: errorResponseSchema,
+            503: errorResponseSchema,
+            504: errorResponseSchema,
+          },
+        },
+      },
+      async (request, reply) => {
+        const apiKeyHeader = request.headers["x-api-key"];
+        const providedKey = typeof apiKeyHeader === "string" ? apiKeyHeader.trim() : undefined;
+        if (!providedKey || !validateApiKey(providedKey, config.apiKey)) {
+          return reply.code(401).send({ error: "Invalid or missing x-api-key header" });
+        }
+        if (!paytmClient) {
+          return reply.code(503).send({ error: "Paytm Money API credentials are not configured" });
+        }
+        if (!paytmAccessTokens) {
+          return reply.code(404).send({ error: "No active Paytm Money session found" });
+        }
+
+        try {
+          return await paytmClient.cancelRegularOrder(
+            paytmAccessTokens.access_token,
+            request.body,
+          );
+        } catch (error) {
+          const statusCode = paytmMoneyRequestStatus(error);
+          request.log.error(
+            { statusCode, errorName: error instanceof Error ? error.name : "UnknownError" },
+            "Paytm Money regular order cancellation failed",
+          );
+          return reply.code(statusCode).send({
+            error:
+              error instanceof PaytmMoneyError
+                ? error.message
+                : "Paytm Money regular order could not be cancelled",
           });
         }
       },

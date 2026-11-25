@@ -10,8 +10,17 @@ The app exposes these routes:
   `requestToken` (or `request_token`) from the broker redirect.
 - `GET /api/paytm-money/user-details` fetches account details using the stored
   read token; it requires the app's `x-api-key`.
+- `GET /api/paytm-money/orders` retrieves all orders for the day using the
+  stored read token; it requires the app's `x-api-key`. The complete broker
+  order records, including `ext_info`, are returned unchanged.
 - `POST /api/paytm-money/orders/regular` submits a live regular order using the
   authenticated access token; it requires the app's `x-api-key`.
+- `POST /api/paytm-money/orders/regular/modify` modifies a pending regular
+  order. Include the broker's `order_no`, `serial_no`, and `group_id`; pass
+  `ext_info` back unchanged when the order book or postback provided it.
+- `POST /api/paytm-money/orders/regular/cancel` cancels a pending regular order.
+  Include the broker's `order_no`, `serial_no`, and `group_id`; pass `ext_info`
+  back unchanged when the order book or postback provided it.
 - `POST /api/paytm-money/auth/logout` clears locally stored tokens and requires
   the app's `x-api-key`.
 
@@ -26,7 +35,10 @@ These methods follow the official
 [Login](https://developer.paytmmoney.com/docs/api/login),
 [Generate Access Token](https://developer.paytmmoney.com/docs/api/generate-access-token),
 [User details](https://developer.paytmmoney.com/docs/api/user-details), and
-[Place Regular Order](https://developer.paytmmoney.com/docs/api/place-regular-order)
+[Order Book - All Orders](https://developer.paytmmoney.com/docs/api/order-book-all-orders),
+[Place Regular Order](https://developer.paytmmoney.com/docs/api/place-regular-order),
+[Modify Regular Order](https://developer.paytmmoney.com/docs/api/modify-regular-order),
+and [Cancel Regular Order](https://developer.paytmmoney.com/docs/api/cancel-regular-order)
 documents. Keep future Paytm Money configuration, API client code, broker types,
 and related implementation in this folder; keep client tests in
 `tests/paytm-money-client.test.ts`.
