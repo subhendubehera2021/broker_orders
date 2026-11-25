@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { validateOptionChainQuery } from "../src/middleware/validate-option-chain.js";
+import { validateOptionChainQuery } from "../src/fyers/middleware/validate-option-chain.js";
 
 function runValidation(query) {
   const response = {

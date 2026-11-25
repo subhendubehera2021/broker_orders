@@ -1,10 +1,10 @@
 import { Router } from "express";
 import { getHealth } from "../controllers/health.controller.js";
-import marketDataRoutes from "./market-data.routes.js";
+import liquiditySwingsRoutes from "./liquidity-swings.routes.js";
 
 const router = Router();
 
 router.get("/health", getHealth);
-router.use("/market-data", marketDataRoutes);
+router.use("/liquidity-swings", liquiditySwingsRoutes);
 
 export default router;

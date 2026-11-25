@@ -5,11 +5,11 @@ Simple Express API with Swagger UI.
 ## Structure
 
 - `src/server.js` starts the HTTP server.
-- `src/app.js` configures Express and mounts routes.
-- `src/routes/` and `src/controllers/` contain API endpoints and handlers.
-- `src/services/` contains the reusable Fyers client and historical-data service.
-- `src/middleware/` validates API query parameters.
-- `src/docs/swagger.js` contains the OpenAPI definition and Swagger UI.
+- `src/app.js` configures Express and mounts the API.
+- `src/api.routes.js` mounts the Fyers and internal API modules.
+- `src/fyers/` contains Fyers routes, controllers, validation, services, and constants.
+- `src/internal/` contains internal routes, controllers, validation, and liquidity-swing analysis.
+- `src/utils/` and `src/docs/` contain shared date helpers and Swagger documentation.
 
 ## Run
 
@@ -24,17 +24,20 @@ npm run dev
 
 Set `PORT` to change the default port (`3000`).
 
-- Health check: `http://localhost:3000/api/health`
-- Historical data: `GET /api/market-data/historical-data`
-- Option chain: `GET /api/market-data/option-chain`
-- Quotes: `GET /api/market-data/quotes`
+- Internal health check: `http://localhost:3000/api/internal/health`
+- Fyers historical data: `GET /api/fyers/market-data/historical-data`
+- Fyers option chain: `GET /api/fyers/market-data/option-chain`
+- Fyers quotes: `GET /api/fyers/market-data/quotes`
+- Internal liquidity swings: `GET /api/internal/liquidity-swings`
 - API index: `http://localhost:3000/`
 - Swagger UI: `http://localhost:3000/docs`
+
+Previous `/api/market-data/*`, `/api/liquidity-swings`, and `/api/health` paths remain available as compatibility aliases.
 
 Example:
 
 ```sh
-curl "http://localhost:3000/api/market-data/historical-data?symbol=NSE%3ASBIN-EQ&resolution=D&date_format=0&range_from=1690895316&range_to=1691068173"
+curl "http://localhost:3000/api/fyers/market-data/historical-data?symbol=NSE%3ASBIN-EQ&resolution=D&date_format=0&range_from=1690895316&range_to=1691068173"
 ```
 
 `date_format=0` uses epoch timestamps; use `date_format=1` with `YYYY-MM-DD` dates instead. `cont_flag` and `oi_flag` are optional.
@@ -42,11 +45,36 @@ curl "http://localhost:3000/api/market-data/historical-data?symbol=NSE%3ASBIN-EQ
 Option-chain example:
 
 ```sh
-curl "http://localhost:3000/api/market-data/option-chain?symbol=NSE%3ANIFTY50-INDEX&strikecount=1&timestamp=&greeks=1"
+curl "http://localhost:3000/api/fyers/market-data/option-chain?symbol=NSE%3ANIFTY50-INDEX&strikecount=1&timestamp=&greeks=1"
 ```
 
 Quotes example (up to 50 comma-separated symbols):
 
 ```sh
-curl "http://localhost:3000/api/market-data/quotes?symbols=NSE%3ASBIN-EQ%2CNSE%3ATCS-EQ"
+curl "http://localhost:3000/api/fyers/market-data/quotes?symbols=NSE%3ASBIN-EQ%2CNSE%3ATCS-EQ"
 ```
+
+## Liquidity-swing library
+
+The library fetches Fyers candles and analyzes the latest confirmed liquidity swing high:
+
+```js
+import {
+  fetchLiquiditySwings,
+  recentIndiaDateRange,
+} from "./src/internal/lib/liquidity-swings.js";
+
+const result = await fetchLiquiditySwings("NSE:SBIN-EQ", {
+  ...recentIndiaDateRange(),
+  resolution: "1",
+  pivotLookback: 5,
+});
+```
+
+The same analysis is available over HTTP. Dates default to the recent three-day India date range:
+
+```sh
+curl "http://localhost:3000/api/internal/liquidity-swings?symbol=NSE%3ASBIN-EQ&resolution=1&pivotLookback=5"
+```
+
+This LuxAlgo-based adaptation is licensed CC BY-NC-SA 4.0 and is for noncommercial use with attribution and share-alike terms: https://creativecommons.org/licenses/by-nc-sa/4.0/

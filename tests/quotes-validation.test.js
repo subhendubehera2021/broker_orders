@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { validateQuotesQuery } from "../src/middleware/validate-quotes.js";
+import { validateQuotesQuery } from "../src/fyers/middleware/validate-quotes.js";
 
 function runValidation(query) {
   const response = {

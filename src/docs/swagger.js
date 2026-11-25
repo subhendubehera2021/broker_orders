@@ -21,7 +21,7 @@ const openapiSpecification = {
         },
       },
     },
-    "/api/health": {
+    "/api/internal/health": {
       get: {
         summary: "Check API health",
         responses: {
@@ -41,7 +41,7 @@ const openapiSpecification = {
         },
       },
     },
-    "/api/market-data/historical-data": {
+    "/api/fyers/market-data/historical-data": {
       get: {
         summary: "Get historical candle data",
         description: "Fetch candle history from Fyers for a symbol and date range.",
@@ -112,7 +112,7 @@ const openapiSpecification = {
         },
       },
     },
-    "/api/market-data/option-chain": {
+    "/api/fyers/market-data/option-chain": {
       get: {
         summary: "Get an option chain",
         description: "Fetch call and put strikes, expiry data, and optionally Greeks from Fyers.",
@@ -161,7 +161,7 @@ const openapiSpecification = {
         },
       },
     },
-    "/api/market-data/quotes": {
+    "/api/fyers/market-data/quotes": {
       get: {
         summary: "Get quotes for symbols",
         description: "Fetch current quotes for up to 50 symbols in one request.",
@@ -183,6 +183,73 @@ const openapiSpecification = {
           },
           502: {
             description: "Fyers quotes request failed.",
+          },
+          503: {
+            description: "Fyers credentials are not configured.",
+          },
+        },
+      },
+    },
+    "/api/internal/liquidity-swings": {
+      get: {
+        summary: "Analyze liquidity swings",
+        description: "Fetch Fyers historical candles and return the latest confirmed liquidity swing high. Defaults to the recent three-day India date range.",
+        parameters: [
+          {
+            name: "symbol",
+            in: "query",
+            required: true,
+            schema: { type: "string", example: "NSE:SBIN-EQ" },
+          },
+          {
+            name: "fromDate",
+            in: "query",
+            required: false,
+            description: "YYYY-MM-DD; provide together with toDate.",
+            schema: { type: "string", format: "date", example: "2025-01-01" },
+          },
+          {
+            name: "toDate",
+            in: "query",
+            required: false,
+            description: "YYYY-MM-DD; provide together with fromDate.",
+            schema: { type: "string", format: "date", example: "2025-01-03" },
+          },
+          {
+            name: "resolution",
+            in: "query",
+            required: false,
+            description: "Fyers candle resolution; defaults to 1-minute candles.",
+            schema: {
+              type: "string",
+              enum: ["5S", "10S", "15S", "30S", "45S", "1", "2", "3", "5", "10", "15", "20", "30", "45", "60", "120", "180", "240", "D", "1D", "1W", "1M"],
+              default: "1",
+            },
+          },
+          {
+            name: "pivotLookback",
+            in: "query",
+            required: false,
+            description: "Positive number of candles on each side used to confirm a pivot; defaults to 5.",
+            schema: { type: "integer", minimum: 1, default: 5 },
+          },
+          {
+            name: "contFlag",
+            in: "query",
+            required: false,
+            description: "Set to 1 for continuous futures/options data.",
+            schema: { type: "string", enum: ["0", "1"] },
+          },
+        ],
+        responses: {
+          200: {
+            description: "Historical candles and the latest confirmed swing, or null if none is found.",
+          },
+          400: {
+            description: "Missing or invalid query parameters.",
+          },
+          502: {
+            description: "Fyers historical-data request or response failed.",
           },
           503: {
             description: "Fyers credentials are not configured.",

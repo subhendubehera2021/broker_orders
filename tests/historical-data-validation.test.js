@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { validateHistoricalDataQuery } from "../src/middleware/validate-historical-data.js";
+import { validateHistoricalDataQuery } from "../src/fyers/middleware/validate-historical-data.js";
 
 function runValidation(query) {
   const response = {

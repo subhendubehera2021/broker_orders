@@ -1,17 +1,5 @@
-const resolutions = new Set([
-  "5S", "10S", "15S", "30S", "45S",
-  "1", "2", "3", "5", "10", "15", "20", "30", "45", "60", "120", "180", "240",
-  "D", "1D", "1W", "1M",
-]);
-
-function isValidDate(value) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return false;
-  }
-
-  const date = new Date(`${value}T00:00:00.000Z`);
-  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
-}
+import { FYERS_HISTORICAL_RESOLUTIONS } from "../constants/fyers-market-data.js";
+import { isValidDateOnly } from "../../utils/date.js";
 
 function isValidEpoch(value) {
   return /^\d+$/.test(value) && Number.isSafeInteger(Number(value));
@@ -31,7 +19,7 @@ export function validateHistoricalDataQuery(request, response, next) {
     }
   }
 
-  if (values.resolution && !resolutions.has(values.resolution)) {
+  if (values.resolution && !FYERS_HISTORICAL_RESOLUTIONS.has(values.resolution)) {
     errors.resolution = "Unsupported candle resolution.";
   }
 
@@ -55,14 +43,14 @@ export function validateHistoricalDataQuery(request, response, next) {
     }
   } else if (values.date_format === "1") {
     for (const field of ["range_from", "range_to"]) {
-      if (values[field] && !isValidDate(values[field])) {
+      if (values[field] && !isValidDateOnly(values[field])) {
         errors[field] = "Use a valid YYYY-MM-DD date when date_format is 1.";
       }
     }
 
     if (
-      values.range_from && isValidDate(values.range_from) &&
-      values.range_to && isValidDate(values.range_to) &&
+      values.range_from && isValidDateOnly(values.range_from) &&
+      values.range_to && isValidDateOnly(values.range_to) &&
       values.range_from >= values.range_to
     ) {
       errors.range_to = "Must be later than range_from.";

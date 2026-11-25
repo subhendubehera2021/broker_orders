@@ -1,5 +1,5 @@
 import express from "express";
-import apiRoutes from "./routes/api.routes.js";
+import apiRoutes from "./api.routes.js";
 import swaggerRouter from "./docs/swagger.js";
 
 const app = express();
@@ -9,10 +9,15 @@ app.get("/", (_request, response) => {
     name: "Auto Trade Processor API",
     docs: "/docs",
     endpoints: {
-      health: "/api/health",
-      historicalData: "/api/market-data/historical-data",
-      optionChain: "/api/market-data/option-chain",
-      quotes: "/api/market-data/quotes",
+      fyers: {
+        historicalData: "/api/fyers/market-data/historical-data",
+        optionChain: "/api/fyers/market-data/option-chain",
+        quotes: "/api/fyers/market-data/quotes",
+      },
+      internal: {
+        health: "/api/internal/health",
+        liquiditySwings: "/api/internal/liquidity-swings",
+      },
     },
   });
 });
