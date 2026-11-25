@@ -1,4 +1,5 @@
 import { getOptionChain as fetchOptionChain } from "../services/option-chain.service.js";
+import { parseOptionChainModel } from "../models/option-chain.model.js";
 
 export async function getOptionChain(_request, response) {
   try {
@@ -11,7 +12,7 @@ export async function getOptionChain(_request, response) {
       });
     }
 
-    response.json(result.data);
+    response.json(parseOptionChainModel(result.data));
   } catch (error) {
     const statusCode = error.statusCode === 503 ? 503 : 502;
     const message = statusCode === 503

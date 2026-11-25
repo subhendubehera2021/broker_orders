@@ -1,5 +1,10 @@
 import { Router } from "express";
 import swaggerUi from "swagger-ui-express";
+import {
+  optionChainInstrumentModel,
+  optionChainModel,
+} from "../fyers/models/option-chain.model.js";
+import { highestVolumeOptionsModel } from "../internal/models/highest-volume-options.model.js";
 
 const router = Router();
 
@@ -10,9 +15,22 @@ const openapiSpecification = {
     version: "1.0.0",
     description: "Market data endpoints backed by the Fyers API.",
   },
+  tags: [
+    { name: "Fyers", description: "Direct Fyers market-data APIs." },
+    { name: "Internal", description: "Application-specific APIs and analysis." },
+    { name: "Auto Trade Process", description: "Auto-trade process market-data APIs." },
+  ],
+  components: {
+    schemas: {
+      OptionChainInstrument: optionChainInstrumentModel,
+      OptionChainModel: optionChainModel,
+      HighestVolumeOptions: highestVolumeOptionsModel,
+    },
+  },
   paths: {
     "/": {
       get: {
+        tags: ["Internal"],
         summary: "List API links",
         responses: {
           200: {
@@ -23,6 +41,7 @@ const openapiSpecification = {
     },
     "/api/internal/health": {
       get: {
+        tags: ["Internal"],
         summary: "Check API health",
         responses: {
           200: {
@@ -43,6 +62,7 @@ const openapiSpecification = {
     },
     "/api/fyers/market-data/historical-data": {
       get: {
+        tags: ["Fyers"],
         summary: "Get historical candle data",
         description: "Fetch candle history from Fyers for a symbol and date range.",
         parameters: [
@@ -114,6 +134,7 @@ const openapiSpecification = {
     },
     "/api/fyers/market-data/option-chain": {
       get: {
+        tags: ["Fyers"],
         summary: "Get an option chain",
         description: "Fetch call and put strikes, expiry data, and optionally Greeks from Fyers.",
         parameters: [
@@ -148,6 +169,11 @@ const openapiSpecification = {
         responses: {
           200: {
             description: "Option-chain data returned by Fyers.",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/OptionChainModel" },
+              },
+            },
           },
           400: {
             description: "Missing or invalid query parameters.",
@@ -163,6 +189,7 @@ const openapiSpecification = {
     },
     "/api/fyers/market-data/quotes": {
       get: {
+        tags: ["Fyers"],
         summary: "Get quotes for symbols",
         description: "Fetch current quotes for up to 50 symbols in one request.",
         parameters: [
@@ -192,6 +219,7 @@ const openapiSpecification = {
     },
     "/api/internal/liquidity-swings": {
       get: {
+        tags: ["Internal"],
         summary: "Analyze liquidity swings",
         description: "Fetch Fyers historical candles and return the latest confirmed liquidity swing high. Defaults to the recent three-day India date range.",
         parameters: [
@@ -257,10 +285,148 @@ const openapiSpecification = {
         },
       },
     },
+    "/api/internal/option-chain/highest-volume": {
+      get: {
+        tags: ["Internal"],
+        summary: "Find the highest-volume call and put in an LTP range",
+        description: "Fetches the Fyers option chain, optionally filters CE and PE contracts by the inclusive LTP bounds, then selects the highest-volume match for each side.",
+        parameters: [
+          {
+            name: "symbol",
+            in: "query",
+            required: true,
+            schema: { type: "string", example: "NSE:NIFTY50-INDEX" },
+          },
+          {
+            name: "strikecount",
+            in: "query",
+            required: false,
+            description: "Number of strikes on each side of ATM (maximum 50).",
+            schema: { type: "integer", minimum: 1, maximum: 50, example: 1 },
+          },
+          {
+            name: "greeks",
+            in: "query",
+            required: false,
+            description: "Set to 1 to include Greeks in selected contracts.",
+            schema: { type: "string", enum: ["0", "1"], example: "0" },
+          },
+          {
+            name: "timestamp",
+            in: "query",
+            required: false,
+            description: "Option-chain timestamp; leave empty for current data.",
+            schema: { type: "string", example: "" },
+          },
+          {
+            name: "ltpMin",
+            in: "query",
+            required: false,
+            description: "Optional inclusive minimum LTP.",
+            schema: { type: "number", minimum: 0, example: 100 },
+          },
+          {
+            name: "ltpMax",
+            in: "query",
+            required: false,
+            description: "Optional inclusive maximum LTP.",
+            schema: { type: "number", minimum: 0, example: 300 },
+          },
+        ],
+        responses: {
+          200: {
+            description: "Highest-volume CE and PE contracts within the supplied bounds, or across all returned strikes when bounds are omitted. A side is null if no contract matches.",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/HighestVolumeOptions" },
+              },
+            },
+          },
+          400: {
+            description: "Missing or invalid query parameters.",
+          },
+          502: {
+            description: "Fyers option-chain request or response failed.",
+          },
+          503: {
+            description: "Fyers credentials are not configured.",
+          },
+        },
+      },
+    },
+    "/api/auto-trade-process": {
+      get: {
+        tags: ["Auto Trade Process"],
+        summary: "Get auto-trade-process option data",
+        description: "Fetches the highest-volume CE and PE for the supplied symbol using the requested strike count, Greeks setting, and inclusive LTP range.",
+        parameters: [
+          {
+            name: "symbol",
+            in: "query",
+            required: true,
+            schema: { type: "string", example: "NSE:NIFTY50-INDEX" },
+          },
+          {
+            name: "strikecount",
+            in: "query",
+            required: false,
+            description: "Number of strikes on each side of ATM (maximum 50).",
+            schema: { type: "integer", minimum: 1, maximum: 50, example: 50 },
+          },
+          {
+            name: "greeks",
+            in: "query",
+            required: false,
+            description: "Set to 1 to include Greeks in selected contracts.",
+            schema: { type: "integer", enum: [0, 1], example: 0 },
+          },
+          {
+            name: "ltpMin",
+            in: "query",
+            required: false,
+            description: "Optional inclusive minimum LTP.",
+            schema: { type: "number", minimum: 0, example: 100 },
+          },
+          {
+            name: "ltpMax",
+            in: "query",
+            required: false,
+            description: "Optional inclusive maximum LTP.",
+            schema: { type: "number", minimum: 0, example: 140 },
+          },
+        ],
+        responses: {
+          200: {
+            description: "Highest-volume CE and PE option contracts.",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/HighestVolumeOptions" },
+              },
+            },
+          },
+          400: {
+            description: "A single symbol is required.",
+          },
+          502: {
+            description: "Option-chain request failed.",
+          },
+          503: {
+            description: "Fyers credentials are not configured.",
+          },
+        },
+      },
+    },
   },
 };
 
 router.use(swaggerUi.serve);
-router.get("/", swaggerUi.setup(openapiSpecification));
+router.get(
+  "/",
+  swaggerUi.setup(openapiSpecification, {
+    swaggerOptions: {
+      docExpansion: "none",
+    },
+  }),
+);
 
 export default router;

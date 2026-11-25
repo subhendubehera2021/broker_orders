@@ -4,12 +4,14 @@ import fyersRoutes from "./fyers/routes/index.js";
 import fyersMarketDataRoutes from "./fyers/routes/market-data.routes.js";
 import internalRoutes from "./internal/routes/index.js";
 import internalLiquiditySwingsRoutes from "./internal/routes/liquidity-swings.routes.js";
+import autoTradeProcessRoutes from "./auto-trade-process/routes/auto-trade-process.routes.js";
 
 const router = Router();
 
 router.get("/health", getHealth);
 router.use("/fyers", fyersRoutes);
 router.use("/internal", internalRoutes);
+router.use("/auto-trade-process", autoTradeProcessRoutes);
 
 router.use("/market-data", fyersMarketDataRoutes);
 router.use("/liquidity-swings", internalLiquiditySwingsRoutes);

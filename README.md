@@ -7,7 +7,9 @@ Simple Express API with Swagger UI.
 - `src/server.js` starts the HTTP server.
 - `src/app.js` configures Express and mounts the API.
 - `src/api.routes.js` mounts the Fyers and internal API modules.
-- `src/fyers/` contains Fyers routes, controllers, validation, services, and constants.
+- `src/fyers/` contains Fyers routes, controllers, validation, services, models, and constants.
+- `src/fyers/models/` describes Fyers response shapes such as the option chain.
+- `src/auto-trade-process/` contains the auto-trade-process route, controller, and service.
 - `src/internal/` contains internal routes, controllers, validation, and liquidity-swing analysis.
 - `src/utils/` and `src/docs/` contain shared date helpers and Swagger documentation.
 
@@ -29,6 +31,8 @@ Set `PORT` to change the default port (`3000`).
 - Fyers option chain: `GET /api/fyers/market-data/option-chain`
 - Fyers quotes: `GET /api/fyers/market-data/quotes`
 - Internal liquidity swings: `GET /api/internal/liquidity-swings`
+- Internal highest-volume options: `GET /api/internal/option-chain/highest-volume`
+- Auto-trade-process data: `GET /api/auto-trade-process`
 - API index: `http://localhost:3000/`
 - Swagger UI: `http://localhost:3000/docs`
 
@@ -75,6 +79,18 @@ The same analysis is available over HTTP. Dates default to the recent three-day 
 
 ```sh
 curl "http://localhost:3000/api/internal/liquidity-swings?symbol=NSE%3ASBIN-EQ&resolution=1&pivotLookback=5"
+```
+
+Find the highest-volume CE and PE contracts. LTP bounds are optional and inclusive; omit both to search all returned strikes:
+
+```sh
+curl "http://localhost:3000/api/internal/option-chain/highest-volume?symbol=NSE%3ANIFTY50-INDEX&strikecount=1&greeks=0&ltpMin=100&ltpMax=300"
+```
+
+Pass the option-chain settings and inclusive LTP range to the auto-trade-process endpoint:
+
+```sh
+curl "http://localhost:3000/api/auto-trade-process?symbol=NSE%3ANIFTY50-INDEX&strikecount=50&greeks=0&ltpMin=100&ltpMax=140"
 ```
 
 This LuxAlgo-based adaptation is licensed CC BY-NC-SA 4.0 and is for noncommercial use with attribution and share-alike terms: https://creativecommons.org/licenses/by-nc-sa/4.0/

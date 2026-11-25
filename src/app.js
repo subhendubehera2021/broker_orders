@@ -17,7 +17,9 @@ app.get("/", (_request, response) => {
       internal: {
         health: "/api/internal/health",
         liquiditySwings: "/api/internal/liquidity-swings",
+        highestVolumeOptions: "/api/internal/option-chain/highest-volume",
       },
+      autoTradeProcess: "/api/auto-trade-process",
     },
   });
 });
