@@ -1,7 +1,8 @@
-# Kotak Neo API
+# Broker Orders API
 
-A Node.js, TypeScript, and Fastify service for Kotak Neo authentication, NIFTY
-option market data, margin estimates, and validated live NIFTY option orders.
+A Node.js, TypeScript, and Fastify service with separate Kotak Neo and Paytm
+Money broker modules. Kotak Neo provides authentication, NIFTY option market
+data, margin estimates, and validated live NIFTY option orders.
 
 ## Requirements
 
@@ -42,13 +43,21 @@ Orders page and API.
 
 Start the service and open [http://127.0.0.1:3000/docs](http://127.0.0.1:3000/docs)
 for interactive Swagger UI. The generated OpenAPI document is available at
-`/docs/json`.
+`/docs/json`. Its top-level OpenAPI configuration is maintained in
+`src/openapi.ts`; route schemas remain alongside their handlers and are combined
+into the generated document.
 
 The login screen is available at [http://127.0.0.1:3000/](http://127.0.0.1:3000/).
 It pre-fills the mobile number and UCC from local server settings. The MPIN
 stays server-side; only the current TOTP is submitted by the browser.
 
 ## Endpoints
+
+Kotak Neo API routes are grouped under `/api/kotak-neo/` in Swagger. Existing
+Kotak routes under `/api/` remain available for compatibility and are marked
+deprecated; both route prefixes use the same handlers and session. For
+example, `/api/auth/login` is also available as
+`/api/kotak-neo/auth/login`.
 
 - `GET /health` — process health check.
 - `GET /margin` — standalone margin calculator UI; requires an active local
@@ -104,6 +113,16 @@ stays server-side; only the current TOTP is submitted by the browser.
   Master.
 - `POST /api/auth/logout` — clear the in-memory session from this process. This
   does not revoke the session with Kotak Neo.
+- `GET /api/paytm-money/auth/login` — get the Paytm Money login URL. The registered
+  Paytm Money Return URL must be this app's public
+  `/api/paytm-money/auth/callback` URL.
+- `GET /api/paytm-money/auth/callback?request_token=...&state=...` — complete
+  Paytm Money login; tokens are stored server-side and not returned.
+- `GET /api/paytm-money/user-details` — get account details using the stored
+  Paytm Money read token; requires this app's `x-api-key` header.
+- `POST /api/paytm-money/auth/logout` — clear Paytm Money tokens stored in this
+  process; requires this app's `x-api-key` header and does not revoke the
+  broker-side session.
 
 Example login request:
 
@@ -237,15 +256,20 @@ application:
 - `KOTAK_NEO_QUOTES_PATH` — quote endpoint template; retain the
   `{neo_symbols}` and `{quote_type}` placeholders.
 - `KOTAK_NEO_REQUEST_TIMEOUT_MS` — upstream request timeout in milliseconds.
+- `PAYTM_MONEY_API_KEY` and `PAYTM_MONEY_API_SECRET_KEY` — optional Paytm Money
+  developer credentials. Configure both to enable Paytm Money login and account
+  details in Swagger; the secret remains server-side.
 - `OPEN_ORDER_PRICE_STEP` — rupee increment used by the Open orders Up/Down
   shortcuts; must be a positive multiple of ₹0.05 and defaults to `1`.
 - `AUTO_SELL_STOP_LOSS_RUPEES` — rupee amount subtracted from the average fill
   price for an app-managed auto-sell stop-limit; defaults to `5`.
 - `HOST` and `PORT` — service bind address and port.
 
-The service reads all runtime settings from the environment (loaded from `.env`
-for local development) and does not embed Kotak endpoint or financial-key
-values in the source.
+The app composition lives in `src/app.ts`; broker-specific clients and routes
+are kept in `src/kotak-neo/` and `src/paytm-money/`. The service reads all
+runtime settings from the environment (loaded from `.env` for local
+development) and does not embed Kotak endpoint or financial-key values in the
+source.
 
 Do not commit `.env` or send API credentials, TOTP codes, or MPINs to anyone.
 Keep this service on a trusted network, use HTTPS if it is accessed remotely,

@@ -1,4 +1,4 @@
-import type { KotakNeoConfig } from "./config.js";
+import type { KotakNeoConfig } from "../config.js";
 
 interface LoginInput {
   mobileNumber: string;

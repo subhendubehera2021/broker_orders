@@ -31,6 +31,11 @@ export interface AppConfig {
   openOrderPriceStep: number;
   autoSellStopLossRupees: number;
   kotakNeo: KotakNeoConfig;
+  paytmMoney?: {
+    apiKey: string;
+    apiSecretKey: string;
+    requestTimeoutMs: number;
+  };
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -112,6 +117,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   );
 
   const apiKey = env.API_KEY?.trim() || env.X_API_KEY?.trim() || webAccessPasscode;
+  const paytmMoneyApiKey = env.PAYTM_MONEY_API_KEY?.trim() || undefined;
+  const paytmMoneyApiSecretKey = env.PAYTM_MONEY_API_SECRET_KEY?.trim() || undefined;
+  if (Boolean(paytmMoneyApiKey) !== Boolean(paytmMoneyApiSecretKey)) {
+    throw new Error(
+      "PAYTM_MONEY_API_KEY and PAYTM_MONEY_API_SECRET_KEY must be configured together",
+    );
+  }
 
   return {
     host: requiredValue(env.HOST, "HOST"),
@@ -148,6 +160,15 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       ),
       requestTimeoutMs,
     },
+    ...(paytmMoneyApiKey && paytmMoneyApiSecretKey
+      ? {
+          paytmMoney: {
+            apiKey: paytmMoneyApiKey,
+            apiSecretKey: paytmMoneyApiSecretKey,
+            requestTimeoutMs,
+          },
+        }
+      : {}),
   };
 }
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { KotakNeoClient } from "../src/kotak-neo-client.js";
+import { KotakNeoClient } from "../src/kotak-neo/client.js";
 
 const prodConfig = {
   apiBaseUrl: "https://mis.kotaksecurities.com/",

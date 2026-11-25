@@ -7,7 +7,7 @@ import {
   KotakNeoError,
   type AuthenticatedSession,
   type PlaceNiftyOptionOrderInput,
-} from "../src/kotak-neo-client.js";
+} from "../src/kotak-neo/client.js";
 
 const config: AppConfig = {
   host: "127.0.0.1",
@@ -79,7 +79,35 @@ describe("app routes", () => {
     assert.equal(spec.statusCode, 200);
     const openapi = spec.json();
     assert.equal(openapi.openapi, "3.0.3");
-    assert.equal(openapi.info.title, "Kotak Neo API");
+    assert.equal(openapi.info.title, "Broker Orders API");
+    assert.deepEqual(openapi.components.securitySchemes.AppApiKey, {
+      type: "apiKey",
+      in: "header",
+      name: "x-api-key",
+    });
+    assert.ok(openapi.paths["/api/paytm-money/auth/login"]);
+    assert.ok(openapi.paths["/api/paytm-money/auth/callback"]);
+    assert.ok(openapi.paths["/api/paytm-money/user-details"]);
+    assert.deepEqual(
+      openapi.paths["/api/paytm-money/user-details"].get.security,
+      [{ AppApiKey: [] }],
+    );
+
+    for (const [method, legacyPath] of [
+      ["get", "/api/auth/session"],
+      ["get", "/api/auth/session-details"],
+      ["post", "/api/auth/login"],
+      ["post", "/api/auth/logout"],
+      ["post", "/api/options/nifty/order"],
+      ["post", "/api/orders/buy-sl-limit"],
+      ["post", "/api/orders/sell-sl-limit"],
+      ["post", "/api/orders/cancel"],
+      ["get", "/api/market-data/historical"],
+    ] as const) {
+      const operation = openapi.paths[legacyPath][method];
+      assert.equal(operation.deprecated, true, legacyPath);
+      assert.ok(openapi.paths[legacyPath.replace(/^\/api\//, "/api/kotak-neo/")][method]);
+    }
   });
 
   it("does not expose the removed historical chart page or assets", async () => {
@@ -121,7 +149,7 @@ describe("app routes", () => {
 
     const loginResponse = await app.inject({
       method: "POST",
-      url: "/api/auth/login",
+      url: "/api/kotak-neo/auth/login",
       payload: { totp: "123456" },
     });
     assert.equal(loginResponse.statusCode, 200);
@@ -129,6 +157,90 @@ describe("app routes", () => {
 
     const current = await app.inject("/api/auth/session");
     assert.deepEqual(current.json(), { authenticated: true, orderReady: true });
+  });
+
+  it("documents and completes Paytm Money login without exposing broker tokens", async () => {
+    let loginState: string | undefined;
+    let usedAccessToken: string | undefined;
+    const details = {
+      data: {
+        kycName: "Example User",
+        userId: 123,
+        activeSegments: ["CASH", "FO"],
+      },
+    };
+    const app = buildApp({
+      config,
+      paytmMoneyClient: {
+        createLoginUrl(state) {
+          loginState = state;
+          return new URL(`https://login.paytmmoney.com/merchant-login?state=${state}`);
+        },
+        async generateAccessToken(requestToken) {
+          assert.equal(requestToken, "request-token");
+          return {
+            merchant_id: "148",
+            channel_id: "API-148",
+            api_key: "test-api-key",
+            access_token: "private-access-token",
+            public_access_token: "private-public-token",
+            read_access_token: "private-read-token",
+          };
+        },
+        async getUserDetails(accessToken) {
+          usedAccessToken = accessToken;
+          return details;
+        },
+      },
+    });
+    apps.push(app);
+
+    const notConfigured = buildApp({ config });
+    apps.push(notConfigured);
+    const unavailable = await notConfigured.inject("/api/paytm-money/auth/login");
+    assert.equal(unavailable.statusCode, 503);
+
+    const login = await app.inject("/api/paytm-money/auth/login");
+    assert.equal(login.statusCode, 200);
+    assert.ok(loginState);
+    assert.equal(new URL(login.json().loginUrl).searchParams.get("state"), loginState);
+
+    const invalidCallback = await app.inject({
+      url: "/api/paytm-money/auth/callback?request_token=request-token&state=wrong",
+    });
+    assert.equal(invalidCallback.statusCode, 400);
+
+    const callback = await app.inject({
+      url: `/api/paytm-money/auth/callback?request_token=request-token&state=${loginState}`,
+    });
+    assert.equal(callback.statusCode, 200);
+    assert.deepEqual(callback.json(), { authenticated: true });
+    assert.doesNotMatch(callback.body, /private-(?:access|public|read)-token/);
+
+    const unauthorized = await app.inject("/api/paytm-money/user-details");
+    assert.equal(unauthorized.statusCode, 401);
+
+    const userDetails = await app.inject({
+      url: "/api/paytm-money/user-details",
+      headers: { "x-api-key": "SKB9178" },
+    });
+    assert.equal(userDetails.statusCode, 200);
+    assert.deepEqual(userDetails.json(), details);
+    assert.equal(usedAccessToken, "private-read-token");
+
+    const logout = await app.inject({
+      method: "POST",
+      url: "/api/paytm-money/auth/logout",
+      headers: { "x-api-key": "SKB9178" },
+    });
+    assert.equal(logout.statusCode, 200);
+    assert.deepEqual(logout.json(), { authenticated: false });
+
+    const noSession = await app.inject({
+      url: "/api/paytm-money/user-details",
+      headers: { "x-api-key": "SKB9178" },
+    });
+    assert.equal(noSession.statusCode, 404);
   });
 
   it("clears session state on logout", async () => {

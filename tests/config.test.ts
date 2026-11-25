@@ -137,6 +137,28 @@ describe("loadConfig", () => {
     assert.equal(config.kotakNeo.orderSource, undefined);
   });
 
+  it("loads Paytm Money credentials only when both values are configured", () => {
+    const config = loadConfig({
+      ...validEnvironment,
+      PAYTM_MONEY_API_KEY: " paytm-api-key ",
+      PAYTM_MONEY_API_SECRET_KEY: " paytm-api-secret ",
+    });
+
+    assert.deepEqual(config.paytmMoney, {
+      apiKey: "paytm-api-key",
+      apiSecretKey: "paytm-api-secret",
+      requestTimeoutMs: 10000,
+    });
+    assert.throws(
+      () =>
+        loadConfig({
+          ...validEnvironment,
+          PAYTM_MONEY_API_KEY: "paytm-api-key",
+        }),
+      /PAYTM_MONEY_API_KEY and PAYTM_MONEY_API_SECRET_KEY must be configured together/,
+    );
+  });
+
   it("allows startup without optional order-book settings", () => {
     const {
       KOTAK_NEO_ORDER_BOOK_PATH: _orderBookPath,

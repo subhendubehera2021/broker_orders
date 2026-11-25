@@ -1,4 +1,4 @@
-import { KotakNeoError } from "./kotak-neo-client.js";
+import { KotakNeoError } from "./kotak-neo/client.js";
 
 export interface NiftyOptionContract {
   instrumentToken: string;
