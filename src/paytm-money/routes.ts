@@ -9,8 +9,10 @@ import {
 } from "./client.js";
 
 interface PaytmMoneyCallbackQuery {
-  request_token: string;
+  request_token?: string;
+  requestToken?: string;
   state: string;
+  success?: "true" | "false";
 }
 
 export interface PaytmMoneyRouteClient {
@@ -70,14 +72,24 @@ export function registerPaytmMoneyRoutes(
           tags: ["Paytm Money"],
           summary: "Complete Paytm Money login",
           description:
-            "Paytm Money redirects here with request_token and state. The state must match a login started within the last five minutes. Access tokens are stored server-side and are not returned.",
+            "Paytm Money redirects here with requestToken (or request_token), state, and optionally success. The state must match a login started within the last five minutes. Access tokens are stored server-side and are not returned.",
           querystring: {
             type: "object",
-            required: ["request_token", "state"],
+            required: ["state"],
+            anyOf: [
+              { required: ["request_token"] },
+              { required: ["requestToken"] },
+              {
+                required: ["success"],
+                properties: { success: { const: "false" } },
+              },
+            ],
             additionalProperties: false,
             properties: {
               request_token: { type: "string", minLength: 1, maxLength: 4096 },
+              requestToken: { type: "string", minLength: 1, maxLength: 4096 },
               state: { type: "string", minLength: 1, maxLength: 128 },
+              success: { type: "string", enum: ["true", "false"] },
             },
           },
           response: {
@@ -109,9 +121,19 @@ export function registerPaytmMoneyRoutes(
           return reply.code(400).send({ error: "Paytm Money login state does not match" });
         }
 
+        if (request.query.success === "false") {
+          paytmLoginState = undefined;
+          return reply.code(400).send({ error: "Paytm Money login was not successful" });
+        }
+
+        const requestToken = request.query.requestToken ?? request.query.request_token;
+        if (!requestToken) {
+          return reply.code(400).send({ error: "Paytm Money request token is missing" });
+        }
+
         paytmLoginState = undefined;
         try {
-          paytmAccessTokens = await paytmClient.generateAccessToken(request.query.request_token);
+          paytmAccessTokens = await paytmClient.generateAccessToken(requestToken);
           return { authenticated: true };
         } catch (error) {
           const statusCode = paytmMoneyRequestStatus(error);

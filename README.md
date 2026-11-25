@@ -116,8 +116,9 @@ example, `/api/auth/login` is also available as
 - `GET /api/paytm-money/auth/login` — get the Paytm Money login URL. The registered
   Paytm Money Return URL must be this app's public
   `/api/paytm-money/auth/callback` URL.
-- `GET /api/paytm-money/auth/callback?request_token=...&state=...` — complete
-  Paytm Money login; tokens are stored server-side and not returned.
+- `GET /api/paytm-money/auth/callback?success=true&requestToken=...&state=...`
+  — complete Paytm Money login; `request_token` is also accepted. Tokens are
+  stored server-side and not returned.
 - `GET /api/paytm-money/user-details` — get account details using the stored
   Paytm Money read token; requires this app's `x-api-key` header.
 - `POST /api/paytm-money/auth/logout` — clear Paytm Money tokens stored in this

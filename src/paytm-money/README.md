@@ -7,7 +7,7 @@ The app exposes these routes:
 
 - `GET /api/paytm-money/auth/login` starts login and returns the broker URL.
 - `GET /api/paytm-money/auth/callback` validates the login state and exchanges
-  the request token.
+  `requestToken` (or `request_token`) from the broker redirect.
 - `GET /api/paytm-money/user-details` fetches account details using the stored
   read token; it requires the app's `x-api-key`.
 - `POST /api/paytm-money/auth/logout` clears locally stored tokens and requires

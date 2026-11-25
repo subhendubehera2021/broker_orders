@@ -209,9 +209,12 @@ describe("app routes", () => {
       url: "/api/paytm-money/auth/callback?request_token=request-token&state=wrong",
     });
     assert.equal(invalidCallback.statusCode, 400);
+    assert.deepEqual(invalidCallback.json(), {
+      error: "Paytm Money login state does not match",
+    });
 
     const callback = await app.inject({
-      url: `/api/paytm-money/auth/callback?request_token=request-token&state=${loginState}`,
+      url: `/api/paytm-money/auth/callback?success=true&requestToken=request-token&state=${loginState}`,
     });
     assert.equal(callback.statusCode, 200);
     assert.deepEqual(callback.json(), { authenticated: true });
