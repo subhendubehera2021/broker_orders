@@ -15,7 +15,7 @@ Simple Express API with Swagger UI.
 
 ## Run
 
-Set `FYERS_APP_ID` and `FYERS_ACCESS_TOKEN` in `.env` (see `.env.example`).
+Set `FYERS_APP_ID`, `FYERS_ACCESS_TOKEN`, `TURSO_DATABASE_URL`, and `TURSO_AUTH_TOKEN` in `.env` (see `.env.example`). The database client also accepts the existing `_v2` Turso variable names.
 
 ```sh
 npm install
@@ -116,5 +116,7 @@ curl -X POST "http://localhost:3000/api/auto-trade-process" \
 ```
 
 The response includes the selected CE/PE contracts and a Step 2 result for each requested liquidity-swing configuration. The endpoint does not place orders.
+
+Changed swing results are saved to the automatically created `auto_trade_liquidity_swing_history` table. The latest result for an option symbol, side, resolution, pivot lookback, and date range is checked before inserting; unchanged results are skipped. When it changes, a new history row is added. Any existing `auto_trade_liquidity_swing_state` rows are migrated into the history table before the old state table is removed. The response's `step2.persistence` reports inserted and unchanged results. Ensure the Turso credentials are configured before calling this endpoint.
 
 This LuxAlgo-based adaptation is licensed CC BY-NC-SA 4.0 and is for noncommercial use with attribution and share-alike terms: https://creativecommons.org/licenses/by-nc-sa/4.0/

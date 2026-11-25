@@ -8,6 +8,7 @@
     "test": "node --test"
   },
   "dependencies": {
+    "@libsql/client": "^0.18.0",
     "express": "^5.1.0",
     "fyers-api-v3": "^2.5.0",
     "swagger-ui-express": "^5.0.1"

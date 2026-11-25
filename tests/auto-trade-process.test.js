@@ -35,6 +35,7 @@ test("forwards the supplied option-chain and LTP settings", async () => {
     totalVolume: 0,
     contracts: [],
   };
+  const persistenceResult = { inserted: 0, unchanged: 0 };
 
   const result = await getAutoTradeProcessData(
     optionChainQuery,
@@ -51,6 +52,10 @@ test("forwards the supplied option-chain and LTP settings", async () => {
         });
         return stepTwoResult;
       },
+      saveChangedLiquiditySwingsImpl: async (step2) => {
+        assert.equal(step2, stepTwoResult);
+        return persistenceResult;
+      },
     },
   );
 
@@ -58,7 +63,10 @@ test("forwards the supplied option-chain and LTP settings", async () => {
     query: optionChainQuery,
     range: ltpRange,
   });
-  assert.deepEqual(result, { ...responseData, step2: stepTwoResult });
+  assert.deepEqual(result, {
+    ...responseData,
+    step2: { ...stepTwoResult, persistence: persistenceResult },
+  });
 });
 
 test("step 2 fetches swings for each selected option symbol", async () => {

@@ -67,7 +67,7 @@ export const autoTradeProcessModel = {
       properties: {
         step2: {
           type: "object",
-          required: ["selectedCount", "totalVolume", "contracts"],
+          required: ["selectedCount", "totalVolume", "contracts", "persistence"],
           properties: {
             selectedCount: {
               type: "integer",
@@ -118,6 +118,15 @@ export const autoTradeProcessModel = {
                               enum: ["fyers", "aggregated-from-1-minute"],
                             },
                             swing: liquiditySwingModel,
+                          },
+                        },
+                        persistence: {
+                          type: "object",
+                          required: ["inserted", "unchanged"],
+                          description: "Number of changed swing results saved and unchanged results skipped.",
+                          properties: {
+                            inserted: { type: "integer", minimum: 0 },
+                            unchanged: { type: "integer", minimum: 0 },
                           },
                         },
                       },

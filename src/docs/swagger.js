@@ -365,7 +365,7 @@ const openapiSpecification = {
       get: {
         tags: ["Auto Trade Process"],
         summary: "Get auto-trade-process option data",
-        description: "Fetches the highest-volume CE and PE, then analyzes liquidity swings for each selected option symbol using the recent three-day India date range and caller-selected resolution and pivot lookback.",
+        description: "Fetches the highest-volume CE and PE, analyzes each selected symbol, and saves only changed swing results to Turso.",
         parameters: [
           {
             name: "symbol",
@@ -437,14 +437,14 @@ const openapiSpecification = {
             description: "Option-chain request failed.",
           },
           503: {
-            description: "Fyers credentials are not configured.",
+            description: "Fyers or Turso credentials are missing, or Turso persistence is unavailable.",
           },
         },
       },
       post: {
         tags: ["Auto Trade Process"],
         summary: "Analyze multiple liquidity-swing configurations",
-        description: "Finds the highest-volume CE and PE and calculates every requested swing configuration. One-minute data is reused for 1-minute and aggregated 3-minute configurations; other supported intervals are fetched directly. Three-minute candles require complete consecutive one-minute candles.",
+        description: "Finds the highest-volume CE and PE, calculates every requested swing configuration, and saves only changed swing results to Turso. One-minute data is reused for 1-minute and aggregated 3-minute configurations; other supported intervals are fetched directly. Three-minute candles require complete consecutive one-minute candles.",
         requestBody: {
           required: true,
           content: {
@@ -455,7 +455,7 @@ const openapiSpecification = {
         },
         responses: {
           200: {
-            description: "Highest-volume CE and PE contracts with each requested liquidity-swing analysis.",
+            description: "Highest-volume CE and PE contracts, swing analyses, and persistence counts.",
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/AutoTradeProcess" },
@@ -469,7 +469,7 @@ const openapiSpecification = {
             description: "Option-chain or historical-data request failed.",
           },
           503: {
-            description: "Fyers credentials are not configured.",
+            description: "Fyers or Turso credentials are missing, or Turso persistence is unavailable.",
           },
         },
       },
