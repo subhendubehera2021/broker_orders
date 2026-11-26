@@ -11,6 +11,7 @@ Simple Express API with Swagger UI.
 - `src/fyers/models/` describes Fyers response shapes such as the option chain.
 - `src/auto-trade-process/` contains the auto-trade-process route, controllers, validation, response models, services, and candle aggregation.
 - `src/internal/` contains internal routes, controllers, validation, and liquidity-swing analysis.
+- `ui/` contains the standalone browser UI for Fyers expiry dates.
 - `src/utils/` and `src/docs/` contain shared date helpers and Swagger documentation.
 
 ## Run
@@ -37,6 +38,7 @@ Set `PORT` to change the default port (`3000`).
 - Internal highest-volume options: `GET /api/internal/option-chain/highest-volume`
 - Auto-trade-process data: `GET /api/auto-trade-process`
 - API index: `http://localhost:3000/`
+- Expiry-dates UI: `http://localhost:3000/ui/`
 - Swagger UI: `http://localhost:3000/docs`
 
 Previous `/api/market-data/*`, `/api/liquidity-swings`, and `/api/health` paths remain available as compatibility aliases.

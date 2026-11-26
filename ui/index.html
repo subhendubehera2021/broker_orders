@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#101722">
+    <title>NIFTY Expired F&amp;O Data | Auto Trade Processor</title>
+    <link rel="stylesheet" href="/ui/styles.css">
+    <script src="/ui/app.js" defer></script>
+  </head>
+  <body>
+    <main class="page">
+      <header class="page-header">
+        <div class="header-top">
+          <a class="brand" href="/">Auto Trade Processor</a>
+          <span class="api-label">FYERS MARKET DATA</span>
+        </div>
+        <h1>NIFTY expired F&amp;O data</h1>
+        <p>Browse expiry dates, contracts, and historical option candles.</p>
+      </header>
+
+      <div class="workspace-grid">
+        <div class="section-grid">
+        <details class="api-section" open>
+          <summary class="api-section-heading">
+            <span class="api-section-title">Expiry dates</span>
+            <span class="collapse-hint" aria-hidden="true"></span>
+          </summary>
+          <div class="api-section-content">
+            <section class="panel" aria-labelledby="request-title">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">GET REQUEST</p>
+                  <h2 id="request-title">Request options</h2>
+                </div>
+                <span class="method">GET</span>
+              </div>
+
+              <form id="expiry-form">
+                <div class="form-fields">
+                  <div class="field">
+                    <label for="symbol">Underlying symbol</label>
+                    <input id="symbol" name="symbol" type="text" value="NSE:NIFTY50-INDEX" required>
+                  </div>
+                  <div class="field">
+                    <label for="range-from">Range from</label>
+                    <input id="range-from" name="range_from" type="date" value="2026-04-01" required>
+                  </div>
+                  <div class="field">
+                    <label for="range-to">Range to</label>
+                    <input id="range-to" name="range_to" type="date" value="2026-11-23" required>
+                  </div>
+                  <div class="field">
+                    <label for="date-format">Date format</label>
+                    <select id="date-format" name="date_format">
+                      <option value="1" selected>Calendar dates</option>
+                      <option value="0">Epoch seconds</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="form-footer">
+                  <p class="help-text" id="date-format-help">Range values are sent as YYYY-MM-DD dates.</p>
+                  <button class="primary-button" type="submit">Get expiry dates</button>
+                </div>
+              </form>
+            </section>
+
+            <section class="panel result-panel" aria-labelledby="result-title">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">API RESPONSE</p>
+                  <h2 id="result-title">Result</h2>
+                </div>
+                <span class="status" id="request-status" role="status">Ready</span>
+              </div>
+              <div class="table-toolbar" id="expiry-search-wrap" hidden>
+                <input id="expiry-search" type="search" placeholder="Search expiry dates" aria-label="Search expiry-date results">
+                <span class="search-count" id="expiry-search-count" aria-live="polite"></span>
+              </div>
+              <p class="empty-state" id="response-empty" aria-live="polite">Submit the form to request expiry dates.</p>
+              <div id="response-table-wrap" hidden>
+                <table>
+                  <thead id="response-table-head">
+                    <tr>
+                      <th scope="col">Contract type</th>
+                      <th scope="col">Expiry date</th>
+                    </tr>
+                  </thead>
+                  <tbody id="response-table-body"></tbody>
+                </table>
+              </div>
+              <details class="raw-response" id="raw-response" hidden>
+                <summary>Raw JSON response</summary>
+                <pre id="raw-response-output"></pre>
+              </details>
+            </section>
+          </div>
+        </details>
+
+        <details class="api-section" open>
+          <summary class="api-section-heading">
+            <span class="api-section-title">Expired contracts</span>
+            <span class="collapse-hint" aria-hidden="true"></span>
+          </summary>
+          <div class="api-section-content">
+            <section class="panel" aria-labelledby="contracts-request-title">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">EXPIRED CONTRACTS</p>
+                  <h2 id="contracts-request-title">Find contracts by expiry</h2>
+                </div>
+                <span class="method">GET</span>
+              </div>
+
+              <form id="contracts-form">
+                <div class="form-fields contract-fields">
+                  <div class="field">
+                    <label for="contract-symbol">Underlying symbol</label>
+                    <input id="contract-symbol" name="symbol" type="text" value="NSE:NIFTY50-INDEX" required>
+                  </div>
+                  <div class="field">
+                    <label for="expiry-date">Expiry date</label>
+                    <input id="expiry-date" name="expiry_date" type="date" value="2026-11-23" required>
+                  </div>
+                </div>
+                <div class="form-footer">
+                  <p class="help-text">Choose the underlying and expiry date to list its futures and options.</p>
+                  <button class="primary-button" type="submit">Get contracts</button>
+                </div>
+              </form>
+            </section>
+
+            <section class="panel result-panel" aria-labelledby="contracts-result-title">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">API RESPONSE</p>
+                  <h2 id="contracts-result-title">Expired contracts</h2>
+                </div>
+                <span class="status" id="contracts-status" role="status">Ready</span>
+              </div>
+              <div class="table-toolbar" id="contracts-search-wrap" hidden>
+                <input id="contracts-search" type="search" placeholder="Search contracts" aria-label="Search expired contracts">
+                <span class="search-count" id="contracts-search-count" aria-live="polite"></span>
+              </div>
+              <p class="empty-state" id="contracts-empty" aria-live="polite">Submit the form to request expired contracts.</p>
+              <div class="table-scroll" id="contracts-table-wrap" hidden>
+                <table>
+                  <thead id="contracts-table-head"></thead>
+                  <tbody id="contracts-table-body"></tbody>
+                </table>
+              </div>
+              <details class="raw-response" id="contracts-raw-response" hidden>
+                <summary>Raw JSON response</summary>
+                <pre id="contracts-raw-response-output"></pre>
+              </details>
+            </section>
+          </div>
+        </details>
+      </div>
+
+        <details class="api-section" open>
+          <summary class="api-section-heading">
+            <span class="api-section-title">Expired F&amp;O candles</span>
+            <span class="collapse-hint" aria-hidden="true"></span>
+          </summary>
+          <div class="api-section-content">
+            <section class="panel" aria-labelledby="candles-request-title">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">GET REQUEST</p>
+                  <h2 id="candles-request-title">Historical candle options</h2>
+                </div>
+                <span class="method">GET</span>
+              </div>
+
+              <form id="candles-form">
+                <div class="form-fields candle-fields">
+                  <div class="field">
+                    <label for="candle-symbol">Option symbol</label>
+                    <input id="candle-symbol" name="symbol" type="text" value="NSE:NIFTY26NOV25600PE" required>
+                  </div>
+                  <div class="field">
+                    <label for="candle-resolution">Resolution</label>
+                    <select id="candle-resolution" name="resolution">
+                      <option value="1">1 minute</option>
+                      <option value="3" selected>3 minutes</option>
+                      <option value="5">5 minutes</option>
+                      <option value="15">15 minutes</option>
+                      <option value="30">30 minutes</option>
+                      <option value="60">60 minutes</option>
+                      <option value="D">Daily</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="candle-range-from">Range from</label>
+                    <input id="candle-range-from" name="range_from" type="date" value="2026-11-18" required>
+                  </div>
+                  <div class="field">
+                    <label for="candle-range-to">Range to</label>
+                    <input id="candle-range-to" name="range_to" type="date" value="2026-11-23" required>
+                  </div>
+                  <div class="field">
+                    <label for="candle-date-format">Date format</label>
+                    <select id="candle-date-format" name="date_format">
+                      <option value="1" selected>Calendar dates</option>
+                      <option value="0">Epoch seconds</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="include-oi">Include OI</label>
+                    <select id="include-oi" name="include_oi">
+                      <option value="1" selected>Yes</option>
+                      <option value="0">No</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="include-greeks">Include Greeks</label>
+                    <select id="include-greeks" name="include_greeks">
+                      <option value="1" selected>Yes</option>
+                      <option value="0">No</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="form-footer">
+                  <p class="help-text" id="candle-date-format-help">Range values are sent as YYYY-MM-DD dates.</p>
+                  <button class="primary-button" type="submit">Get candles</button>
+                </div>
+              </form>
+            </section>
+
+            <section class="panel result-panel" aria-labelledby="candles-result-title">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">API RESPONSE</p>
+                  <h2 id="candles-result-title">Historical candles</h2>
+                </div>
+                <span class="status" id="candles-status" role="status">Ready</span>
+              </div>
+              <div class="table-toolbar" id="candles-search-wrap" hidden>
+                <input id="candles-search" type="search" placeholder="Search candle data" aria-label="Search candle results">
+                <span class="search-count" id="candles-search-count" aria-live="polite"></span>
+              </div>
+              <p class="empty-state" id="candles-empty" aria-live="polite">Submit the form to request historical candles.</p>
+              <div class="table-scroll" id="candles-table-wrap" hidden>
+                <table class="candles-table">
+                  <thead id="candles-table-head"></thead>
+                  <tbody id="candles-table-body"></tbody>
+                </table>
+              </div>
+              <details class="raw-response" id="candles-raw-response" hidden>
+                <summary>Raw JSON response</summary>
+                <pre id="candles-raw-response-output"></pre>
+              </details>
+            </section>
+          </div>
+        </details>
+      </div>
+    </main>
+  </body>
+</html>

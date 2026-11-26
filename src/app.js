@@ -1,13 +1,16 @@
 import express from "express";
+import { fileURLToPath } from "node:url";
 import apiRoutes from "./api.routes.js";
 import swaggerRouter from "./docs/swagger.js";
 
 const app = express();
+const uiDirectory = fileURLToPath(new URL("../ui/", import.meta.url));
 
 app.get("/", (_request, response) => {
   response.json({
     name: "Auto Trade Processor API",
     docs: "/docs",
+    ui: "/ui/",
     endpoints: {
       fyers: {
         expiredFoData: "/api/fyers/market-data/expired-fo-data",
@@ -30,5 +33,6 @@ app.get("/", (_request, response) => {
 app.use(express.json());
 app.use("/api", apiRoutes);
 app.use("/docs", swaggerRouter);
+app.use("/ui", express.static(uiDirectory));
 
 export default app;
