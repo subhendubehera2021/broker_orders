@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "build": "node scripts/copy-swagger-ui-assets.js",
     "start": "node --env-file-if-exists=.env src/server.js",
     "dev": "nodemon --watch src --exec \"node --env-file-if-exists=.env\" src/server.js",
     "test": "node --test"
@@ -11,6 +12,7 @@
     "@libsql/client": "^0.18.0",
     "express": "^5.1.0",
     "fyers-api-v3": "^2.5.0",
+    "swagger-ui-dist": "^5.36.0",
     "swagger-ui-express": "^5.0.1"
   },
   "devDependencies": {
