@@ -11,7 +11,7 @@ Simple Express API with Swagger UI.
 - `src/fyers/models/` describes Fyers response shapes such as the option chain.
 - `src/auto-trade-process/` contains the auto-trade-process route, controllers, validation, response models, services, and candle aggregation.
 - `src/internal/` contains internal routes, controllers, validation, and liquidity-swing analysis.
-- `ui/` contains the standalone browser UI for Fyers expiry dates.
+- `public/ui/` contains the standalone browser UI for Fyers expiry dates. Vercel serves these assets from its CDN.
 - `src/utils/` and `src/docs/` contain shared date helpers and Swagger documentation.
 
 ## Run

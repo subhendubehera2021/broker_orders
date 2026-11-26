@@ -1,7 +1,7 @@
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { fyersModel: FyersAPI } = require("fyers-api-v3");
+const FyersAPI = require("fyers-api-v3/apiService/apiService.js");
 
 let client;
 let configuredAppId;

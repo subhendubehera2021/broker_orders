@@ -4,7 +4,7 @@ import apiRoutes from "./api.routes.js";
 import swaggerRouter from "./docs/swagger.js";
 
 const app = express();
-const uiDirectory = fileURLToPath(new URL("../ui/", import.meta.url));
+const uiDirectory = fileURLToPath(new URL("../public/ui/", import.meta.url));
 
 app.get("/", (_request, response) => {
   response.json({
