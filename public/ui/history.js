@@ -162,7 +162,6 @@ function renderHistoryRows(rows) {
       formatLocalDateTime(row.recorded_at),
       `${row.from_date} to ${row.to_date}`,
       swing?.status,
-      row.comment,
       row.is_traded ? "Yes" : "No",
       row.buy_price,
       row.sell_price,
@@ -171,6 +170,7 @@ function renderHistoryRows(rows) {
       row.c_low,
       row.qty,
       row.p_l,
+      row.comment,
     ];
     for (const value of values) {
       appendHistoryCell(tableRow, value);
