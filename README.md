@@ -11,7 +11,7 @@ Simple Express API with Swagger UI.
 - `src/fyers/models/` describes Fyers response shapes such as the option chain.
 - `src/auto-trade-process/` contains the auto-trade-process route, controllers, validation, response models, services, and candle aggregation.
 - `src/internal/` contains internal routes, controllers, validation, and liquidity-swing analysis.
-- `public/ui/` contains the standalone browser UI for Fyers expiry dates. Vercel serves these assets from its CDN.
+- `public/ui/` contains the browser UIs for Fyers expiry dates, liquidity-swing history, and historical chart replay. Vercel serves these assets from its CDN.
 - `public/docs/` receives the Swagger UI static assets during the build so Vercel can serve them from its CDN.
 - `src/utils/` and `src/docs/` contain shared date helpers and Swagger documentation.
 
@@ -44,6 +44,7 @@ Set `PORT` to change the default port (`3000`).
 - API index: `http://localhost:3000/`
 - Expiry-dates UI: `http://localhost:3000/ui/`
 - Liquidity-swing history UI: `http://localhost:3000/ui/history.html`
+- Fyers historical replay chart: `http://localhost:3000/ui/chart.html`
 - Swagger UI: `http://localhost:3000/docs`
 
 Previous `/api/market-data/*`, `/api/liquidity-swings`, and `/api/health` paths remain available as compatibility aliases.
@@ -66,6 +67,10 @@ Example:
 ```sh
 curl "http://localhost:3000/api/fyers/market-data/historical-data?symbol=NSE%3ASBIN-EQ&resolution=D&date_format=0&range_from=1690895316&range_to=1691068173"
 ```
+
+The historical chart loads Fyers 1-minute candles once and uses that same dataset for chart display and bar replay. Choose **Pick start**, drag across the chart to position the replay marker, then click **Done** and **Start**. Replay reveals one 1-minute bar at a time from that position; exiting restores the full chart. At 1×, playback advances one bar per second. The chart uses the locally served Lightweight Charts bundle at `/vendor/lightweight-charts.js` and does not connect to a live feed.
+
+The chart includes internal and swing order blocks, each showing the latest 7 zones by default. Their JavaScript adaptation is based on LuxAlgo's Smart Money Concepts Pine Script supplied for this project and is licensed under [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/); use is noncommercial and adaptations must be shared under the same license.
 
 Expired F&O historical data example:
 

@@ -38,6 +38,19 @@ test("accepts valid epoch-based historical data parameters", () => {
   assert.equal(response.locals.historicalDataQuery.cont_flag, "1");
 });
 
+test("accepts Fyers five-second historical resolution", () => {
+  const { response, continued } = runValidation({
+    symbol: "NSE:SBIN-EQ",
+    resolution: "5S",
+    date_format: "1",
+    range_from: "2026-01-01",
+    range_to: "2026-01-02",
+  });
+
+  assert.equal(continued, true);
+  assert.equal(response.locals.historicalDataQuery.resolution, "5S");
+});
+
 test("rejects a range whose end is not after its start", () => {
   const { response, continued } = runValidation({
     symbol: "NSE:SBIN-EQ",

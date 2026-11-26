@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0b0e11">
+    <title>Historical Replay | Auto Trade Processor</title>
+    <link rel="stylesheet" href="/ui/chart.css">
+    <script src="/vendor/lightweight-charts.js" defer></script>
+    <script type="module" src="/ui/chart.js"></script>
+  </head>
+  <body class="chart-page">
+    <main class="chart-workspace">
+      <header class="chart-topbar">
+        <a class="chart-brand" href="/ui/">Auto Trade Processor</a>
+        <span class="chart-workspace-label">HISTORICAL REPLAY</span>
+        <nav class="chart-nav" aria-label="Workspace navigation">
+          <a href="/ui/history.html">Swing history</a>
+          <a href="/ui/">Market data</a>
+        </nav>
+      </header>
+
+      <section class="chart-toolbar" aria-label="Chart controls">
+        <form class="chart-query-form" id="chart-query-form">
+          <label class="chart-control chart-symbol-control" for="chart-symbol">
+            Symbol
+            <input id="chart-symbol" name="symbol" type="text" value="NSE:NIFTY50-INDEX" required>
+          </label>
+          <div class="chart-control chart-fixed-interval">
+            <span>Chart interval</span>
+            <strong>1m</strong>
+          </div>
+          <label class="chart-control" for="chart-from-date">
+            From
+            <input id="chart-from-date" name="range_from" type="date" required>
+          </label>
+          <label class="chart-control" for="chart-to-date">
+            To
+            <input id="chart-to-date" name="range_to" type="date" required>
+          </label>
+          <button class="chart-primary-button" id="chart-load" type="submit">Load 1m chart</button>
+        </form>
+
+        <div class="order-block-settings" aria-label="Order block indicators">
+          <label class="indicator-toggle">
+            <input id="internal-ob-enabled" type="checkbox" checked>
+            Internal OB
+          </label>
+          <label class="indicator-count" for="internal-ob-count">
+            <span>Count</span>
+            <input id="internal-ob-count" type="number" min="1" max="20" value="7">
+          </label>
+          <label class="indicator-toggle">
+            <input id="swing-ob-enabled" type="checkbox" checked>
+            Swing OB
+          </label>
+          <label class="indicator-count" for="swing-ob-count">
+            <span>Count</span>
+            <input id="swing-ob-count" type="number" min="1" max="20" value="7">
+          </label>
+        </div>
+
+        <div class="chart-replay-controls" aria-label="Historical replay controls">
+          <span class="replay-label">Bar replay</span>
+          <button class="chart-icon-button" id="replay-pick-start" type="button" disabled title="Choose replay start by dragging on the chart">Pick start</button>
+          <button class="chart-icon-button" id="replay-start" type="button" disabled title="Start replay">Start</button>
+          <button class="chart-icon-button" id="replay-previous" type="button" disabled title="Previous candle" aria-label="Previous candle">‹</button>
+          <button class="chart-icon-button" id="replay-next" type="button" disabled title="Next candle" aria-label="Next candle">›</button>
+          <button class="chart-icon-button" id="replay-play" type="button" disabled title="Play replay">Play</button>
+          <label class="chart-speed-control" for="replay-speed">
+            Speed
+            <select id="replay-speed" disabled>
+              <option value="1">1×</option>
+              <option value="2">2×</option>
+              <option value="5">5×</option>
+              <option value="10">10×</option>
+            </select>
+          </label>
+          <button class="chart-icon-button" id="replay-exit" type="button" disabled title="Exit replay">Exit</button>
+        </div>
+      </section>
+
+      <section class="chart-card" aria-label="Fyers historical chart">
+        <div class="chart-instrument-bar">
+          <div class="chart-instrument-title">
+            <span class="instrument-symbol" id="chart-title-symbol">NSE:NIFTY50-INDEX</span>
+            <span class="instrument-description" id="chart-title-interval">1-minute default chart</span>
+          </div>
+          <div class="chart-ohlc" aria-live="polite">
+            <span>O <b id="chart-open">—</b></span>
+            <span>H <b id="chart-high">—</b></span>
+            <span>L <b id="chart-low">—</b></span>
+            <span>C <b id="chart-close">—</b></span>
+            <span>Vol <b id="chart-volume">—</b></span>
+          </div>
+          <span class="chart-status" id="chart-status" role="status">Choose a range and load candles</span>
+        </div>
+        <div class="chart-container" id="chart-container"></div>
+        <div class="chart-replay-status" id="replay-status" aria-live="polite">
+          Load 1-minute candles, then replay the same data
+        </div>
+      </section>
+
+      <footer class="chart-footer">
+        <span id="chart-candle-count">No candles loaded</span>
+        <span>Chart and replay use the same 1-minute candles.</span>
+        <span>Order-block logic adapted from Smart Money Concepts by LuxAlgo.</span>
+        <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank" rel="noreferrer">CC BY-NC-SA 4.0</a>
+        <a href="https://www.tradingview.com/" target="_blank" rel="noreferrer">TradingView Lightweight Charts™</a>
+      </footer>
+    </main>
+  </body>
+</html>

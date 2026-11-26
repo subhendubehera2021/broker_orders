@@ -5,6 +5,9 @@ import swaggerRouter from "./docs/swagger.js";
 
 const app = express();
 const uiDirectory = fileURLToPath(new URL("../public/ui/", import.meta.url));
+const lightweightChartsBundle = fileURLToPath(
+  new URL("../node_modules/lightweight-charts/dist/lightweight-charts.standalone.production.js", import.meta.url),
+);
 
 app.get("/", (_request, response) => {
   response.json({
@@ -34,6 +37,9 @@ app.get("/", (_request, response) => {
 app.use(express.json());
 app.use("/api", apiRoutes);
 app.use("/docs", swaggerRouter);
+app.get("/vendor/lightweight-charts.js", (_request, response) => {
+  response.sendFile(lightweightChartsBundle);
+});
 app.use("/ui", express.static(uiDirectory));
 
 export default app;
