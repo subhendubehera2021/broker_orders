@@ -17,7 +17,7 @@ Simple Express API with Swagger UI.
 
 ## Run
 
-Set `FYERS_APP_ID`, `FYERS_ACCESS_TOKEN`, `TURSO_DATABASE_URL`, and `TURSO_AUTH_TOKEN` in `.env` (see `.env.example`). The database client also accepts the existing `_v2` Turso variable names.
+Set `FYERS_APP_ID`, `FYERS_ACCESS_TOKEN`, `TURSO_DATABASE_URL`, and `TURSO_AUTH_TOKEN` in `.env` (see `.env.example`). Set either `MASTER_API_KEY` or `MASTER_PASSCODE` to protect history delete/restore actions. If both are set, `MASTER_API_KEY` takes precedence. The database client also accepts the existing `_v2` Turso variable names.
 
 ```sh
 npm install
@@ -30,6 +30,8 @@ npm run dev
 Set `PORT` to change the default port (`3000`).
 
 - Internal health check: `http://localhost:3000/api/internal/health`
+- Saved liquidity-swing history: `GET /api/internal/liquidity-swing-history?limit=50&offset=0`
+- Update saved history deletion status: `PATCH /api/internal/liquidity-swing-history/:id`
 - Fyers expired F&O data: `GET /api/fyers/market-data/expired-fo-data`
 - Fyers expired contracts: `GET /api/fyers/market-data/expired-fo-data/contracts`
 - Fyers expired expiry dates: `GET /api/fyers/market-data/expired-fo-data/expiry-dates`
@@ -41,9 +43,23 @@ Set `PORT` to change the default port (`3000`).
 - Auto-trade-process data: `GET /api/auto-trade-process`
 - API index: `http://localhost:3000/`
 - Expiry-dates UI: `http://localhost:3000/ui/`
+- Liquidity-swing history UI: `http://localhost:3000/ui/history.html`
 - Swagger UI: `http://localhost:3000/docs`
 
 Previous `/api/market-data/*`, `/api/liquidity-swings`, and `/api/health` paths remain available as compatibility aliases.
+
+The history UI filters and paginates on the server. Filters include pivot-time date, resolution, option type, lookback, swing status, and traded status. The API also supports free-text search. It returns 50 active rows by default and allows up to 100 per request; its `total` value reflects the active filters. Add `includeDeleted=1` to also list deleted rows. Editing analysis or changing a row's deletion status requires the configured `MASTER_API_KEY` or `MASTER_PASSCODE` in the `x-apikey` header.
+
+History records are soft-deleted by setting `is_deleted` to `1`; existing records default to `0`. For example:
+
+```sh
+curl -X PATCH "http://localhost:3000/api/internal/liquidity-swing-history/12" \
+  -H "x-apikey: ${MASTER_API_KEY:-$MASTER_PASSCODE}" \
+  -H "Content-Type: application/json" \
+  -d '{"is_deleted":true}'
+```
+
+The history page's **Edit** action saves the manual analysis fields (`comment`, `is_traded`, `buy_price`, `sell_price`, `high`, `sl`, `c_low`, `qty`, and `p_l`) to the selected history row. Analysis edits use the same master key or passcode as delete/restore. Numeric analysis values are nullable until entered; `is_traded` defaults to false and `qty` is a non-negative integer.
 
 Example:
 
@@ -142,6 +158,6 @@ curl -X POST "http://localhost:3000/api/auto-trade-process" \
 
 The response includes the selected CE/PE contracts and a Step 2 result for each requested liquidity-swing configuration. The endpoint does not place orders.
 
-Changed swing results are saved to the automatically created `auto_trade_liquidity_swing_history` table. The latest result for an option symbol, side, resolution, pivot lookback, and date range is checked before inserting; unchanged results are skipped. When it changes, a new history row is added. Any existing `auto_trade_liquidity_swing_state` rows are migrated into the history table before the old state table is removed. The response's `step2.persistence` reports inserted and unchanged results. Ensure the Turso credentials are configured before calling this endpoint.
+Swing results with a pivot time are saved to the automatically created `auto_trade_liquidity_swing_history` table. A unique key of option symbol, side, resolution, pivot lookback, and `pivot_time` allows one active row per swing; repeated results with the same key are ignored, even if other swing values later change. Results without a pivot time are not saved. Existing rows receive a `pivot_time` backfilled from `swing_json`. If existing rows have duplicate active keys, soft-delete all but one row; history reads and deletion actions remain available, and the unique index is created after active duplicates are resolved. Soft-deleted rows remain available with `includeDeleted=1`. Any existing `auto_trade_liquidity_swing_state` rows are migrated into the history table before the old state table is removed. The response's `step2.persistence` reports inserted and ignored results. Ensure the Turso credentials are configured before calling this endpoint.
 
 This LuxAlgo-based adaptation is licensed CC BY-NC-SA 4.0 and is for noncommercial use with attribution and share-alike terms: https://creativecommons.org/licenses/by-nc-sa/4.0/

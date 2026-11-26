@@ -22,6 +22,7 @@ app.get("/", (_request, response) => {
       },
       internal: {
         health: "/api/internal/health",
+        liquiditySwingHistory: "/api/internal/liquidity-swing-history",
         liquiditySwings: "/api/internal/liquidity-swings",
         highestVolumeOptions: "/api/internal/option-chain/highest-volume",
       },

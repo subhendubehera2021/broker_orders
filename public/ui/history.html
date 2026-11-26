@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#101722">
+    <title>Liquidity Swing History | Auto Trade Processor</title>
+    <link rel="stylesheet" href="/ui/styles.css">
+    <script src="/ui/history.js" defer></script>
+  </head>
+  <body>
+    <main class="page">
+      <header class="page-header history-page-header">
+        <div class="history-page-controls">
+          <div class="history-filter-row">
+            <label class="history-filter" for="history-filter-pivot-time">
+              Pivot time
+              <input id="history-filter-pivot-time" type="date">
+            </label>
+            <div class="history-filter">
+              Resolution
+              <div class="history-filter-choices" role="group" aria-label="Filter by resolution">
+                <button class="history-filter-chip" type="button" data-history-resolution="" aria-pressed="true">All</button>
+                <button class="history-filter-chip" type="button" data-history-resolution="1" aria-pressed="false">1</button>
+                <button class="history-filter-chip" type="button" data-history-resolution="3" aria-pressed="false">3</button>
+                <button class="history-filter-chip" type="button" data-history-resolution="5" aria-pressed="false">5</button>
+                <select id="history-filter-resolution" aria-label="More resolutions">
+                  <option value="">More</option>
+                  <option value="5S">5S</option>
+                  <option value="10S">10S</option>
+                  <option value="15S">15S</option>
+                  <option value="30S">30S</option>
+                  <option value="45S">45S</option>
+                  <option value="2">2</option>
+                  <option value="10">10</option>
+                  <option value="15">15</option>
+                  <option value="20">20</option>
+                  <option value="30">30</option>
+                  <option value="45">45</option>
+                  <option value="60">60</option>
+                  <option value="120">120</option>
+                  <option value="180">180</option>
+                  <option value="240">240</option>
+                  <option value="D">D</option>
+                  <option value="1D">1D</option>
+                  <option value="1W">1W</option>
+                  <option value="1M">1M</option>
+                </select>
+              </div>
+            </div>
+            <div class="history-filter">
+              Type
+              <div class="history-filter-choices" role="group" aria-label="Filter by option type">
+                <button class="history-filter-chip" type="button" data-history-type="" aria-pressed="true">All</button>
+                <button class="history-filter-chip" type="button" data-history-type="CE" aria-pressed="false">CE</button>
+                <button class="history-filter-chip" type="button" data-history-type="PE" aria-pressed="false">PE</button>
+              </div>
+            </div>
+            <div class="history-filter">
+              Swing status
+              <div class="history-filter-choices" role="group" aria-label="Filter by swing status">
+                <button class="history-filter-chip" type="button" data-history-status="" aria-pressed="true">All</button>
+                <button class="history-filter-chip" type="button" data-history-status="tracking" aria-pressed="false">Tracking</button>
+                <button class="history-filter-chip" type="button" data-history-status="broken" aria-pressed="false">Broken</button>
+                <button class="history-filter-chip" type="button" data-history-status="qualified" aria-pressed="false">Qualified</button>
+              </div>
+            </div>
+            <div class="history-filter">
+              Traded
+              <div class="history-filter-choices" role="group" aria-label="Filter by traded status">
+                <button class="history-filter-chip" type="button" data-history-traded="" aria-pressed="true">All</button>
+                <button class="history-filter-chip" type="button" data-history-traded="1" aria-pressed="false">Yes</button>
+                <button class="history-filter-chip" type="button" data-history-traded="0" aria-pressed="false">No</button>
+              </div>
+            </div>
+            <div class="history-filter">
+              Lookback
+              <div class="history-filter-choices" role="group" aria-label="Filter by lookback">
+                <button class="history-filter-chip" type="button" data-history-lookback="" aria-pressed="true">All</button>
+                <button class="history-filter-chip" type="button" data-history-lookback="5" aria-pressed="false">5</button>
+                <button class="history-filter-chip" type="button" data-history-lookback="7" aria-pressed="false">7</button>
+                <button class="history-filter-chip" type="button" data-history-lookback="14" aria-pressed="false">14</button>
+              </div>
+            </div>
+            <div class="history-table-options">
+              <label for="history-limit">Rows per page</label>
+              <select id="history-limit">
+                <option value="25">25</option>
+                <option value="50" selected>50</option>
+                <option value="100">100</option>
+              </select>
+              <label class="history-show-deleted" for="history-show-deleted">
+                <input id="history-show-deleted" type="checkbox">
+                Show deleted
+              </label>
+            </div>
+            <button class="secondary-button" id="history-refresh" type="button">Refresh</button>
+            <button
+              class="secondary-button history-auth-trigger"
+              id="history-auth-trigger"
+              type="button"
+              aria-label="Open history edit and delete access"
+              title="History edit and delete access"
+            >
+              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M10 17l5-5-5-5M15 12H3"></path>
+                <path d="M12 3h7a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-7"></path>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <section class="panel result-panel history-section">
+        <div class="table-toolbar history-toolbar">
+          <span class="search-count" id="history-count" aria-live="polite"></span>
+        </div>
+
+        <p class="empty-state" id="history-empty" aria-live="polite">Loading saved swing history…</p>
+        <div class="table-scroll" id="history-table-wrap" hidden>
+          <table class="history-table">
+            <thead>
+              <tr>
+                <th scope="col">ID</th>
+                <th scope="col">Option symbol</th>
+                <th scope="col">Type</th>
+                <th scope="col">Resolution</th>
+                <th scope="col">Lookback</th>
+                <th scope="col">Level</th>
+                <th scope="col">Pivot time</th>
+                <th scope="col">Recorded at</th>
+                <th scope="col">Date range</th>
+                <th scope="col">Swing status</th>
+                <th scope="col">Comment</th>
+                <th scope="col">Traded</th>
+                <th scope="col">Buy price</th>
+                <th scope="col">Sell price</th>
+                <th scope="col">High</th>
+                <th scope="col">SL</th>
+                <th scope="col">C low</th>
+                <th scope="col">Qty</th>
+                <th scope="col">P&amp;L</th>
+                <th scope="col">Swing data</th>
+                <th scope="col">Action</th>
+              </tr>
+            </thead>
+            <tbody id="history-table-body"></tbody>
+          </table>
+        </div>
+
+        <div class="history-pagination">
+          <span id="history-page-status" aria-live="polite"></span>
+          <div class="history-page-buttons">
+            <button class="secondary-button" id="history-previous" type="button" disabled>Previous</button>
+            <button class="secondary-button" id="history-next" type="button" disabled>Next</button>
+          </div>
+        </div>
+      </section>
+      <dialog class="history-auth-modal" id="history-auth-modal" aria-labelledby="history-auth-title">
+        <div class="history-auth-modal-header">
+          <h2 id="history-auth-title">History edit and delete access</h2>
+          <button class="history-auth-close" id="history-auth-close" type="button" aria-label="Close dialog">×</button>
+        </div>
+        <form class="history-auth-form" id="history-auth-form">
+          <label for="history-api-key">Master key or passcode</label>
+          <input id="history-api-key" type="password" autocomplete="off" placeholder="Enter key or passcode">
+          <div class="history-auth-buttons">
+            <button class="secondary-button" id="history-unlock" type="submit">Unlock actions</button>
+            <button class="secondary-button" id="history-lock" type="button" hidden>Lock actions</button>
+          </div>
+          <span class="status" id="history-auth-status" role="status">Actions are locked.</span>
+        </form>
+      </dialog>
+      <dialog class="history-auth-modal history-analysis-modal" id="history-analysis-modal" aria-labelledby="history-analysis-title">
+        <div class="history-auth-modal-header">
+          <h2 id="history-analysis-title">Edit analysis</h2>
+          <button class="history-auth-close" id="history-analysis-close" type="button" aria-label="Close dialog">×</button>
+        </div>
+        <form class="history-analysis-form" id="history-analysis-form">
+          <input id="history-analysis-row-id" type="hidden">
+          <label for="history-analysis-comment">Comment</label>
+          <textarea id="history-analysis-comment" maxlength="2000" rows="3"></textarea>
+          <label class="history-analysis-traded" for="history-analysis-is-traded">
+            <input id="history-analysis-is-traded" type="checkbox">
+            Traded
+          </label>
+          <div class="history-analysis-fields">
+            <label for="history-analysis-buy-price">Buy price<input id="history-analysis-buy-price" type="number" min="0" step="any"></label>
+            <label for="history-analysis-sell-price">Sell price<input id="history-analysis-sell-price" type="number" min="0" step="any"></label>
+            <label for="history-analysis-high">High<input id="history-analysis-high" type="number" min="0" step="any"></label>
+            <label for="history-analysis-sl">SL<input id="history-analysis-sl" type="number" min="0" step="any"></label>
+            <label for="history-analysis-c-low">C low<input id="history-analysis-c-low" type="number" min="0" step="any"></label>
+            <label for="history-analysis-qty">Qty<input id="history-analysis-qty" type="number" min="0" step="1"></label>
+            <label for="history-analysis-p-l">P&amp;L<input id="history-analysis-p-l" type="number" step="any"></label>
+          </div>
+          <div class="history-auth-buttons">
+            <button class="secondary-button" id="history-analysis-save" type="submit">Save analysis</button>
+            <button class="secondary-button" id="history-analysis-cancel" type="button">Cancel</button>
+          </div>
+          <span class="status" id="history-analysis-status" role="status"></span>
+        </form>
+      </dialog>
+    </main>
+  </body>
+</html>

@@ -67,6 +67,251 @@ const openapiSpecification = {
         },
       },
     },
+    "/api/internal/liquidity-swing-history": {
+      get: {
+        tags: ["Internal"],
+        summary: "List saved liquidity-swing history",
+        description: "Returns the newest matching liquidity-swing history rows from Turso. Filtering and pagination are applied by the database. Pagination defaults to 50 rows and is limited to 100 rows per request.",
+        parameters: [
+          {
+            name: "limit",
+            in: "query",
+            required: false,
+            schema: { type: "integer", minimum: 1, maximum: 100, default: 50 },
+          },
+          {
+            name: "offset",
+            in: "query",
+            required: false,
+            schema: { type: "integer", minimum: 0, default: 0 },
+          },
+          {
+            name: "includeDeleted",
+            in: "query",
+            required: false,
+            description: "Set to 1 to include soft-deleted rows.",
+            schema: { type: "string", enum: ["0", "1"], default: "0" },
+          },
+          {
+            name: "search",
+            in: "query",
+            required: false,
+            description: "Search symbols, option details, dates, and saved swing JSON.",
+            schema: { type: "string", maxLength: 200 },
+          },
+          {
+            name: "resolution",
+            in: "query",
+            required: false,
+            schema: {
+              type: "string",
+              enum: [...FYERS_HISTORICAL_RESOLUTIONS],
+              example: "3",
+            },
+          },
+          {
+            name: "optionType",
+            in: "query",
+            required: false,
+            schema: { type: "string", enum: ["CE", "PE"] },
+          },
+          {
+            name: "lookback",
+            in: "query",
+            required: false,
+            schema: { type: "integer", minimum: 1, maximum: 1000 },
+          },
+          {
+            name: "status",
+            in: "query",
+            required: false,
+            schema: { type: "string", enum: ["tracking", "broken", "qualified"] },
+          },
+          {
+            name: "traded",
+            in: "query",
+            required: false,
+            description: "Filter manually recorded traded status: 1 for traded, 0 for not traded.",
+            schema: { type: "string", enum: ["0", "1"] },
+          },
+          {
+            name: "pivotTimeFrom",
+            in: "query",
+            required: false,
+            description: "Inclusive UTC start of the selected local pivot-time date. Provide this with pivotTimeTo.",
+            schema: { type: "string", format: "date-time" },
+          },
+          {
+            name: "pivotTimeTo",
+            in: "query",
+            required: false,
+            description: "Exclusive UTC end of the selected local pivot-time date. Provide this with pivotTimeFrom.",
+            schema: { type: "string", format: "date-time" },
+          },
+        ],
+        responses: {
+          200: {
+            description: "Saved history rows and pagination metadata.",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    rows: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          id: { type: "integer" },
+                          option_symbol: { type: "string" },
+                          option_type: { type: "string", enum: ["CE", "PE"] },
+                          resolution: { type: "string" },
+                          pivot_lookback: { type: "integer" },
+                          pivot_time: { type: "string", format: "date-time", nullable: true },
+                          from_date: { type: "string", format: "date" },
+                          to_date: { type: "string", format: "date" },
+                          swing_json: { type: "string" },
+                          recorded_at: { type: "string", format: "date-time" },
+                          is_deleted: { type: "boolean" },
+                          comment: { type: "string", nullable: true },
+                          is_traded: { type: "boolean" },
+                          buy_price: { type: "number", nullable: true },
+                          sell_price: { type: "number", nullable: true },
+                          high: { type: "number", nullable: true },
+                          sl: { type: "number", nullable: true },
+                          c_low: { type: "number", nullable: true },
+                          qty: { type: "integer", nullable: true },
+                          p_l: { type: "number", nullable: true },
+                        },
+                      },
+                    },
+                    total: { type: "integer" },
+                    limit: { type: "integer" },
+                    offset: { type: "integer" },
+                  },
+                },
+              },
+            },
+          },
+          400: {
+            description: "Invalid pagination or filter values.",
+          },
+          503: {
+            description: "Turso credentials are missing or the database is unavailable.",
+          },
+        },
+      },
+      patch: {
+        tags: ["Internal"],
+        summary: "Soft-delete or restore a saved liquidity-swing row",
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "integer", minimum: 1 },
+          },
+          {
+            name: "x-apikey",
+            in: "header",
+            required: true,
+            description: "The configured MASTER_API_KEY or MASTER_PASSCODE.",
+            schema: { type: "string" },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["is_deleted"],
+                properties: {
+                  is_deleted: { type: "boolean", description: "True to hide; false to restore." },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: "Updated deletion status.",
+          },
+          400: {
+            description: "Invalid history ID or request body.",
+          },
+          401: {
+            description: "Missing or invalid x-apikey header.",
+          },
+          404: {
+            description: "History row not found.",
+          },
+          503: {
+            description: "Neither master environment variable is configured, or Turso is unavailable.",
+          },
+        },
+      },
+    },
+    "/api/internal/liquidity-swing-history/{id}/analysis": {
+      patch: {
+        tags: ["Internal"],
+        summary: "Update manual swing analysis fields",
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "integer", minimum: 1 },
+          },
+          {
+            name: "x-apikey",
+            in: "header",
+            required: true,
+            description: "The configured MASTER_API_KEY or MASTER_PASSCODE.",
+            schema: { type: "string" },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: [
+                  "comment",
+                  "is_traded",
+                  "buy_price",
+                  "sell_price",
+                  "high",
+                  "sl",
+                  "c_low",
+                  "qty",
+                  "p_l",
+                ],
+                properties: {
+                  comment: { type: "string", nullable: true, maxLength: 2000 },
+                  is_traded: { type: "boolean" },
+                  buy_price: { type: "number", nullable: true, minimum: 0 },
+                  sell_price: { type: "number", nullable: true, minimum: 0 },
+                  high: { type: "number", nullable: true, minimum: 0 },
+                  sl: { type: "number", nullable: true, minimum: 0 },
+                  c_low: { type: "number", nullable: true, minimum: 0 },
+                  qty: { type: "integer", nullable: true, minimum: 0 },
+                  p_l: { type: "number", nullable: true },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: { description: "Updated manual analysis values." },
+          400: { description: "Invalid manual analysis values." },
+          401: { description: "Missing or invalid x-apikey header." },
+          404: { description: "History row not found." },
+          503: { description: "Turso credentials are missing or the database is unavailable." },
+        },
+      },
+    },
     "/api/fyers/market-data/expired-fo-data": {
       get: {
         tags: ["Fyers"],
