@@ -1,7 +1,7 @@
 :root {
   color-scheme: dark;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  background: #0b0e11;
+  background: #080808;
   color: #d1d4dc;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -15,7 +15,7 @@ body.chart-page {
   min-width: 320px;
   min-height: 100vh;
   margin: 0;
-  background: #0b0e11;
+  background: #080808;
 }
 
 button,
@@ -48,8 +48,8 @@ select {
   justify-content: flex-start;
   gap: 6px;
   padding: 7px 12px;
-  border-bottom: 1px solid #20242b;
-  background: #0f131a;
+  border-bottom: 1px solid #1b1b1b;
+  background: #080808;
 }
 
 .chart-query-form,
@@ -574,9 +574,9 @@ select {
   flex: 1;
   flex-direction: column;
   margin: 10px 12px 0;
-  border: 1px solid #20242b;
+  border: 1px solid #1b1b1b;
   border-radius: 5px;
-  background: #131722;
+  background: #080808;
   overflow: hidden;
 }
 
@@ -587,7 +587,7 @@ select {
   align-items: center;
   gap: 8px 18px;
   padding: 8px 12px;
-  border-bottom: 1px solid #20242b;
+  border-bottom: 1px solid #1b1b1b;
 }
 
 .chart-instrument-title {
@@ -660,6 +660,7 @@ select {
   width: 100%;
   height: min(72vh, 820px);
   min-height: 440px;
+  background: #080808;
 }
 
 .order-block-overlay {
@@ -698,6 +699,33 @@ select {
 .chart-footer a {
   color: #787b86;
   font-size: inherit;
+}
+
+.chart-appearance-toggle {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  padding: 0;
+}
+
+.appearance-icon {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.appearance-icon-moon,
+body.chart-page[data-theme="light"] .appearance-icon-sun {
+  display: none;
+}
+
+body.chart-page[data-theme="light"] .appearance-icon-moon {
+  display: block;
 }
 
 @media (max-width: 1050px) {
@@ -761,4 +789,160 @@ select {
     width: 100%;
     margin-left: 0;
   }
+}
+
+body.chart-page[data-theme="light"] {
+  color-scheme: light;
+  background: #f3f5f8;
+  color: #252a32;
+}
+
+body.chart-page[data-theme="light"] .chart-toolbar,
+body.chart-page[data-theme="light"] .chart-card {
+  border-color: #d7dbe2;
+  background: #f7f8fa;
+}
+
+body.chart-page[data-theme="light"] .chart-container {
+  background: #fff;
+}
+
+body.chart-page[data-theme="light"] .chart-instrument-bar {
+  border-bottom-color: #d7dbe2;
+}
+
+body.chart-page[data-theme="light"] .chart-interval-quick-access {
+  border-color: #d7dbe2;
+}
+
+body.chart-page[data-theme="light"] .chart-toolbar-menu > summary {
+  color: #4b525d;
+}
+
+body.chart-page[data-theme="light"] .chart-toolbar-menu[open] > summary,
+body.chart-page[data-theme="light"] .chart-toolbar-menu > summary:hover {
+  border-color: #c9cfd8;
+  background: #e9edf2;
+  color: #202630;
+}
+
+body.chart-page[data-theme="light"] .chart-toolbar-popover,
+body.chart-page[data-theme="light"] .indicator-settings-dialog {
+  border-color: #d3d8e0;
+  background: #fff;
+  color: #252a32;
+}
+
+body.chart-page[data-theme="light"] .chart-control,
+body.chart-page[data-theme="light"] .chart-speed-control,
+body.chart-page[data-theme="light"] .replay-label {
+  color: #5c6470;
+}
+
+body.chart-page[data-theme="light"] .chart-control input,
+body.chart-page[data-theme="light"] .chart-control select,
+body.chart-page[data-theme="light"] .chart-speed-control select,
+body.chart-page[data-theme="light"] .chart-icon-button,
+body.chart-page[data-theme="light"] .indicator-dialog-close,
+body.chart-page[data-theme="light"] .indicator-count input {
+  border-color: #cbd1da;
+  background: #fff;
+  color: #252a32;
+}
+
+body.chart-page[data-theme="light"] .chart-icon-button:hover:not(:disabled),
+body.chart-page[data-theme="light"] .indicator-dialog-close:hover {
+  border-color: #9da6b2;
+  background: #edf0f4;
+  color: #161a20;
+}
+
+body.chart-page[data-theme="light"] .chart-interval-button[aria-pressed="true"] {
+  border-color: #aeb8c5;
+  background: #e8edf3;
+  color: #1e252d;
+}
+
+body.chart-page[data-theme="light"] .instrument-symbol,
+body.chart-page[data-theme="light"] .chart-ohlc b {
+  color: #262c34;
+}
+
+body.chart-page[data-theme="light"] .instrument-description,
+body.chart-page[data-theme="light"] .chart-ohlc,
+body.chart-page[data-theme="light"] .chart-live-status,
+body.chart-page[data-theme="light"] .chart-footer,
+body.chart-page[data-theme="light"] .chart-footer a,
+body.chart-page[data-theme="light"] .indicator-dialog-eyebrow,
+body.chart-page[data-theme="light"] .indicator-dialog-description,
+body.chart-page[data-theme="light"] .indicator-setting-description,
+body.chart-page[data-theme="light"] .indicator-count {
+  color: #68717d;
+}
+
+body.chart-page[data-theme="light"] .chart-status[data-state="success"],
+body.chart-page[data-theme="light"] .chart-live-status[data-state="live"],
+body.chart-page[data-theme="light"] .chart-candle-countdown {
+  color: #087a5b;
+}
+
+body.chart-page[data-theme="light"] .chart-indicator-row {
+  color: #343b45;
+}
+
+body.chart-page[data-theme="light"] .chart-indicator-description,
+body.chart-page[data-theme="light"] .chart-indicator-empty {
+  color: #717a86;
+}
+
+body.chart-page[data-theme="light"] .chart-indicator-collapse,
+body.chart-page[data-theme="light"] .indicator-row-action {
+  color: #525c68;
+}
+
+body.chart-page[data-theme="light"] .chart-indicator-collapse:hover,
+body.chart-page[data-theme="light"] .chart-indicator-collapse:focus-visible,
+body.chart-page[data-theme="light"] .indicator-row-action:hover,
+body.chart-page[data-theme="light"] .indicator-row-action:focus-visible {
+  border-color: #c5ccd5;
+  background: #e9edf2;
+  color: #202630;
+}
+
+body.chart-page[data-theme="light"] .chart-indicator-row[data-visible="false"] .chart-indicator-name,
+body.chart-page[data-theme="light"] .indicator-row-action[aria-pressed="false"] {
+  color: #858e99;
+}
+
+body.chart-page[data-theme="light"] .chart-replay-status {
+  border-top-color: #d7dbe2;
+  color: #68717d;
+}
+
+body.chart-page[data-theme="light"] .indicator-setting-row {
+  border-color: #dfe3e9;
+  background: #f6f7f9;
+}
+
+body.chart-page[data-theme="light"] .indicator-switch {
+  color: #303741;
+}
+
+body.chart-page[data-theme="light"] .indicator-switch-track {
+  background: #8b949f;
+}
+
+body.chart-page[data-theme="light"] .indicator-switch input:checked + .indicator-switch-track {
+  background: #087f6e;
+}
+
+body.chart-page[data-theme="light"] .indicator-count input:focus,
+body.chart-page[data-theme="light"] .chart-control input:focus,
+body.chart-page[data-theme="light"] .chart-control select:focus,
+body.chart-page[data-theme="light"] .chart-speed-control select:focus {
+  border-color: #2962ff;
+}
+
+body.chart-page[data-theme="light"] .chart-footer a:hover {
+  color: #202630;
 }

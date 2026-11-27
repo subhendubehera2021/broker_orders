@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#0b0e11">
+    <meta name="theme-color" content="#080808">
     <title>Historical Replay | Auto Trade Processor</title>
     <link rel="stylesheet" href="/ui/chart.css">
     <script src="/vendor/lightweight-charts.js" defer></script>
@@ -58,6 +58,11 @@
             <button class="chart-icon-button" id="replay-exit" type="button" disabled title="Exit replay">Exit</button>
           </div>
         </details>
+
+        <button class="chart-icon-button chart-appearance-toggle" id="chart-appearance-toggle" type="button" aria-label="Switch to light theme" title="Switch to light theme" aria-pressed="false">
+          <svg class="appearance-icon appearance-icon-sun" aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"></path></svg>
+          <svg class="appearance-icon appearance-icon-moon" aria-hidden="true" viewBox="0 0 24 24"><path d="M20.2 15.6A8.5 8.5 0 0 1 8.4 3.8 8.5 8.5 0 1 0 20.2 15.6Z"></path></svg>
+        </button>
       </section>
 
       <dialog class="indicator-settings-dialog" id="indicator-settings-dialog" aria-labelledby="indicator-settings-title">
@@ -134,8 +139,8 @@
           <span class="chart-live-status" id="chart-live-status" role="status">Live feed off</span>
         </div>
         <div class="chart-container" id="chart-container">
-          <div class="chart-indicator-list" id="chart-indicator-list" aria-label="Chart indicators">
-            <button class="chart-indicator-collapse" id="chart-indicator-collapse" type="button" aria-expanded="true" aria-controls="chart-indicator-items" aria-label="Collapse indicators" title="Collapse indicators">
+          <div class="chart-indicator-list" id="chart-indicator-list" data-collapsed="true" aria-label="Chart indicators">
+            <button class="chart-indicator-collapse" id="chart-indicator-collapse" type="button" aria-expanded="false" aria-controls="chart-indicator-items" aria-label="Expand indicators" title="Expand indicators">
               <svg aria-hidden="true" viewBox="0 0 16 16"><path d="m4 10 4-4 4 4"></path></svg>
             </button>
             <div class="chart-indicator-items" id="chart-indicator-items">

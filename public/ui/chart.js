@@ -7,6 +7,45 @@ import { mapFyersCandles } from "/ui/chart-data.js";
 import { createLiveCandleAggregator } from "/ui/live-candles.js";
 
 const historyEndpoint = "/api/fyers/market-data/historical-data";
+const chartPalettes = {
+  dark: {
+    background: "#080808",
+    grid: "#181818",
+    border: "#262626",
+    text: "#858585",
+    crosshair: "#555555",
+    crosshairLabel: "#303030",
+    bullish: "#089981",
+    bearish: "#f23645",
+    bullishVolume: "rgba(8, 119, 105, 0.48)",
+    bearishVolume: "rgba(165, 58, 69, 0.48)",
+  },
+  light: {
+    background: "#ffffff",
+    grid: "#e7e9ed",
+    border: "#cfd4dc",
+    text: "#59616c",
+    crosshair: "#858d98",
+    crosshairLabel: "#4b5563",
+    bullish: "#089981",
+    bearish: "#f23645",
+    bullishVolume: "rgba(8, 153, 129, 0.32)",
+    bearishVolume: "rgba(242, 54, 69, 0.32)",
+  },
+};
+const appearanceToggle = document.querySelector("#chart-appearance-toggle");
+let currentAppearance = localStorage.getItem("chart-appearance") === "light" ? "light" : "dark";
+let chartPalette = chartPalettes[currentAppearance];
+document.body.dataset.theme = currentAppearance;
+document.querySelector('meta[name="theme-color"]').content = chartPalette.background;
+
+function updateAppearanceToggle() {
+  const nextAppearance = currentAppearance === "light" ? "dark" : "light";
+  appearanceToggle.setAttribute("aria-label", `Switch to ${nextAppearance} theme`);
+  appearanceToggle.setAttribute("title", `Switch to ${nextAppearance} theme`);
+  appearanceToggle.setAttribute("aria-pressed", String(currentAppearance === "light"));
+}
+updateAppearanceToggle();
 const localTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 const form = document.querySelector("#chart-query-form");
 const symbolInput = document.querySelector("#chart-symbol");
@@ -105,22 +144,28 @@ function formatLocalChartTime(time, locale, options) {
 const chart = LightweightCharts.createChart(chartContainer, {
   autoSize: true,
   layout: {
-    background: { type: LightweightCharts.ColorType.Solid, color: "#131722" },
-    textColor: "#b2b5be",
+    background: { type: LightweightCharts.ColorType.Solid, color: chartPalette.background },
+    textColor: chartPalette.text,
     attributionLogo: true,
   },
   grid: {
-    vertLines: { color: "#1e222d" },
-    horzLines: { color: "#1e222d" },
+    vertLines: { color: chartPalette.grid },
+    horzLines: { color: chartPalette.grid },
   },
   crosshair: {
     mode: LightweightCharts.CrosshairMode.Normal,
-    vertLine: { color: "#758696", labelBackgroundColor: "#363a45" },
-    horzLine: { color: "#758696", labelBackgroundColor: "#363a45" },
+    vertLine: {
+      color: chartPalette.crosshair,
+      labelBackgroundColor: chartPalette.crosshairLabel,
+    },
+    horzLine: {
+      color: chartPalette.crosshair,
+      labelBackgroundColor: chartPalette.crosshairLabel,
+    },
   },
-  rightPriceScale: { borderColor: "#363a45" },
+  rightPriceScale: { borderColor: chartPalette.border },
   timeScale: {
-    borderColor: "#363a45",
+    borderColor: chartPalette.border,
     timeVisible: true,
     secondsVisible: false,
     rightOffset: 4,
@@ -155,12 +200,12 @@ const chart = LightweightCharts.createChart(chartContainer, {
 });
 
 const candleSeries = chart.addSeries(LightweightCharts.CandlestickSeries, {
-  upColor: "#089981",
-  downColor: "#f23645",
-  borderUpColor: "#089981",
-  borderDownColor: "#f23645",
-  wickUpColor: "#089981",
-  wickDownColor: "#f23645",
+  upColor: chartPalette.bullish,
+  downColor: chartPalette.bearish,
+  borderUpColor: chartPalette.bullish,
+  borderDownColor: chartPalette.bearish,
+  wickUpColor: chartPalette.bullish,
+  wickDownColor: chartPalette.bearish,
 });
 const volumeSeries = chart.addSeries(
   LightweightCharts.HistogramSeries,
@@ -173,6 +218,55 @@ const volumeSeries = chart.addSeries(
   1,
 );
 chart.panes()[1].setHeight(105);
+
+function applyAppearance(appearance) {
+  currentAppearance = appearance;
+  chartPalette = chartPalettes[appearance];
+  document.body.dataset.theme = appearance;
+  document.querySelector('meta[name="theme-color"]').content = chartPalette.background;
+  chart.applyOptions({
+    layout: {
+      background: { type: LightweightCharts.ColorType.Solid, color: chartPalette.background },
+      textColor: chartPalette.text,
+    },
+    grid: {
+      vertLines: { color: chartPalette.grid },
+      horzLines: { color: chartPalette.grid },
+    },
+    crosshair: {
+      vertLine: {
+        color: chartPalette.crosshair,
+        labelBackgroundColor: chartPalette.crosshairLabel,
+      },
+      horzLine: {
+        color: chartPalette.crosshair,
+        labelBackgroundColor: chartPalette.crosshairLabel,
+      },
+    },
+    rightPriceScale: { borderColor: chartPalette.border },
+    timeScale: { borderColor: chartPalette.border },
+  });
+  candleSeries.applyOptions({
+    upColor: chartPalette.bullish,
+    downColor: chartPalette.bearish,
+    borderUpColor: chartPalette.bullish,
+    borderDownColor: chartPalette.bearish,
+    wickUpColor: chartPalette.bullish,
+    wickDownColor: chartPalette.bearish,
+  });
+  const visibleVolume = replayIndex >= 0
+    ? volumeData.slice(0, replayIndex + 1)
+    : volumeData;
+  volumeSeries.setData(
+    visibleVolume.map((volume, index) => ({
+      ...volume,
+      color: getVolumeColor(candleData[index]),
+    })),
+  );
+  updateAppearanceToggle();
+  localStorage.setItem("chart-appearance", appearance);
+  scheduleOrderBlockOverlayRender();
+}
 
 function setVolumeVisible(visible) {
   if (visible) {
@@ -264,8 +358,8 @@ function showCandleStats(candle, volume) {
 
 function getVolumeColor(candle) {
   return candle.close >= candle.open
-    ? "rgba(8, 153, 129, 0.45)"
-    : "rgba(242, 54, 69, 0.45)";
+    ? chartPalette.bullishVolume
+    : chartPalette.bearishVolume;
 }
 
 function toCandlePoint(candle) {
@@ -394,14 +488,18 @@ function drawLiquiditySwings(plotWidth, paneHeight, timeScale, visibleRange) {
       continue;
     }
 
-    const color = swing.side === "high" ? "#f23645" : "#089981";
+    const color = swing.side === "high" ? chartPalette.bearish : chartPalette.bullish;
     const boxTop = Math.max(0, Math.min(zoneTop, zoneBottom));
     const boxBottom = Math.min(paneHeight, Math.max(zoneTop, zoneBottom));
     const boxEnd = Math.min(end, start + 22);
     if (boxBottom > boxTop && boxEnd > start) {
       orderBlockContext.fillStyle = swing.side === "high"
-        ? "rgba(242, 54, 69, 0.12)"
-        : "rgba(8, 153, 129, 0.12)";
+        ? currentAppearance === "light"
+          ? "rgba(165, 58, 69, 0.06)"
+          : "rgba(165, 58, 69, 0.12)"
+        : currentAppearance === "light"
+          ? "rgba(8, 119, 105, 0.06)"
+          : "rgba(8, 119, 105, 0.12)";
       orderBlockContext.fillRect(start, boxTop, boxEnd - start, boxBottom - boxTop);
     }
 
@@ -458,7 +556,18 @@ function renderOrderBlockOverlay() {
 
   const timeScale = chart.timeScale();
   const visibleRange = timeScale.getVisibleRange();
-  const palettes = {
+  const palettes = currentAppearance === "light"
+    ? {
+      internal: {
+        bullish: { fill: "rgba(49, 121, 245, 0.08)", line: "rgba(49, 121, 245, 0.65)" },
+        bearish: { fill: "rgba(247, 124, 128, 0.08)", line: "rgba(247, 124, 128, 0.65)" },
+      },
+      swing: {
+        bullish: { fill: "rgba(24, 72, 204, 0.1)", line: "rgba(24, 72, 204, 0.75)" },
+        bearish: { fill: "rgba(178, 40, 51, 0.1)", line: "rgba(178, 40, 51, 0.75)" },
+      },
+    }
+    : {
     internal: {
       bullish: { fill: "rgba(49, 121, 245, 0.18)", line: "rgba(49, 121, 245, 0.65)" },
       bearish: { fill: "rgba(247, 124, 128, 0.18)", line: "rgba(247, 124, 128, 0.65)" },
@@ -1003,6 +1112,9 @@ replaySpeed.addEventListener("change", () => {
   }
 });
 replayExit.addEventListener("click", loadChart);
+appearanceToggle.addEventListener("click", () => {
+  applyAppearance(currentAppearance === "dark" ? "light" : "dark");
+});
 volumeEnabled.addEventListener("change", () => {
   setVolumeVisible(volumeEnabled.checked);
   updateIndicatorList();
