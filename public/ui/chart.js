@@ -22,6 +22,12 @@ const swingOrderBlocksCount = document.querySelector("#swing-ob-count");
 const liquiditySwingEnabled = document.querySelector("#liquidity-swing-enabled");
 const liquiditySwingPivot = document.querySelector("#liquidity-swing-pivot");
 const volumeEnabled = document.querySelector("#volume-enabled");
+const indicatorSettingsDialog = document.querySelector("#indicator-settings-dialog");
+const indicatorSettingsCloseButton = document.querySelector("#indicator-settings-close");
+const indicatorList = document.querySelector("#chart-indicator-list");
+const indicatorListCollapseButton = document.querySelector("#chart-indicator-collapse");
+const indicatorRows = [...document.querySelectorAll(".chart-indicator-row")];
+const indicatorLegendEmpty = document.querySelector(".chart-indicator-empty");
 const replayPickStart = document.querySelector("#replay-pick-start");
 const chartContainer = document.querySelector("#chart-container");
 const chartStatus = document.querySelector("#chart-status");
@@ -62,6 +68,31 @@ function updateQuickIntervalButtons() {
     );
   }
   loadButton.textContent = `Load ${getChartIntervalLabel()} chart`;
+}
+
+function updateIndicatorList() {
+  const visibility = {
+    volume: volumeEnabled.checked,
+    internal: internalOrderBlocksEnabled.checked,
+    swing: swingOrderBlocksEnabled.checked,
+    liquidity: liquiditySwingEnabled.checked,
+  };
+  for (const row of indicatorRows) {
+    const visible = visibility[row.dataset.indicator];
+    const visibilityButton = row.querySelector('[data-action="visibility"]');
+    const name = row.querySelector(".chart-indicator-name").textContent.trim();
+    row.dataset.visible = String(visible);
+    visibilityButton.setAttribute("aria-pressed", String(visible));
+    visibilityButton.setAttribute("aria-label", `${visible ? "Hide" : "Show"} ${name}`);
+    visibilityButton.title = `${visible ? "Hide" : "Show"} ${name}`;
+  }
+  indicatorLegendEmpty.hidden = Object.values(visibility).some(Boolean);
+  document.querySelector("#internal-indicator-description").textContent =
+    `Count ${getOrderBlockCount(internalOrderBlocksCount)}`;
+  document.querySelector("#swing-indicator-description").textContent =
+    `Count ${getOrderBlockCount(swingOrderBlocksCount)}`;
+  document.querySelector("#liquidity-indicator-description").textContent =
+    `Pivot ${getLiquiditySwingPivotLookback()}`;
 }
 
 function formatLocalChartTime(time, locale, options) {
@@ -777,9 +808,8 @@ function updateReplayControls() {
 
 function updateReplayStatus() {
   if (replayIndex < 0) {
-    if (!hasCurrentChartData()) {
-      replayStatus.textContent = `Load ${getMinuteIntervalLabel()} chart data before starting replay.`;
-    } else if (isPickingReplayStart) {
+    if (hasCurrentChartData() && isPickingReplayStart) {
+      replayStatus.hidden = false;
       const candle = candleData[replayStartIndex];
       replayStatus.textContent = `Drag across the chart to choose the replay start bar, then click Done. Current: bar ${
         replayStartIndex + 1
@@ -787,14 +817,13 @@ function updateReplayStatus() {
         candle ? ` · ${new Date(candle.time * 1000).toLocaleString()}` : ""
       }`;
     } else {
-      const candle = candleData[replayStartIndex];
-      replayStatus.textContent = `Replay starts at bar ${replayStartIndex + 1} of ${candleData.length}${
-        candle ? ` · ${new Date(candle.time * 1000).toLocaleString()}` : ""
-      }. Drag the start marker to change it.`;
+      replayStatus.textContent = "";
+      replayStatus.hidden = true;
     }
     return;
   }
 
+  replayStatus.hidden = false;
   const candle = candleData[replayIndex];
   replayStatus.textContent = `${getMinuteIntervalLabel()} bar ${replayIndex + 1} of ${candleData.length} · ${
     new Date(candle.time * 1000).toLocaleString()
@@ -976,7 +1005,40 @@ replaySpeed.addEventListener("change", () => {
 replayExit.addEventListener("click", loadChart);
 volumeEnabled.addEventListener("change", () => {
   setVolumeVisible(volumeEnabled.checked);
+  updateIndicatorList();
 });
+indicatorSettingsCloseButton.addEventListener("click", () => {
+  indicatorSettingsDialog.close();
+});
+indicatorListCollapseButton.addEventListener("click", () => {
+  const expanded = indicatorListCollapseButton.getAttribute("aria-expanded") !== "true";
+  indicatorListCollapseButton.setAttribute("aria-expanded", String(expanded));
+  indicatorListCollapseButton.setAttribute(
+    "aria-label",
+    `${expanded ? "Collapse" : "Expand"} indicators`,
+  );
+  indicatorListCollapseButton.title = `${expanded ? "Collapse" : "Expand"} indicators`;
+  indicatorList.dataset.collapsed = String(!expanded);
+});
+indicatorSettingsDialog.addEventListener("click", (event) => {
+  if (event.target === indicatorSettingsDialog) {
+    indicatorSettingsDialog.close();
+  }
+});
+for (const action of document.querySelectorAll(".indicator-row-action")) {
+  action.addEventListener("click", () => {
+    if (action.dataset.action === "visibility") {
+      const setting = document.getElementById(action.dataset.setting);
+      setting.checked = !setting.checked;
+      setting.dispatchEvent(new Event("input", { bubbles: true }));
+      setting.dispatchEvent(new Event("change", { bubbles: true }));
+      return;
+    }
+
+    indicatorSettingsDialog.showModal();
+    document.getElementById(action.dataset.focus).focus({ preventScroll: true });
+  });
+}
 
 chart.subscribeCrosshairMove((parameter) => {
   const candle = parameter.seriesData.get(candleSeries);
@@ -999,9 +1061,13 @@ for (const setting of [
   liquiditySwingEnabled,
   liquiditySwingPivot,
 ]) {
-  setting.addEventListener("input", () => refreshOrderBlocks(indicatorCandles));
+  setting.addEventListener("input", () => {
+    refreshOrderBlocks(indicatorCandles);
+    updateIndicatorList();
+  });
 }
 
+updateIndicatorList();
 chart.timeScale().subscribeVisibleTimeRangeChange(scheduleOrderBlockOverlayRender);
 new ResizeObserver(scheduleOrderBlockOverlayRender).observe(chartContainer);
 chartContainer.addEventListener("pointerdown", () => {

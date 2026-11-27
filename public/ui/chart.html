@@ -14,84 +14,105 @@
       <section class="chart-toolbar" aria-label="Chart controls">
         <form class="chart-query-form" id="chart-query-form">
           <label class="chart-control chart-symbol-control" for="chart-symbol">
-            Symbol
-            <input id="chart-symbol" name="symbol" type="text" value="NSE:NIFTY50-INDEX" required>
+            <input id="chart-symbol" name="symbol" type="text" value="NSE:NIFTY50-INDEX" aria-label="Symbol" required>
           </label>
-          <label class="chart-control" for="chart-resolution">
-            Chart interval
-            <select id="chart-resolution" name="resolution">
-              <option value="1" selected>1m</option>
-              <option value="3">3m</option>
-              <option value="5">5m</option>
-            </select>
-          </label>
+          <input id="chart-resolution" name="resolution" type="hidden" value="1">
           <div class="chart-interval-quick-access" role="group" aria-label="Quick chart intervals">
-            <span class="chart-quick-interval-label">Quick</span>
             <button class="chart-icon-button chart-interval-button" type="button" data-resolution="1" aria-pressed="true">1m</button>
             <button class="chart-icon-button chart-interval-button" type="button" data-resolution="3" aria-pressed="false">3m</button>
             <button class="chart-icon-button chart-interval-button" type="button" data-resolution="5" aria-pressed="false">5m</button>
           </div>
-          <label class="chart-control" for="chart-from-date">
-            From
-            <input id="chart-from-date" name="range_from" type="date" required>
-          </label>
-          <label class="chart-control" for="chart-to-date">
-            To
-            <input id="chart-to-date" name="range_to" type="date" required>
-          </label>
+          <details class="chart-toolbar-menu chart-date-menu">
+            <summary title="Choose chart date range">Date range</summary>
+            <div class="chart-toolbar-popover">
+              <label class="chart-control" for="chart-from-date">
+                From
+                <input id="chart-from-date" name="range_from" type="date" required>
+              </label>
+              <label class="chart-control" for="chart-to-date">
+                To
+                <input id="chart-to-date" name="range_to" type="date" required>
+              </label>
+            </div>
+          </details>
           <button class="chart-primary-button" id="chart-load" type="submit">Load 1m chart</button>
         </form>
 
-        <div class="order-block-settings" aria-label="Chart indicators and display options">
-          <label class="indicator-toggle">
-            <input id="volume-enabled" type="checkbox" checked>
-            Volume
-          </label>
-          <label class="indicator-toggle">
-            <input id="internal-ob-enabled" type="checkbox" checked>
-            Internal OB
-          </label>
-          <label class="indicator-count" for="internal-ob-count">
-            <span>Count</span>
-            <input id="internal-ob-count" type="number" min="1" max="20" value="7">
-          </label>
-          <label class="indicator-toggle">
-            <input id="swing-ob-enabled" type="checkbox" checked>
-            Swing OB
-          </label>
-          <label class="indicator-count" for="swing-ob-count">
-            <span>Count</span>
-            <input id="swing-ob-count" type="number" min="1" max="20" value="7">
-          </label>
-          <label class="indicator-toggle">
-            <input id="liquidity-swing-enabled" type="checkbox" checked>
-            Liquidity swings
-          </label>
-          <label class="indicator-count" for="liquidity-swing-pivot">
-            <span>Pivot</span>
-            <input id="liquidity-swing-pivot" type="number" min="1" max="100" value="5">
-          </label>
-        </div>
-
-        <div class="chart-replay-controls" aria-label="Historical replay controls">
-          <span class="replay-label">Bar replay</span>
-          <button class="chart-icon-button" id="replay-pick-start" type="button" disabled title="Choose replay start by dragging on the chart">Pick start</button>
-          <button class="chart-icon-button" id="replay-start" type="button" disabled title="Start replay">Start</button>
-          <button class="chart-icon-button" id="replay-previous" type="button" disabled title="Previous candle" aria-label="Previous candle">‹</button>
-          <button class="chart-icon-button" id="replay-next" type="button" disabled title="Next candle" aria-label="Next candle">›</button>
-          <button class="chart-icon-button" id="replay-play" type="button" disabled title="Play replay">Play</button>
-          <label class="chart-speed-control" for="replay-speed">
-            Speed
-            <select id="replay-speed" disabled>
-              <option value="1">1×</option>
-              <option value="2">2×</option>
-              <option value="5">5×</option>
-              <option value="10">10×</option>
-            </select>
-          </label>
-          <button class="chart-icon-button" id="replay-exit" type="button" disabled title="Exit replay">Exit</button>
-        </div>
+        <details class="chart-toolbar-menu chart-replay-menu">
+          <summary title="Historical replay controls">Replay</summary>
+          <div class="chart-toolbar-popover chart-replay-controls" aria-label="Historical replay controls">
+            <button class="chart-icon-button" id="replay-pick-start" type="button" disabled title="Choose replay start by dragging on the chart">Pick start</button>
+            <button class="chart-icon-button" id="replay-start" type="button" disabled title="Start replay">Start</button>
+            <button class="chart-icon-button" id="replay-previous" type="button" disabled title="Previous candle" aria-label="Previous candle">‹</button>
+            <button class="chart-icon-button" id="replay-next" type="button" disabled title="Next candle" aria-label="Next candle">›</button>
+            <button class="chart-icon-button" id="replay-play" type="button" disabled title="Play replay">Play</button>
+            <label class="chart-speed-control" for="replay-speed">
+              Speed
+              <select id="replay-speed" disabled>
+                <option value="1">1×</option>
+                <option value="2">2×</option>
+                <option value="5">5×</option>
+                <option value="10">10×</option>
+              </select>
+            </label>
+            <button class="chart-icon-button" id="replay-exit" type="button" disabled title="Exit replay">Exit</button>
+          </div>
+        </details>
       </section>
+
+      <dialog class="indicator-settings-dialog" id="indicator-settings-dialog" aria-labelledby="indicator-settings-title">
+        <div class="indicator-dialog-header">
+          <div>
+            <p class="indicator-dialog-eyebrow">CHART DISPLAY</p>
+            <h2 id="indicator-settings-title">Indicators</h2>
+          </div>
+          <button class="indicator-dialog-close" id="indicator-settings-close" type="button" aria-label="Close indicator settings">×</button>
+        </div>
+        <p class="indicator-dialog-description">Choose which indicators to show on the chart.</p>
+        <div class="indicator-settings-list">
+          <div class="indicator-setting-row" data-setting-row="volume">
+            <label class="indicator-switch" for="volume-enabled">
+              <input id="volume-enabled" type="checkbox" role="switch" checked>
+              <span class="indicator-switch-track" aria-hidden="true"></span>
+              <span>Volume</span>
+            </label>
+            <span class="indicator-setting-description">Bottom volume pane</span>
+          </div>
+          <div class="indicator-setting-row" data-setting-row="internal">
+            <label class="indicator-switch" for="internal-ob-enabled">
+              <input id="internal-ob-enabled" type="checkbox" role="switch" checked>
+              <span class="indicator-switch-track" aria-hidden="true"></span>
+              <span>Internal order blocks</span>
+            </label>
+            <label class="indicator-count" for="internal-ob-count">
+              <span>Count</span>
+              <input id="internal-ob-count" type="number" min="1" max="20" value="7">
+            </label>
+          </div>
+          <div class="indicator-setting-row" data-setting-row="swing">
+            <label class="indicator-switch" for="swing-ob-enabled">
+              <input id="swing-ob-enabled" type="checkbox" role="switch" checked>
+              <span class="indicator-switch-track" aria-hidden="true"></span>
+              <span>Swing order blocks</span>
+            </label>
+            <label class="indicator-count" for="swing-ob-count">
+              <span>Count</span>
+              <input id="swing-ob-count" type="number" min="1" max="20" value="7">
+            </label>
+          </div>
+          <div class="indicator-setting-row" data-setting-row="liquidity">
+            <label class="indicator-switch" for="liquidity-swing-enabled">
+              <input id="liquidity-swing-enabled" type="checkbox" role="switch" checked>
+              <span class="indicator-switch-track" aria-hidden="true"></span>
+              <span>Liquidity swings</span>
+            </label>
+            <label class="indicator-count" for="liquidity-swing-pivot">
+              <span>Pivot</span>
+              <input id="liquidity-swing-pivot" type="number" min="1" max="100" value="5">
+            </label>
+          </div>
+        </div>
+      </dialog>
 
       <section class="chart-card" aria-label="Fyers historical chart">
         <div class="chart-instrument-bar">
@@ -112,10 +133,69 @@
           <span class="chart-status" id="chart-status" role="status">Choose a range and load candles</span>
           <span class="chart-live-status" id="chart-live-status" role="status">Live feed off</span>
         </div>
-        <div class="chart-container" id="chart-container"></div>
-        <div class="chart-replay-status" id="replay-status" aria-live="polite">
-          Load chart data, then replay the same data
+        <div class="chart-container" id="chart-container">
+          <div class="chart-indicator-list" id="chart-indicator-list" aria-label="Chart indicators">
+            <button class="chart-indicator-collapse" id="chart-indicator-collapse" type="button" aria-expanded="true" aria-controls="chart-indicator-items" aria-label="Collapse indicators" title="Collapse indicators">
+              <svg aria-hidden="true" viewBox="0 0 16 16"><path d="m4 10 4-4 4 4"></path></svg>
+            </button>
+            <div class="chart-indicator-items" id="chart-indicator-items">
+          <div class="chart-indicator-row" data-indicator="volume">
+            <span class="chart-indicator-dot" aria-hidden="true"></span>
+            <span class="chart-indicator-name">Volume</span>
+            <span class="chart-indicator-description">Bottom volume pane</span>
+            <div class="chart-indicator-actions">
+              <button class="indicator-row-action" type="button" data-action="visibility" data-setting="volume-enabled" aria-label="Hide Volume" title="Hide Volume">
+                <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M2.5 12s3.2-6 9.5-6 9.5 6 9.5 6-3.2 6-9.5 6-9.5-6-9.5-6Z"></path><circle cx="12" cy="12" r="2.5"></circle></svg>
+              </button>
+              <button class="indicator-row-action" type="button" data-action="settings" data-focus="volume-enabled" aria-label="Volume settings" title="Volume settings">
+                <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"></path><path d="m19.4 13.5 1.1.9-1.1 1.9-1.4-.5a7.8 7.8 0 0 1-1.3.8l-.2 1.5h-2.2l-.4-1.4a7.8 7.8 0 0 1-1.5 0l-.9 1.1-1.9-1.1.5-1.4a7.8 7.8 0 0 1-.8-1.3l-1.5-.2v-2.2l1.4-.4a7.8 7.8 0 0 1 0-1.5L6.1 8.8l1.1-1.9 1.4.5a7.8 7.8 0 0 1 1.3-.8l.2-1.5h2.2l.4 1.4a7.8 7.8 0 0 1 1.5 0l.9-1.1 1.9 1.1-.5 1.4a7.8 7.8 0 0 1 .8 1.3l1.5.2v2.2l-1.4.4a7.8 7.8 0 0 1 0 1.5Z"></path></svg>
+              </button>
+            </div>
+          </div>
+          <div class="chart-indicator-row" data-indicator="internal">
+            <span class="chart-indicator-dot" aria-hidden="true"></span>
+            <span class="chart-indicator-name">Internal order blocks</span>
+            <span class="chart-indicator-description" id="internal-indicator-description">Count 7</span>
+            <div class="chart-indicator-actions">
+              <button class="indicator-row-action" type="button" data-action="visibility" data-setting="internal-ob-enabled" aria-label="Hide internal order blocks" title="Hide internal order blocks">
+                <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M2.5 12s3.2-6 9.5-6 9.5 6 9.5 6-3.2 6-9.5 6-9.5-6-9.5-6Z"></path><circle cx="12" cy="12" r="2.5"></circle></svg>
+              </button>
+              <button class="indicator-row-action" type="button" data-action="settings" data-focus="internal-ob-count" aria-label="Internal order block settings" title="Internal order block settings">
+                <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"></path><path d="m19.4 13.5 1.1.9-1.1 1.9-1.4-.5a7.8 7.8 0 0 1-1.3.8l-.2 1.5h-2.2l-.4-1.4a7.8 7.8 0 0 1-1.5 0l-.9 1.1-1.9-1.1.5-1.4a7.8 7.8 0 0 1-.8-1.3l-1.5-.2v-2.2l1.4-.4a7.8 7.8 0 0 1 0-1.5L6.1 8.8l1.1-1.9 1.4.5a7.8 7.8 0 0 1 1.3-.8l.2-1.5h2.2l.4 1.4a7.8 7.8 0 0 1 1.5 0l.9-1.1 1.9 1.1-.5 1.4a7.8 7.8 0 0 1 .8 1.3l1.5.2v2.2l-1.4.4a7.8 7.8 0 0 1 0 1.5Z"></path></svg>
+              </button>
+            </div>
+          </div>
+          <div class="chart-indicator-row" data-indicator="swing">
+            <span class="chart-indicator-dot" aria-hidden="true"></span>
+            <span class="chart-indicator-name">Swing order blocks</span>
+            <span class="chart-indicator-description" id="swing-indicator-description">Count 7</span>
+            <div class="chart-indicator-actions">
+              <button class="indicator-row-action" type="button" data-action="visibility" data-setting="swing-ob-enabled" aria-label="Hide swing order blocks" title="Hide swing order blocks">
+                <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M2.5 12s3.2-6 9.5-6 9.5 6 9.5 6-3.2 6-9.5 6-9.5-6-9.5-6Z"></path><circle cx="12" cy="12" r="2.5"></circle></svg>
+              </button>
+              <button class="indicator-row-action" type="button" data-action="settings" data-focus="swing-ob-count" aria-label="Swing order block settings" title="Swing order block settings">
+                <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"></path><path d="m19.4 13.5 1.1.9-1.1 1.9-1.4-.5a7.8 7.8 0 0 1-1.3.8l-.2 1.5h-2.2l-.4-1.4a7.8 7.8 0 0 1-1.5 0l-.9 1.1-1.9-1.1.5-1.4a7.8 7.8 0 0 1-.8-1.3l-1.5-.2v-2.2l1.4-.4a7.8 7.8 0 0 1 0-1.5L6.1 8.8l1.1-1.9 1.4.5a7.8 7.8 0 0 1 1.3-.8l.2-1.5h2.2l.4 1.4a7.8 7.8 0 0 1 1.5 0l.9-1.1 1.9 1.1-.5 1.4a7.8 7.8 0 0 1 .8 1.3l1.5.2v2.2l-1.4.4a7.8 7.8 0 0 1 0 1.5Z"></path></svg>
+              </button>
+            </div>
+          </div>
+          <div class="chart-indicator-row" data-indicator="liquidity">
+            <span class="chart-indicator-dot" aria-hidden="true"></span>
+            <span class="chart-indicator-name">Liquidity swings</span>
+            <span class="chart-indicator-description" id="liquidity-indicator-description">Pivot 5</span>
+            <div class="chart-indicator-actions">
+              <button class="indicator-row-action" type="button" data-action="visibility" data-setting="liquidity-swing-enabled" aria-label="Hide liquidity swings" title="Hide liquidity swings">
+                <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M2.5 12s3.2-6 9.5-6 9.5 6 9.5 6-3.2 6-9.5 6-9.5-6-9.5-6Z"></path><circle cx="12" cy="12" r="2.5"></circle></svg>
+              </button>
+              <button class="indicator-row-action" type="button" data-action="settings" data-focus="liquidity-swing-pivot" aria-label="Liquidity swing settings" title="Liquidity swing settings">
+                <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"></path><path d="m19.4 13.5 1.1.9-1.1 1.9-1.4-.5a7.8 7.8 0 0 1-1.3.8l-.2 1.5h-2.2l-.4-1.4a7.8 7.8 0 0 1-1.5 0l-.9 1.1-1.9-1.1.5-1.4a7.8 7.8 0 0 1-.8-1.3l-1.5-.2v-2.2l1.4-.4a7.8 7.8 0 0 1 0-1.5L6.1 8.8l1.1-1.9 1.4.5a7.8 7.8 0 0 1 1.3-.8l.2-1.5h2.2l.4 1.4a7.8 7.8 0 0 1 1.5 0l.9-1.1 1.9 1.1-.5 1.4a7.8 7.8 0 0 1 .8 1.3l1.5.2v2.2l-1.4.4a7.8 7.8 0 0 1 0 1.5Z"></path></svg>
+              </button>
+            </div>
+          </div>
+            <span class="chart-indicator-empty" hidden>All indicators are hidden</span>
+          </div>
         </div>
+        </div>
+        <div class="chart-replay-status" id="replay-status" aria-live="polite" hidden></div>
       </section>
 
       <footer class="chart-footer">
