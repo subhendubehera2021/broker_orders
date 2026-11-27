@@ -175,6 +175,8 @@ let replayTimer;
 let loadRequestId = 0;
 let liveSocket;
 let liveCandleAggregator;
+let liveReconnectTimer;
+let liveReconnectDelay = 1000;
 let orderBlockRenderFrame;
 let chartPointerDown = false;
 let isPickingReplayStart = false;
@@ -584,6 +586,10 @@ function updateCandleCountdown() {
 }
 
 function disconnectLiveFeed(status = "Live feed off") {
+  if (liveReconnectTimer !== undefined) {
+    clearTimeout(liveReconnectTimer);
+    liveReconnectTimer = undefined;
+  }
   const socket = liveSocket;
   liveSocket = undefined;
   liveCandleAggregator = undefined;
@@ -636,7 +642,10 @@ function applyLiveTick(tick) {
   setLiveStatus("Live feed active", "live");
 }
 
-function connectLiveFeed() {
+function connectLiveFeed(isReconnect = false) {
+  if (!isReconnect) {
+    liveReconnectDelay = 1000;
+  }
   disconnectLiveFeed("Connecting to live feed…");
   if (!hasCurrentChartData()) {
     return;
@@ -687,6 +696,9 @@ function connectLiveFeed() {
       return;
     }
     if (message.type === "status") {
+      if (message.status === "subscribed") {
+        liveReconnectDelay = 1000;
+      }
       setLiveStatus(
         message.status === "subscribed"
           ? "Live feed connected"
@@ -707,9 +719,21 @@ function connectLiveFeed() {
     }
   });
   socket.addEventListener("close", () => {
-    if (liveSocket === socket && !feedErrorReceived) {
+    if (liveSocket !== socket) {
+      return;
+    }
+    liveSocket = undefined;
+    liveCandleAggregator = undefined;
+    if (!feedErrorReceived) {
       setLiveStatus("Live feed disconnected");
     }
+    liveReconnectTimer = setTimeout(() => {
+      liveReconnectTimer = undefined;
+      if (hasCurrentChartData() && replayIndex < 0) {
+        connectLiveFeed(true);
+      }
+    }, liveReconnectDelay);
+    liveReconnectDelay = Math.min(liveReconnectDelay * 2, 30000);
   });
 }
 
