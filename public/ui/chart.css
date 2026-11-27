@@ -59,6 +59,24 @@ select {
   gap: 8px;
 }
 
+.chart-interval-quick-access {
+  display: flex;
+  align-items: end;
+  gap: 3px;
+}
+
+.chart-quick-interval-label {
+  align-self: center;
+  color: #787b86;
+  font-size: 0.7rem;
+}
+
+.chart-interval-button[aria-pressed="true"] {
+  border-color: #2962ff;
+  background: #2962ff;
+  color: #fff;
+}
+
 .chart-control,
 .chart-speed-control {
   display: grid;

@@ -25,6 +25,12 @@
               <option value="5">5m</option>
             </select>
           </label>
+          <div class="chart-interval-quick-access" role="group" aria-label="Quick chart intervals">
+            <span class="chart-quick-interval-label">Quick</span>
+            <button class="chart-icon-button chart-interval-button" type="button" data-resolution="1" aria-pressed="true">1m</button>
+            <button class="chart-icon-button chart-interval-button" type="button" data-resolution="3" aria-pressed="false">3m</button>
+            <button class="chart-icon-button chart-interval-button" type="button" data-resolution="5" aria-pressed="false">5m</button>
+          </div>
           <label class="chart-control" for="chart-from-date">
             From
             <input id="chart-from-date" name="range_from" type="date" required>

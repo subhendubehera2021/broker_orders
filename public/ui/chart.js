@@ -11,6 +11,7 @@ const localTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 const form = document.querySelector("#chart-query-form");
 const symbolInput = document.querySelector("#chart-symbol");
 const chartResolutionInput = document.querySelector("#chart-resolution");
+const quickIntervalButtons = [...document.querySelectorAll(".chart-interval-button")];
 const fromDateInput = document.querySelector("#chart-from-date");
 const toDateInput = document.querySelector("#chart-to-date");
 const loadButton = document.querySelector("#chart-load");
@@ -51,6 +52,16 @@ function getMinuteIntervalLabel() {
 
 function getChartIntervalLabel() {
   return `${chartResolutionInput.value}m`;
+}
+
+function updateQuickIntervalButtons() {
+  for (const button of quickIntervalButtons) {
+    button.setAttribute(
+      "aria-pressed",
+      String(button.dataset.resolution === chartResolutionInput.value),
+    );
+  }
+  loadButton.textContent = `Load ${getChartIntervalLabel()} chart`;
 }
 
 function formatLocalChartTime(time, locale, options) {
@@ -899,6 +910,14 @@ form.addEventListener("submit", (event) => {
   event.preventDefault();
   loadChart();
 });
+chartResolutionInput.addEventListener("input", updateQuickIntervalButtons);
+for (const button of quickIntervalButtons) {
+  button.addEventListener("click", () => {
+    chartResolutionInput.value = button.dataset.resolution;
+    updateQuickIntervalButtons();
+    loadChart();
+  });
+}
 replayStart.addEventListener("click", startReplay);
 replayPickStart.addEventListener("click", () => {
   setReplayStartPicking(!isPickingReplayStart);
