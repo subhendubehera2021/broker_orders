@@ -67,6 +67,8 @@ const indicatorList = document.querySelector("#chart-indicator-list");
 const indicatorListCollapseButton = document.querySelector("#chart-indicator-collapse");
 const indicatorRows = [...document.querySelectorAll(".chart-indicator-row")];
 const indicatorLegendEmpty = document.querySelector(".chart-indicator-empty");
+const replayToggle = document.querySelector("#replay-toggle");
+const replayControls = document.querySelector("#replay-controls");
 const replayPickStart = document.querySelector("#replay-pick-start");
 const chartContainer = document.querySelector("#chart-container");
 const chartStatus = document.querySelector("#chart-status");
@@ -439,6 +441,10 @@ function setReplayStartPicking(enabled) {
   replayPickStart.title = isPickingReplayStart
     ? "Finish choosing the replay start"
     : "Choose replay start by dragging on the chart";
+  replayPickStart.setAttribute(
+    "aria-label",
+    isPickingReplayStart ? "Finish choosing the replay start" : "Choose replay start",
+  );
   scheduleOrderBlockOverlayRender();
   updateReplayStatus();
   updateReplayControls();
@@ -882,7 +888,22 @@ function stopReplayTimer() {
     clearInterval(replayTimer);
     replayTimer = undefined;
   }
-  replayPlay.textContent = "Play";
+  setReplayPlaybackState(false);
+}
+
+function setReplayPlaybackState(isPlaying) {
+  replayPlay.classList.toggle("is-playing", isPlaying);
+  const label = `${isPlaying ? "Pause" : "Play"} replay`;
+  replayPlay.setAttribute("aria-label", label);
+  replayPlay.title = label;
+}
+
+function setReplayControlsOpen(open) {
+  replayControls.hidden = !open;
+  replayToggle.setAttribute("aria-expanded", String(open));
+  const label = `${open ? "Hide" : "Show"} replay controls`;
+  replayToggle.setAttribute("aria-label", label);
+  replayToggle.title = label;
 }
 
 function restoreChart() {
@@ -1080,6 +1101,38 @@ for (const button of quickIntervalButtons) {
     loadChart();
   });
 }
+replayToggle.addEventListener("click", () => {
+  setReplayControlsOpen(replayControls.hidden);
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !replayControls.hidden) {
+    setReplayControlsOpen(false);
+    replayToggle.focus();
+  }
+});
+document.addEventListener("keydown", (event) => {
+  if (
+    replayIndex < 0 ||
+    event.altKey ||
+    event.ctrlKey ||
+    event.metaKey ||
+    event.shiftKey ||
+    (event.target instanceof Element &&
+      event.target.closest("input, textarea, select, [contenteditable], [role='textbox']"))
+  ) {
+    return;
+  }
+
+  const control = event.key === "ArrowLeft"
+    ? replayPrevious
+    : event.key === "ArrowRight"
+      ? replayNext
+      : undefined;
+  if (control && !control.disabled) {
+    event.preventDefault();
+    control.click();
+  }
+});
 replayStart.addEventListener("click", startReplay);
 replayPickStart.addEventListener("click", () => {
   setReplayStartPicking(!isPickingReplayStart);
@@ -1099,7 +1152,7 @@ replayPlay.addEventListener("click", () => {
     stopReplayTimer();
     return;
   }
-  replayPlay.textContent = "Pause";
+  setReplayPlaybackState(true);
   replayTimer = setInterval(
     advanceReplay,
     Math.max(50, 1000 / Number(replaySpeed.value)),
@@ -1111,7 +1164,10 @@ replaySpeed.addEventListener("change", () => {
     replayPlay.click();
   }
 });
-replayExit.addEventListener("click", loadChart);
+replayExit.addEventListener("click", () => {
+  setReplayControlsOpen(false);
+  loadChart();
+});
 appearanceToggle.addEventListener("click", () => {
   applyAppearance(currentAppearance === "dark" ? "light" : "dark");
 });
@@ -1179,6 +1235,7 @@ for (const setting of [
   });
 }
 
+setVolumeVisible(volumeEnabled.checked);
 updateIndicatorList();
 chart.timeScale().subscribeVisibleTimeRangeChange(scheduleOrderBlockOverlayRender);
 new ResizeObserver(scheduleOrderBlockOverlayRender).observe(chartContainer);

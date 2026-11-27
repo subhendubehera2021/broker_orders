@@ -52,6 +52,31 @@ test("aggregates ticks into interval candles with incremental volume", () => {
   });
 });
 
+test("aggregates live ticks into fifteen-minute candles", () => {
+  const aggregator = createLiveCandleAggregator(
+    15,
+    { time: 900, open: 100, high: 101, low: 99, close: 100, volume: 500 },
+    10000,
+  );
+
+  assert.deepEqual(aggregator.update({
+    time: 1799,
+    price: 102,
+    cumulativeVolume: 10030,
+  }), {
+    candle: { time: 900, open: 100, high: 102, low: 99, close: 102, volume: 530 },
+    isNewBar: false,
+  });
+  assert.deepEqual(aggregator.update({
+    time: 1800,
+    price: 98,
+    cumulativeVolume: 10050,
+  }), {
+    candle: { time: 1800, open: 98, high: 98, low: 98, close: 98, volume: 20 },
+    isNewBar: true,
+  });
+});
+
 test("rejects unsupported live candle intervals", () => {
   assert.throws(() => createLiveCandleAggregator(2), RangeError);
 });

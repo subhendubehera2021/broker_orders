@@ -42,7 +42,7 @@ select {
 .chart-toolbar {
   display: flex;
   position: relative;
-  z-index: 4;
+  z-index: 5;
   min-height: 52px;
   align-items: center;
   justify-content: flex-start;
@@ -70,10 +70,26 @@ select {
 .chart-interval-quick-access {
   display: flex;
   align-items: center;
-  gap: 2px;
-  padding: 0 7px;
-  border-right: 1px solid #292e39;
+  gap: 4px;
+  padding: 0 10px 0 12px;
   border-left: 1px solid #292e39;
+}
+
+.chart-interval-quick-access .chart-interval-button {
+  min-width: 42px;
+  min-height: 38px;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: #b2b5be;
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+.chart-interval-quick-access .chart-interval-button:hover:not(:disabled):not([aria-pressed="true"]) {
+  background: #1d1d1d;
+  color: #f0f0f0;
 }
 
 .chart-toolbar-menu {
@@ -126,10 +142,10 @@ select {
   align-items: center;
   gap: 10px;
   padding: 12px;
-  border: 1px solid #363a45;
+  border: 1px solid #4a5261;
   border-radius: 6px;
-  background: #131722;
-  box-shadow: 0 8px 24px rgb(0 0 0 / 35%);
+  background-color: #1b202b;
+  box-shadow: 0 12px 30px rgb(0 0 0 / 70%), 0 2px 8px rgb(0 0 0 / 45%);
 }
 
 .chart-date-menu .chart-toolbar-popover {
@@ -140,10 +156,9 @@ select {
   color: #aeb4c0;
 }
 
-.chart-interval-button[aria-pressed="true"] {
-  border-color: #343a48;
-  background: #252b36;
-  color: #fff;
+.chart-interval-quick-access .chart-interval-button[aria-pressed="true"] {
+  background: #444;
+  color: #f0f0f0;
 }
 
 .chart-control,
@@ -219,8 +234,108 @@ select {
 }
 
 .chart-replay-controls {
-  align-items: end;
-  gap: 6px;
+  position: absolute;
+  z-index: 6;
+  bottom: 34px;
+  left: 50%;
+  width: max-content;
+  max-width: calc(100% - 24px);
+  justify-content: center;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 4px;
+  padding: 5px 6px;
+  transform: translateX(-50%);
+  border: 1px solid #4a5261;
+  border-radius: 10px;
+  background: #1b202b;
+  box-shadow: 0 8px 20px rgb(0 0 0 / 55%), 0 1px 3px rgb(0 0 0 / 45%);
+}
+
+.chart-replay-controls[hidden] {
+  display: none;
+}
+
+.chart-replay-controls .chart-icon-button {
+  min-height: 28px;
+  padding: 4px 7px;
+  font-size: 0.7rem;
+}
+
+.chart-replay-controls #replay-start {
+  border-color: #2962ff;
+  background: #2962ff;
+  color: #fff;
+}
+
+.chart-replay-controls #replay-start:hover:not(:disabled) {
+  border-color: #1e53e5;
+  background: #1e53e5;
+}
+
+.replay-transport-button {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  padding: 0;
+}
+
+.replay-control-icon {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.replay-play-symbol,
+.replay-pause-symbol {
+  fill: currentColor;
+  stroke: none;
+}
+
+.replay-pause-symbol,
+#replay-play.is-playing .replay-play-symbol {
+  display: none;
+}
+
+#replay-play.is-playing .replay-pause-symbol {
+  display: block;
+}
+
+.chart-replay-controls .chart-speed-control {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.chart-replay-controls .chart-speed-control select {
+  width: 50px;
+  min-width: 50px;
+  height: 28px;
+  padding: 3px 5px;
+  font-size: 0.7rem;
+}
+
+.chart-replay-toggle {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  padding: 0;
+}
+
+.chart-replay-icon {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.75;
 }
 
 .replay-label {
@@ -390,7 +505,7 @@ select {
 .chart-indicator-list {
   position: absolute;
   z-index: 4;
-  top: 8px;
+  top: 48px;
   left: 8px;
   display: flex;
   width: max-content;
@@ -581,13 +696,18 @@ select {
 }
 
 .chart-instrument-bar {
+  position: absolute;
+  z-index: 4;
+  top: 8px;
+  right: 12px;
+  left: 12px;
   display: flex;
-  min-height: 52px;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px 18px;
-  padding: 8px 12px;
-  border-bottom: 1px solid #1b1b1b;
+  gap: 6px 18px;
+  padding: 0;
+  background: transparent;
+  pointer-events: none;
 }
 
 .chart-instrument-title {
@@ -773,11 +893,26 @@ body.chart-page[data-theme="light"] .appearance-icon-moon {
 
   .chart-replay-controls {
     flex-wrap: wrap;
-    justify-content: flex-end;
+    right: 8px;
+    bottom: 32px;
+    left: 8px;
+    width: auto;
+    max-width: none;
+    transform: none;
   }
 
   .chart-card {
     margin: 8px 6px 0;
+  }
+
+  .chart-instrument-bar {
+    right: 8px;
+    left: 8px;
+    gap: 4px 8px;
+  }
+
+  .chart-indicator-list {
+    top: 120px;
   }
 
   .chart-container {
@@ -812,7 +947,18 @@ body.chart-page[data-theme="light"] .chart-instrument-bar {
 }
 
 body.chart-page[data-theme="light"] .chart-interval-quick-access {
-  border-color: #d7dbe2;
+  border-left-color: #d7dbe2;
+}
+
+body.chart-page[data-theme="light"] .chart-interval-quick-access .chart-interval-button {
+  border: 0;
+  background: transparent;
+  color: #505762;
+}
+
+body.chart-page[data-theme="light"] .chart-interval-quick-access .chart-interval-button:hover:not(:disabled):not([aria-pressed="true"]) {
+  background: #edf0f4;
+  color: #202630;
 }
 
 body.chart-page[data-theme="light"] .chart-toolbar-menu > summary {
@@ -828,9 +974,19 @@ body.chart-page[data-theme="light"] .chart-toolbar-menu > summary:hover {
 
 body.chart-page[data-theme="light"] .chart-toolbar-popover,
 body.chart-page[data-theme="light"] .indicator-settings-dialog {
-  border-color: #d3d8e0;
+  border-color: #bcc5d1;
   background: #fff;
   color: #252a32;
+}
+
+body.chart-page[data-theme="light"] .chart-toolbar-popover {
+  box-shadow: 0 12px 30px rgb(31 42 55 / 20%), 0 2px 8px rgb(31 42 55 / 12%);
+}
+
+body.chart-page[data-theme="light"] .chart-replay-controls {
+  border-color: #bcc5d1;
+  background: #fff;
+  box-shadow: 0 12px 30px rgb(31 42 55 / 20%), 0 2px 8px rgb(31 42 55 / 12%);
 }
 
 body.chart-page[data-theme="light"] .chart-control,
@@ -858,8 +1014,7 @@ body.chart-page[data-theme="light"] .indicator-dialog-close:hover {
 }
 
 body.chart-page[data-theme="light"] .chart-interval-button[aria-pressed="true"] {
-  border-color: #aeb8c5;
-  background: #e8edf3;
+  background: #d8dde5;
   color: #1e252d;
 }
 

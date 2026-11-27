@@ -32,6 +32,6 @@ test("Vercel live-chart function accepts WebSocket upgrades", async (t) => {
 
   assert.deepEqual(JSON.parse(message.toString()), {
     type: "error",
-    message: "Provide a valid symbol and a 1m, 3m, or 5m interval.",
+    message: "Provide a valid symbol and a 1m, 3m, 5m, or 15m interval.",
   });
 });

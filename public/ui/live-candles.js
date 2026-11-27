@@ -4,8 +4,8 @@ export function createLiveCandleAggregator(
   initialCumulativeVolume = null,
 ) {
   const interval = Number(intervalMinutes);
-  if (![1, 3, 5].includes(interval)) {
-    throw new RangeError("Live candle interval must be 1, 3, or 5 minutes.");
+  if (![1, 3, 5, 15].includes(interval)) {
+    throw new RangeError("Live candle interval must be 1, 3, 5, or 15 minutes.");
   }
 
   let currentCandle = lastCandle

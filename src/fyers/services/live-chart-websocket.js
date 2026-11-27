@@ -5,7 +5,7 @@ import { parseFyersLiveTick } from "../lib/live-candles.js";
 const require = createRequire(import.meta.url);
 const FyersDataSocket = require("fyers-api-v3").fyersDataSocket;
 const liveChartPath = "/api/live-chart";
-const supportedIntervals = new Set(["1", "3", "5"]);
+const supportedIntervals = new Set(["1", "3", "5", "15"]);
 
 function send(client, message) {
   if (client.readyState === WebSocket.OPEN) {
@@ -198,7 +198,7 @@ export function attachLiveChartWebSocket(server) {
       }
 
       if (!isValidSubscription(subscription)) {
-        sendError(client, "Provide a valid symbol and a 1m, 3m, or 5m interval.");
+        sendError(client, "Provide a valid symbol and a 1m, 3m, 5m, or 15m interval.");
         return;
       }
 

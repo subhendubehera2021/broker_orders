@@ -21,6 +21,7 @@
             <button class="chart-icon-button chart-interval-button" type="button" data-resolution="1" aria-pressed="true">1m</button>
             <button class="chart-icon-button chart-interval-button" type="button" data-resolution="3" aria-pressed="false">3m</button>
             <button class="chart-icon-button chart-interval-button" type="button" data-resolution="5" aria-pressed="false">5m</button>
+            <button class="chart-icon-button chart-interval-button" type="button" data-resolution="15" aria-pressed="false">15m</button>
           </div>
           <details class="chart-toolbar-menu chart-date-menu">
             <summary title="Choose chart date range">Date range</summary>
@@ -38,26 +39,13 @@
           <button class="chart-primary-button" id="chart-load" type="submit">Load 1m chart</button>
         </form>
 
-        <details class="chart-toolbar-menu chart-replay-menu">
-          <summary title="Historical replay controls">Replay</summary>
-          <div class="chart-toolbar-popover chart-replay-controls" aria-label="Historical replay controls">
-            <button class="chart-icon-button" id="replay-pick-start" type="button" disabled title="Choose replay start by dragging on the chart">Pick start</button>
-            <button class="chart-icon-button" id="replay-start" type="button" disabled title="Start replay">Start</button>
-            <button class="chart-icon-button" id="replay-previous" type="button" disabled title="Previous candle" aria-label="Previous candle">‹</button>
-            <button class="chart-icon-button" id="replay-next" type="button" disabled title="Next candle" aria-label="Next candle">›</button>
-            <button class="chart-icon-button" id="replay-play" type="button" disabled title="Play replay">Play</button>
-            <label class="chart-speed-control" for="replay-speed">
-              Speed
-              <select id="replay-speed" disabled>
-                <option value="1">1×</option>
-                <option value="2">2×</option>
-                <option value="5">5×</option>
-                <option value="10">10×</option>
-              </select>
-            </label>
-            <button class="chart-icon-button" id="replay-exit" type="button" disabled title="Exit replay">Exit</button>
-          </div>
-        </details>
+        <button class="chart-icon-button chart-replay-toggle" id="replay-toggle" type="button" aria-label="Show replay controls" title="Show replay controls" aria-controls="replay-controls" aria-expanded="false">
+          <svg class="chart-replay-icon" aria-hidden="true" viewBox="0 0 24 24">
+            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+            <path d="M3 3v5h5"></path>
+            <path d="M12 7v5l4 2"></path>
+          </svg>
+        </button>
 
         <button class="chart-icon-button chart-appearance-toggle" id="chart-appearance-toggle" type="button" aria-label="Switch to light theme" title="Switch to light theme" aria-pressed="false">
           <svg class="appearance-icon appearance-icon-sun" aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"></path></svg>
@@ -77,7 +65,7 @@
         <div class="indicator-settings-list">
           <div class="indicator-setting-row" data-setting-row="volume">
             <label class="indicator-switch" for="volume-enabled">
-              <input id="volume-enabled" type="checkbox" role="switch" checked>
+              <input id="volume-enabled" type="checkbox" role="switch">
               <span class="indicator-switch-track" aria-hidden="true"></span>
               <span>Volume</span>
             </label>
@@ -120,25 +108,25 @@
       </dialog>
 
       <section class="chart-card" aria-label="Fyers historical chart">
-        <div class="chart-instrument-bar">
-          <div class="chart-instrument-title">
-            <span class="instrument-symbol" id="chart-title-symbol">NSE:NIFTY50-INDEX</span>
-            <span class="instrument-description" id="chart-title-interval">1-minute default chart</span>
-          </div>
-          <div class="chart-ohlc" aria-live="polite">
-            <span>O <b id="chart-open">—</b></span>
-            <span>H <b id="chart-high">—</b></span>
-            <span>L <b id="chart-low">—</b></span>
-            <span>C <b id="chart-close">—</b></span>
-            <span>Vol <b id="chart-volume">—</b></span>
-          </div>
-          <span class="chart-candle-countdown" id="chart-candle-countdown" role="timer">
-            Candle closes in --:--
-          </span>
-          <span class="chart-status" id="chart-status" role="status">Choose a range and load candles</span>
-          <span class="chart-live-status" id="chart-live-status" role="status">Live feed off</span>
-        </div>
         <div class="chart-container" id="chart-container">
+          <div class="chart-instrument-bar">
+            <div class="chart-instrument-title">
+              <span class="instrument-symbol" id="chart-title-symbol">NSE:NIFTY50-INDEX</span>
+              <span class="instrument-description" id="chart-title-interval">1-minute default chart</span>
+            </div>
+            <div class="chart-ohlc" aria-live="polite">
+              <span>O <b id="chart-open">—</b></span>
+              <span>H <b id="chart-high">—</b></span>
+              <span>L <b id="chart-low">—</b></span>
+              <span>C <b id="chart-close">—</b></span>
+              <span>Vol <b id="chart-volume">—</b></span>
+            </div>
+            <span class="chart-candle-countdown" id="chart-candle-countdown" role="timer">
+              Candle closes in --:--
+            </span>
+            <span class="chart-status" id="chart-status" role="status">Choose a range and load candles</span>
+            <span class="chart-live-status" id="chart-live-status" role="status">Live feed off</span>
+          </div>
           <div class="chart-indicator-list" id="chart-indicator-list" data-collapsed="true" aria-label="Chart indicators">
             <button class="chart-indicator-collapse" id="chart-indicator-collapse" type="button" aria-expanded="false" aria-controls="chart-indicator-items" aria-label="Expand indicators" title="Expand indicators">
               <svg aria-hidden="true" viewBox="0 0 16 16"><path d="m4 10 4-4 4 4"></path></svg>
@@ -199,6 +187,34 @@
             <span class="chart-indicator-empty" hidden>All indicators are hidden</span>
           </div>
         </div>
+          <div class="chart-replay-controls" id="replay-controls" role="group" aria-label="Historical replay controls" hidden>
+            <button class="chart-icon-button" id="replay-pick-start" type="button" disabled title="Choose replay start by dragging on the chart">Pick start</button>
+            <button class="chart-icon-button" id="replay-start" type="button" disabled title="Start replay">Start</button>
+            <button class="chart-icon-button replay-transport-button" id="replay-previous" type="button" disabled title="Previous candle (←)" aria-label="Previous candle" aria-keyshortcuts="ArrowLeft">
+              <svg class="replay-control-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m14 18-6-6 6-6"></path></svg>
+            </button>
+            <button class="chart-icon-button replay-transport-button" id="replay-next" type="button" disabled title="Next candle (→)" aria-label="Next candle" aria-keyshortcuts="ArrowRight">
+              <svg class="replay-control-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m10 18 6-6-6-6"></path></svg>
+            </button>
+            <button class="chart-icon-button replay-transport-button" id="replay-play" type="button" disabled title="Play replay" aria-label="Play replay">
+              <svg class="replay-control-icon" aria-hidden="true" viewBox="0 0 24 24">
+                <path class="replay-play-symbol" d="M8 5v14l11-7z"></path>
+                <path class="replay-pause-symbol" d="M7 5h4v14H7zm7 0h4v14h-4z"></path>
+              </svg>
+            </button>
+            <label class="chart-speed-control" for="replay-speed">
+              Speed
+              <select id="replay-speed" disabled>
+                <option value="1">1×</option>
+                <option value="2">2×</option>
+                <option value="5">5×</option>
+                <option value="10">10×</option>
+              </select>
+            </label>
+            <button class="chart-icon-button replay-transport-button" id="replay-exit" type="button" disabled title="Exit replay" aria-label="Exit replay">
+              <svg class="replay-control-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m7 7 10 10M17 7 7 17"></path></svg>
+            </button>
+          </div>
         </div>
         <div class="chart-replay-status" id="replay-status" aria-live="polite" hidden></div>
       </section>
