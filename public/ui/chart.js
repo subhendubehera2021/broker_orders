@@ -4,6 +4,7 @@ import {
   findLiquiditySwings,
 } from "/ui/liquidity-swings-indicator.js";
 import { mapFyersCandles } from "/ui/chart-data.js";
+import { createLiveCandleAggregator } from "/ui/live-candles.js";
 
 const historyEndpoint = "/api/fyers/market-data/historical-data";
 const localTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -19,9 +20,12 @@ const swingOrderBlocksEnabled = document.querySelector("#swing-ob-enabled");
 const swingOrderBlocksCount = document.querySelector("#swing-ob-count");
 const liquiditySwingEnabled = document.querySelector("#liquidity-swing-enabled");
 const liquiditySwingPivot = document.querySelector("#liquidity-swing-pivot");
+const volumeEnabled = document.querySelector("#volume-enabled");
 const replayPickStart = document.querySelector("#replay-pick-start");
 const chartContainer = document.querySelector("#chart-container");
 const chartStatus = document.querySelector("#chart-status");
+const chartLiveStatus = document.querySelector("#chart-live-status");
+const chartCandleCountdown = document.querySelector("#chart-candle-countdown");
 const chartTitleSymbol = document.querySelector("#chart-title-symbol");
 const chartTitleInterval = document.querySelector("#chart-title-interval");
 const chartCandleCount = document.querySelector("#chart-candle-count");
@@ -68,6 +72,7 @@ const chart = LightweightCharts.createChart(chartContainer, {
     horzLines: { color: "#1e222d" },
   },
   crosshair: {
+    mode: LightweightCharts.CrosshairMode.Normal,
     vertLine: { color: "#758696", labelBackgroundColor: "#363a45" },
     horzLine: { color: "#758696", labelBackgroundColor: "#363a45" },
   },
@@ -127,6 +132,18 @@ const volumeSeries = chart.addSeries(
 );
 chart.panes()[1].setHeight(105);
 
+function setVolumeVisible(visible) {
+  if (visible) {
+    volumeSeries.moveToPane(1);
+    chart.panes()[1].setHeight(105);
+    volumeSeries.applyOptions({ priceScaleId: "volume", visible: true });
+  } else {
+    volumeSeries.applyOptions({ priceScaleId: "right", visible: false });
+    volumeSeries.moveToPane(0);
+  }
+  scheduleOrderBlockOverlayRender();
+}
+
 const orderBlockCanvas = document.createElement("canvas");
 orderBlockCanvas.className = "order-block-overlay";
 chartContainer.append(orderBlockCanvas);
@@ -145,6 +162,8 @@ let replayIndex = -1;
 let replayStartIndex = 0;
 let replayTimer;
 let loadRequestId = 0;
+let liveSocket;
+let liveCandleAggregator;
 let orderBlockRenderFrame;
 let chartPointerDown = false;
 let isPickingReplayStart = false;
@@ -530,6 +549,159 @@ function setChartStatus(message, state = "") {
   chartStatus.dataset.state = state;
 }
 
+function setLiveStatus(message, state = "") {
+  chartLiveStatus.textContent = message;
+  chartLiveStatus.dataset.state = state;
+  updateCandleCountdown();
+}
+
+function updateCandleCountdown() {
+  let timeRemaining = "--:--";
+  if (
+    hasCurrentChartData() &&
+    replayIndex < 0 &&
+    chartLiveStatus.dataset.state === "live"
+  ) {
+    const intervalSeconds = Number(chartResolutionInput.value) * 60;
+    const secondsIntoCandle = Math.floor(Date.now() / 1000) % intervalSeconds;
+    const remainingSeconds = intervalSeconds - secondsIntoCandle;
+    const minutes = Math.floor(remainingSeconds / 60);
+    const seconds = remainingSeconds % 60;
+    timeRemaining = `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  }
+  chartCandleCountdown.textContent = `Candle closes in ${timeRemaining}`;
+}
+
+function disconnectLiveFeed(status = "Live feed off") {
+  const socket = liveSocket;
+  liveSocket = undefined;
+  liveCandleAggregator = undefined;
+  if (socket && socket.readyState < WebSocket.CLOSING) {
+    socket.close();
+  }
+  setLiveStatus(status);
+}
+
+function getCurrentDayHistoricalVolume() {
+  const today = localDateValue(new Date());
+  return candleData.reduce((total, candle, index) => (
+    localDateValue(new Date(candle.time * 1000)) === today
+      ? total + (volumeData[index]?.value ?? 0)
+      : total
+  ), 0);
+}
+
+function applyLiveTick(tick) {
+  if (
+    !liveCandleAggregator ||
+    replayIndex >= 0 ||
+    !hasCurrentChartData() ||
+    tick.symbol !== symbolInput.value.trim()
+  ) {
+    return;
+  }
+
+  const update = liveCandleAggregator.update(tick);
+  if (!update) {
+    return;
+  }
+
+  const candleIndex = candleData.length - 1;
+  if (update.isNewBar) {
+    candleData.push(update.candle);
+    volumeData.push(toVolumePoint(update.candle));
+  } else {
+    candleData[candleIndex] = update.candle;
+    volumeData[candleIndex] = toVolumePoint(update.candle);
+  }
+
+  candleSeries.update(toCandlePoint(update.candle));
+  volumeSeries.update(volumeData.at(-1));
+  showCandleStats(update.candle, update.candle.volume);
+  if (update.isNewBar) {
+    chartCandleCount.textContent = `${candleData.length.toLocaleString()} ${getMinuteIntervalLabel()} candles`;
+    refreshOrderBlocks(candleData);
+  }
+  setLiveStatus("Live feed active", "live");
+}
+
+function connectLiveFeed() {
+  disconnectLiveFeed("Connecting to live feed…");
+  if (!hasCurrentChartData()) {
+    return;
+  }
+  if (toDateInput.value !== localDateValue(new Date())) {
+    setLiveStatus("Set To to today for live candles");
+    return;
+  }
+
+  liveCandleAggregator = createLiveCandleAggregator(
+    chartResolutionInput.value,
+    {
+      ...candleData.at(-1),
+      volume: volumeData.at(-1)?.value ?? 0,
+    },
+    getCurrentDayHistoricalVolume(),
+  );
+  const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+  let socket;
+  try {
+    socket = new WebSocket(`${protocol}//${location.host}/api/live-chart`);
+  } catch {
+    setLiveStatus("Could not start live feed connection", "error");
+    return;
+  }
+  liveSocket = socket;
+  let feedErrorReceived = false;
+
+  socket.addEventListener("open", () => {
+    if (liveSocket !== socket) {
+      return;
+    }
+    socket.send(JSON.stringify({
+      type: "subscribe",
+      symbol: symbolInput.value.trim(),
+      resolution: chartResolutionInput.value,
+    }));
+  });
+  socket.addEventListener("message", (event) => {
+    if (liveSocket !== socket) {
+      return;
+    }
+    let message;
+    try {
+      message = JSON.parse(event.data);
+    } catch {
+      setLiveStatus("Invalid live feed message", "error");
+      return;
+    }
+    if (message.type === "status") {
+      setLiveStatus(
+        message.status === "subscribed"
+          ? "Live feed connected"
+          : `Live feed ${message.status}`,
+        message.status === "subscribed" ? "live" : "",
+      );
+    } else if (message.type === "tick") {
+      applyLiveTick(message.data);
+    } else if (message.type === "error") {
+      feedErrorReceived = true;
+      setLiveStatus(message.message, "error");
+    }
+  });
+  socket.addEventListener("error", () => {
+    if (liveSocket === socket) {
+      feedErrorReceived = true;
+      setLiveStatus("Live feed connection error", "error");
+    }
+  });
+  socket.addEventListener("close", () => {
+    if (liveSocket === socket && !feedErrorReceived) {
+      setLiveStatus("Live feed disconnected");
+    }
+  });
+}
+
 function stopReplayTimer() {
   if (replayTimer !== undefined) {
     clearInterval(replayTimer);
@@ -616,6 +788,7 @@ function startReplay() {
     return;
   }
 
+  disconnectLiveFeed("Live feed paused during replay");
   stopReplayTimer();
   setReplayStartPicking(false);
   chartTitleInterval.textContent = `${getMinuteIntervalLabel()} bar replay`;
@@ -650,6 +823,7 @@ function advanceReplay() {
 }
 
 function invalidateChartData() {
+  disconnectLiveFeed();
   loadRequestId += 1;
   loadButton.disabled = false;
   setReplayStartPicking(false);
@@ -667,6 +841,7 @@ function invalidateChartData() {
 }
 
 async function loadChart() {
+  disconnectLiveFeed();
   const requestId = ++loadRequestId;
   const queryKey = currentQueryKey();
   resetReplaySession();
@@ -697,6 +872,7 @@ async function loadChart() {
     chartTitleInterval.textContent = `${getMinuteIntervalLabel()} default chart`;
     chartCandleCount.textContent = `${candleData.length.toLocaleString()} ${getMinuteIntervalLabel()} candles`;
     setChartStatus(`${getMinuteIntervalLabel()} chart data loaded`, "success");
+    connectLiveFeed();
     updateReplayStatus();
     updateReplayControls();
   } catch (error) {
@@ -754,13 +930,17 @@ replaySpeed.addEventListener("change", () => {
     replayPlay.click();
   }
 });
-replayExit.addEventListener("click", resetReplaySession);
+replayExit.addEventListener("click", loadChart);
+volumeEnabled.addEventListener("change", () => {
+  setVolumeVisible(volumeEnabled.checked);
+});
 
 chart.subscribeCrosshairMove((parameter) => {
   const candle = parameter.seriesData.get(candleSeries);
   const volume = parameter.seriesData.get(volumeSeries);
   if (candle) {
-    showCandleStats(candle, volume?.value);
+    const candleIndex = candleData.findIndex((item) => item.time === candle.time);
+    showCandleStats(candle, volume?.value ?? volumeData[candleIndex]?.value);
   } else if (replayIndex >= 0) {
     showCandleStats(candleData[replayIndex], volumeData[replayIndex]?.value);
   } else {
@@ -814,3 +994,5 @@ for (const eventName of ["pointerup", "pointercancel"]) {
 setDefaultDates();
 updateReplayControls();
 updateReplayStatus();
+updateCandleCountdown();
+setInterval(updateCandleCountdown, 1000);

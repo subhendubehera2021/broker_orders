@@ -36,7 +36,11 @@
           <button class="chart-primary-button" id="chart-load" type="submit">Load 1m chart</button>
         </form>
 
-        <div class="order-block-settings" aria-label="Chart indicators">
+        <div class="order-block-settings" aria-label="Chart indicators and display options">
+          <label class="indicator-toggle">
+            <input id="volume-enabled" type="checkbox" checked>
+            Volume
+          </label>
           <label class="indicator-toggle">
             <input id="internal-ob-enabled" type="checkbox" checked>
             Internal OB
@@ -96,11 +100,15 @@
             <span>C <b id="chart-close">—</b></span>
             <span>Vol <b id="chart-volume">—</b></span>
           </div>
+          <span class="chart-candle-countdown" id="chart-candle-countdown" role="timer">
+            Candle closes in --:--
+          </span>
           <span class="chart-status" id="chart-status" role="status">Choose a range and load candles</span>
+          <span class="chart-live-status" id="chart-live-status" role="status">Live feed off</span>
         </div>
         <div class="chart-container" id="chart-container"></div>
         <div class="chart-replay-status" id="replay-status" aria-live="polite">
-          Load 1-minute candles, then replay the same data
+          Load chart data, then replay the same data
         </div>
       </section>
 

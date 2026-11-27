@@ -257,6 +257,26 @@ select {
   color: #089981;
 }
 
+.chart-live-status {
+  color: #787b86;
+  font-size: 0.7rem;
+}
+
+.chart-live-status[data-state="live"] {
+  color: #089981;
+}
+
+.chart-live-status[data-state="error"] {
+  color: #f23645;
+}
+
+.chart-candle-countdown {
+  color: #d1d4dc;
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .chart-container {
   position: relative;
   width: 100%;
