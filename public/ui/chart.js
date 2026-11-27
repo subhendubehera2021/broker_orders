@@ -1,9 +1,15 @@
 import { calculateOrderBlocks } from "/ui/order-blocks.js";
+import {
+  DEFAULT_PIVOT_LOOKBACK,
+  findLiquiditySwings,
+} from "/ui/liquidity-swings-indicator.js";
+import { mapFyersCandles } from "/ui/chart-data.js";
 
 const historyEndpoint = "/api/fyers/market-data/historical-data";
-const chartResolution = "1";
+const localTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 const form = document.querySelector("#chart-query-form");
 const symbolInput = document.querySelector("#chart-symbol");
+const chartResolutionInput = document.querySelector("#chart-resolution");
 const fromDateInput = document.querySelector("#chart-from-date");
 const toDateInput = document.querySelector("#chart-to-date");
 const loadButton = document.querySelector("#chart-load");
@@ -11,12 +17,15 @@ const internalOrderBlocksEnabled = document.querySelector("#internal-ob-enabled"
 const internalOrderBlocksCount = document.querySelector("#internal-ob-count");
 const swingOrderBlocksEnabled = document.querySelector("#swing-ob-enabled");
 const swingOrderBlocksCount = document.querySelector("#swing-ob-count");
+const liquiditySwingEnabled = document.querySelector("#liquidity-swing-enabled");
+const liquiditySwingPivot = document.querySelector("#liquidity-swing-pivot");
 const replayPickStart = document.querySelector("#replay-pick-start");
 const chartContainer = document.querySelector("#chart-container");
 const chartStatus = document.querySelector("#chart-status");
 const chartTitleSymbol = document.querySelector("#chart-title-symbol");
 const chartTitleInterval = document.querySelector("#chart-title-interval");
 const chartCandleCount = document.querySelector("#chart-candle-count");
+const liquiditySwingStatus = document.querySelector("#liquidity-swing-status");
 const replayStatus = document.querySelector("#replay-status");
 const replayStart = document.querySelector("#replay-start");
 const replayPrevious = document.querySelector("#replay-previous");
@@ -31,6 +40,21 @@ const stats = {
   close: document.querySelector("#chart-close"),
   volume: document.querySelector("#chart-volume"),
 };
+
+function getMinuteIntervalLabel() {
+  return `${chartResolutionInput.value}-minute`;
+}
+
+function getChartIntervalLabel() {
+  return `${chartResolutionInput.value}m`;
+}
+
+function formatLocalChartTime(time, locale, options) {
+  return new Intl.DateTimeFormat(locale, {
+    ...options,
+    timeZone: localTimeZone,
+  }).format(new Date(Number(time) * 1000));
+}
 
 const chart = LightweightCharts.createChart(chartContainer, {
   autoSize: true,
@@ -53,9 +77,33 @@ const chart = LightweightCharts.createChart(chartContainer, {
     timeVisible: true,
     secondsVisible: false,
     rightOffset: 4,
+    tickMarkFormatter: (time, tickMarkType, locale) => {
+      const formats = {
+        [LightweightCharts.TickMarkType.Year]: { year: "numeric" },
+        [LightweightCharts.TickMarkType.Month]: { month: "short", year: "2-digit" },
+        [LightweightCharts.TickMarkType.DayOfMonth]: { day: "2-digit", month: "short" },
+        [LightweightCharts.TickMarkType.Time]: {
+          hour: "2-digit",
+          minute: "2-digit",
+          hourCycle: "h23",
+        },
+        [LightweightCharts.TickMarkType.TimeWithSeconds]: {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hourCycle: "h23",
+        },
+      };
+      return formatLocalChartTime(time, locale, formats[tickMarkType]);
+    },
   },
   localization: {
     locale: navigator.language,
+    timeFormatter: (time) => formatLocalChartTime(time, navigator.language, {
+      dateStyle: "short",
+      timeStyle: "medium",
+      hourCycle: "h23",
+    }),
   },
 });
 
@@ -92,6 +140,7 @@ let volumeData = [];
 let chartQuery = "";
 let indicatorCandles = [];
 let currentOrderBlocks = { internal: [], swing: [] };
+let currentLiquiditySwings = { highs: [], lows: [] };
 let replayIndex = -1;
 let replayStartIndex = 0;
 let replayTimer;
@@ -119,6 +168,7 @@ function setDefaultDates() {
 function currentQueryKey() {
   return JSON.stringify([
     symbolInput.value.trim(),
+    chartResolutionInput.value,
     fromDateInput.value,
     toDateInput.value,
   ]);
@@ -180,6 +230,27 @@ function getOrderBlockCount(input) {
     : 7;
 }
 
+function getLiquiditySwingPivotLookback() {
+  const parsedLookback = Number.parseInt(liquiditySwingPivot.value, 10);
+  return Number.isInteger(parsedLookback)
+    ? Math.min(100, Math.max(1, parsedLookback))
+    : DEFAULT_PIVOT_LOOKBACK;
+}
+
+function updateLiquiditySwingStatus() {
+  if (!liquiditySwingEnabled.checked) {
+    liquiditySwingStatus.textContent = "Liquidity swings: off";
+  } else if (indicatorCandles.length === 0) {
+    liquiditySwingStatus.textContent = "Liquidity swings: waiting for data";
+  } else if (currentLiquiditySwings.highs.length === 0 && currentLiquiditySwings.lows.length === 0) {
+    liquiditySwingStatus.textContent = "Liquidity swings: no confirmed pivots";
+  } else {
+    liquiditySwingStatus.textContent = `Liquidity swings: ${currentLiquiditySwings.highs.length} highs · ${
+      currentLiquiditySwings.lows.length
+    } lows · pivot ${getLiquiditySwingPivotLookback()}`;
+  }
+}
+
 function updateReplayStartFromPointer(event) {
   const canvasBounds = orderBlockCanvas.getBoundingClientRect();
   const logicalIndex = chart.timeScale().coordinateToLogical(
@@ -214,6 +285,87 @@ function setReplayStartPicking(enabled) {
   scheduleOrderBlockOverlayRender();
   updateReplayStatus();
   updateReplayControls();
+}
+
+function drawLiquiditySwings(plotWidth, paneHeight, timeScale, visibleRange) {
+  const swings = [...currentLiquiditySwings.highs, ...currentLiquiditySwings.lows]
+    .sort((left, right) => left.pivotTime - right.pivotTime);
+  for (let index = 0; index < swings.length; index += 1) {
+    const swing = swings[index];
+    let start = timeScale.timeToCoordinate(swing.pivotTime);
+    if (start === null) {
+      if (visibleRange && swing.pivotTime < visibleRange.from) {
+        start = 0;
+      } else {
+        continue;
+      }
+    }
+
+    let end = plotWidth;
+    let nextSwing;
+    for (let nextIndex = index + 1; nextIndex < swings.length; nextIndex += 1) {
+      if (swings[nextIndex].side === swing.side) {
+        nextSwing = swings[nextIndex];
+        break;
+      }
+    }
+    if (nextSwing) {
+      const nextStart = timeScale.timeToCoordinate(nextSwing.pivotTime);
+      if (nextStart === null) {
+        if (visibleRange && nextSwing.pivotTime < visibleRange.from) {
+          continue;
+        }
+      } else {
+        end = Math.min(end, nextStart);
+      }
+    }
+    start = Math.max(0, Math.min(plotWidth, start));
+    if (end <= start) {
+      continue;
+    }
+
+    const level = candleSeries.priceToCoordinate(swing.level);
+    const zoneTop = candleSeries.priceToCoordinate(swing.zoneTop);
+    const zoneBottom = candleSeries.priceToCoordinate(swing.zoneBottom);
+    if (level === null || zoneTop === null || zoneBottom === null) {
+      continue;
+    }
+
+    const color = swing.side === "high" ? "#f23645" : "#089981";
+    const boxTop = Math.max(0, Math.min(zoneTop, zoneBottom));
+    const boxBottom = Math.min(paneHeight, Math.max(zoneTop, zoneBottom));
+    const boxEnd = Math.min(end, start + 22);
+    if (boxBottom > boxTop && boxEnd > start) {
+      orderBlockContext.fillStyle = swing.side === "high"
+        ? "rgba(242, 54, 69, 0.12)"
+        : "rgba(8, 153, 129, 0.12)";
+      orderBlockContext.fillRect(start, boxTop, boxEnd - start, boxBottom - boxTop);
+    }
+
+    if (level >= 0 && level <= paneHeight) {
+      orderBlockContext.beginPath();
+      orderBlockContext.setLineDash(swing.status === "broken" ? [4, 3] : []);
+      orderBlockContext.strokeStyle = color;
+      orderBlockContext.lineWidth = 1.2;
+      orderBlockContext.moveTo(start, level);
+      orderBlockContext.lineTo(end, level);
+      orderBlockContext.stroke();
+      orderBlockContext.setLineDash([]);
+
+      const volume = swing.intersectionVolume || swing.pivotVolume;
+      const volumeLabel = new Intl.NumberFormat(navigator.language, {
+        notation: "compact",
+        maximumFractionDigits: 2,
+      }).format(volume);
+      orderBlockContext.fillStyle = color;
+      orderBlockContext.font = "10px sans-serif";
+      orderBlockContext.fillText(
+        volumeLabel,
+        Math.min(start + 3, plotWidth - 48),
+        Math.max(10, Math.min(paneHeight - 3, level + (swing.side === "high" ? -5 : 12))),
+      );
+    }
+  }
 }
 
 function renderOrderBlockOverlay() {
@@ -253,6 +405,10 @@ function renderOrderBlockOverlay() {
       bearish: { fill: "rgba(178, 40, 51, 0.20)", line: "rgba(178, 40, 51, 0.75)" },
     },
   };
+
+  if (liquiditySwingEnabled.checked) {
+    drawLiquiditySwings(plotWidth, paneHeight, timeScale, visibleRange);
+  }
 
   const zones = [...currentOrderBlocks.swing, ...currentOrderBlocks.internal].reverse();
   for (const zone of zones) {
@@ -320,43 +476,30 @@ function scheduleOrderBlockOverlayRender() {
 }
 
 function refreshOrderBlocks(candles = indicatorCandles) {
-  indicatorCandles = candles;
-  currentOrderBlocks = calculateOrderBlocks(candles, {
+  indicatorCandles = candles.map((candle, index) => {
+    const volume = volumeData[index]?.value;
+    if (!Number.isFinite(volume)) {
+      throw new Error(`Missing volume for chart candle ${index + 1}.`);
+    }
+    return { ...candle, volume };
+  });
+  currentOrderBlocks = calculateOrderBlocks(indicatorCandles, {
     internalEnabled: internalOrderBlocksEnabled.checked,
     swingEnabled: swingOrderBlocksEnabled.checked,
     internalCount: getOrderBlockCount(internalOrderBlocksCount),
     swingCount: getOrderBlockCount(swingOrderBlocksCount),
   });
+  currentLiquiditySwings = liquiditySwingEnabled.checked
+    ? findLiquiditySwings(indicatorCandles, getLiquiditySwingPivotLookback())
+    : { highs: [], lows: [] };
+  updateLiquiditySwingStatus();
   scheduleOrderBlockOverlayRender();
-}
-
-function mapFyersCandles(rows) {
-  if (!Array.isArray(rows)) {
-    throw new Error("Fyers did not return a candles array.");
-  }
-
-  return rows.map((row, index) => {
-    if (
-      !Array.isArray(row) ||
-      row.length < 6 ||
-      !Number.isSafeInteger(row[0]) ||
-      !row.slice(1, 6).every((value) => typeof value === "number" && Number.isFinite(value))
-    ) {
-      throw new Error(`Fyers returned an invalid candle at row ${index + 1}.`);
-    }
-
-    const [time, open, high, low, close, volume] = row;
-    if (volume < 0 || low > high) {
-      throw new Error(`Fyers returned invalid OHLCV values at row ${index + 1}.`);
-    }
-    return { time, open, high, low, close, volume };
-  }).sort((left, right) => left.time - right.time);
 }
 
 async function fetchFyersCandles() {
   const params = new URLSearchParams({
     symbol: symbolInput.value.trim(),
-    resolution: chartResolution,
+    resolution: chartResolutionInput.value,
     date_format: "1",
     range_from: fromDateInput.value,
     range_to: toDateInput.value,
@@ -398,7 +541,7 @@ function stopReplayTimer() {
 function restoreChart() {
   if (hasCurrentChartData()) {
     setChartData(candleData, volumeData);
-    chartTitleInterval.textContent = "1-minute default chart";
+    chartTitleInterval.textContent = `${getMinuteIntervalLabel()} default chart`;
   } else {
     setChartData([], []);
   }
@@ -428,7 +571,7 @@ function updateReplayControls() {
 function updateReplayStatus() {
   if (replayIndex < 0) {
     if (!hasCurrentChartData()) {
-      replayStatus.textContent = "Load 1-minute chart data before starting replay.";
+      replayStatus.textContent = `Load ${getMinuteIntervalLabel()} chart data before starting replay.`;
     } else if (isPickingReplayStart) {
       const candle = candleData[replayStartIndex];
       replayStatus.textContent = `Drag across the chart to choose the replay start bar, then click Done. Current: bar ${
@@ -446,7 +589,7 @@ function updateReplayStatus() {
   }
 
   const candle = candleData[replayIndex];
-  replayStatus.textContent = `1-minute bar ${replayIndex + 1} of ${candleData.length} · ${
+  replayStatus.textContent = `${getMinuteIntervalLabel()} bar ${replayIndex + 1} of ${candleData.length} · ${
     new Date(candle.time * 1000).toLocaleString()
   }`;
 }
@@ -475,7 +618,7 @@ function startReplay() {
 
   stopReplayTimer();
   setReplayStartPicking(false);
-  chartTitleInterval.textContent = "1-minute bar replay";
+  chartTitleInterval.textContent = `${getMinuteIntervalLabel()} bar replay`;
   updateReplayView(replayStartIndex);
 }
 
@@ -517,8 +660,9 @@ function invalidateChartData() {
   resetReplaySession();
   chartCandleCount.textContent = "No chart data loaded";
   chartTitleSymbol.textContent = symbolInput.value.trim();
-  chartTitleInterval.textContent = "1-minute default chart";
-  setChartStatus("Inputs changed. Load the 1-minute chart data again.");
+  chartTitleInterval.textContent = `${getMinuteIntervalLabel()} default chart`;
+  loadButton.textContent = `Load ${getChartIntervalLabel()} chart`;
+  setChartStatus(`Inputs changed. Load the ${getMinuteIntervalLabel()} chart data again.`);
   updateReplayControls();
 }
 
@@ -531,8 +675,8 @@ async function loadChart() {
   chartQuery = "";
   setChartData([], []);
   updateReplayControls();
-  setChartStatus("Loading 1-minute Fyers chart data…");
-  chartCandleCount.textContent = "Loading 1-minute chart data…";
+  setChartStatus(`Loading ${getMinuteIntervalLabel()} Fyers chart data…`);
+  chartCandleCount.textContent = `Loading ${getMinuteIntervalLabel()} chart data…`;
   loadButton.disabled = true;
 
   try {
@@ -541,7 +685,7 @@ async function loadChart() {
       return;
     }
     if (candles.length === 0) {
-      throw new Error("Fyers returned no 1-minute candles for this symbol and date range.");
+      throw new Error(`Fyers returned no ${getMinuteIntervalLabel()} candles for this symbol and date range.`);
     }
 
     candleData = candles.map(toCandlePoint);
@@ -550,9 +694,9 @@ async function loadChart() {
     chartQuery = queryKey;
     setChartData(candleData, volumeData);
     chartTitleSymbol.textContent = symbolInput.value.trim();
-    chartTitleInterval.textContent = "1-minute default chart";
-    chartCandleCount.textContent = `${candleData.length.toLocaleString()} 1-minute candles`;
-    setChartStatus("1-minute chart data loaded", "success");
+    chartTitleInterval.textContent = `${getMinuteIntervalLabel()} default chart`;
+    chartCandleCount.textContent = `${candleData.length.toLocaleString()} ${getMinuteIntervalLabel()} candles`;
+    setChartStatus(`${getMinuteIntervalLabel()} chart data loaded`, "success");
     updateReplayStatus();
     updateReplayControls();
   } catch (error) {
@@ -629,6 +773,8 @@ for (const setting of [
   internalOrderBlocksCount,
   swingOrderBlocksEnabled,
   swingOrderBlocksCount,
+  liquiditySwingEnabled,
+  liquiditySwingPivot,
 ]) {
   setting.addEventListener("input", () => refreshOrderBlocks(indicatorCandles));
 }

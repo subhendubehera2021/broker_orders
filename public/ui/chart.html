@@ -11,25 +11,20 @@
   </head>
   <body class="chart-page">
     <main class="chart-workspace">
-      <header class="chart-topbar">
-        <a class="chart-brand" href="/ui/">Auto Trade Processor</a>
-        <span class="chart-workspace-label">HISTORICAL REPLAY</span>
-        <nav class="chart-nav" aria-label="Workspace navigation">
-          <a href="/ui/history.html">Swing history</a>
-          <a href="/ui/">Market data</a>
-        </nav>
-      </header>
-
       <section class="chart-toolbar" aria-label="Chart controls">
         <form class="chart-query-form" id="chart-query-form">
           <label class="chart-control chart-symbol-control" for="chart-symbol">
             Symbol
             <input id="chart-symbol" name="symbol" type="text" value="NSE:NIFTY50-INDEX" required>
           </label>
-          <div class="chart-control chart-fixed-interval">
-            <span>Chart interval</span>
-            <strong>1m</strong>
-          </div>
+          <label class="chart-control" for="chart-resolution">
+            Chart interval
+            <select id="chart-resolution" name="resolution">
+              <option value="1" selected>1m</option>
+              <option value="3">3m</option>
+              <option value="5">5m</option>
+            </select>
+          </label>
           <label class="chart-control" for="chart-from-date">
             From
             <input id="chart-from-date" name="range_from" type="date" required>
@@ -41,7 +36,7 @@
           <button class="chart-primary-button" id="chart-load" type="submit">Load 1m chart</button>
         </form>
 
-        <div class="order-block-settings" aria-label="Order block indicators">
+        <div class="order-block-settings" aria-label="Chart indicators">
           <label class="indicator-toggle">
             <input id="internal-ob-enabled" type="checkbox" checked>
             Internal OB
@@ -57,6 +52,14 @@
           <label class="indicator-count" for="swing-ob-count">
             <span>Count</span>
             <input id="swing-ob-count" type="number" min="1" max="20" value="7">
+          </label>
+          <label class="indicator-toggle">
+            <input id="liquidity-swing-enabled" type="checkbox" checked>
+            Liquidity swings
+          </label>
+          <label class="indicator-count" for="liquidity-swing-pivot">
+            <span>Pivot</span>
+            <input id="liquidity-swing-pivot" type="number" min="1" max="100" value="5">
           </label>
         </div>
 
@@ -103,8 +106,9 @@
 
       <footer class="chart-footer">
         <span id="chart-candle-count">No candles loaded</span>
-        <span>Chart and replay use the same 1-minute candles.</span>
-        <span>Order-block logic adapted from Smart Money Concepts by LuxAlgo.</span>
+        <span id="liquidity-swing-status">Liquidity swings: waiting for data</span>
+        <span>Chart and replay use the selected interval candles.</span>
+        <span>Order-block and liquidity-swing indicators adapted from LuxAlgo.</span>
         <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank" rel="noreferrer">CC BY-NC-SA 4.0</a>
         <a href="https://www.tradingview.com/" target="_blank" rel="noreferrer">TradingView Lightweight Charts™</a>
       </footer>

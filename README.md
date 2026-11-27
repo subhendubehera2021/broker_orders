@@ -68,9 +68,9 @@ Example:
 curl "http://localhost:3000/api/fyers/market-data/historical-data?symbol=NSE%3ASBIN-EQ&resolution=D&date_format=0&range_from=1690895316&range_to=1691068173"
 ```
 
-The historical chart loads Fyers 1-minute candles once and uses that same dataset for chart display and bar replay. Choose **Pick start**, drag across the chart to position the replay marker, then click **Done** and **Start**. Replay reveals one 1-minute bar at a time from that position; exiting restores the full chart. At 1×, playback advances one bar per second. The chart uses the locally served Lightweight Charts bundle at `/vendor/lightweight-charts.js` and does not connect to a live feed.
+The historical chart supports Fyers 1-, 3-, and 5-minute candles. Choose the interval before loading; chart display and bar replay use the same selected dataset. Choose **Pick start**, drag across the chart to position the replay marker, then click **Done** and **Start**. Replay reveals one bar at a time from that position; exiting restores the full chart. At 1×, playback advances one bar per second. The chart uses the locally served Lightweight Charts bundle at `/vendor/lightweight-charts.js` and does not connect to a live feed.
 
-The chart includes internal and swing order blocks, each showing the latest 7 zones by default. Their JavaScript adaptation is based on LuxAlgo's Smart Money Concepts Pine Script supplied for this project and is licensed under [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/); use is noncommercial and adaptations must be shared under the same license.
+The chart includes internal and swing order blocks (latest 7 zones each by default) and liquidity-swing high and low levels (pivot lookback 5 by default), with volume labels. These indicators are based on LuxAlgo's Smart Money Concepts and Liquidity Swings logic and are licensed under [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/); use is noncommercial and adaptations must be shared under the same license.
 
 Expired F&O historical data example:
 
