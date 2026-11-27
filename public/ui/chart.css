@@ -70,21 +70,21 @@ select {
 .chart-interval-quick-access {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 0 10px 0 12px;
+  gap: 2px;
+  padding: 0 6px 0 8px;
   border-left: 1px solid #292e39;
 }
 
 .chart-interval-quick-access .chart-interval-button {
-  min-width: 42px;
-  min-height: 38px;
-  padding: 4px 10px;
+  min-width: 34px;
+  min-height: 30px;
+  padding: 3px 5px;
   border: 0;
-  border-radius: 11px;
+  border-radius: 8px;
   background: transparent;
   color: #b2b5be;
-  font-size: 0.95rem;
-  font-weight: 500;
+  font-size: 0.8rem;
+  font-weight: 600;
 }
 
 .chart-interval-quick-access .chart-interval-button:hover:not(:disabled):not([aria-pressed="true"]) {
@@ -113,6 +113,34 @@ select {
 
 .chart-toolbar-menu > summary::-webkit-details-marker {
   display: none;
+}
+
+.chart-menu-icon {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  margin-right: 6px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.chart-date-menu > summary {
+  justify-content: center;
+  width: 32px;
+  padding: 0;
+}
+
+.chart-date-menu > summary::after {
+  display: none;
+}
+
+.chart-date-menu .chart-menu-icon {
+  width: 16px;
+  height: 16px;
+  margin-right: 0;
 }
 
 .chart-toolbar-menu > summary::after {
@@ -157,7 +185,7 @@ select {
 }
 
 .chart-interval-quick-access .chart-interval-button[aria-pressed="true"] {
-  background: #444;
+  background: #2b303c;
   color: #f0f0f0;
 }
 
@@ -767,10 +795,37 @@ select {
   color: #f23645;
 }
 
-.chart-candle-countdown {
-  color: #089981;
-  font-size: 0.8rem;
+.chart-current-price-label {
+  position: absolute;
+  z-index: 5;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 3px 4px;
+  border-radius: 2px;
+  color: #fff;
   font-variant-numeric: tabular-nums;
+  line-height: 1;
+  text-align: center;
+  pointer-events: none;
+}
+
+.chart-current-price-label[hidden] {
+  display: none;
+}
+
+.chart-current-price-value {
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.chart-candle-countdown {
+  color: rgb(255 255 255 / 84%);
+  font-size: 0.72rem;
+  line-height: 1.15;
   white-space: nowrap;
 }
 
@@ -1036,8 +1091,7 @@ body.chart-page[data-theme="light"] .indicator-count {
 }
 
 body.chart-page[data-theme="light"] .chart-status[data-state="success"],
-body.chart-page[data-theme="light"] .chart-live-status[data-state="live"],
-body.chart-page[data-theme="light"] .chart-candle-countdown {
+body.chart-page[data-theme="light"] .chart-live-status[data-state="live"] {
   color: #087a5b;
 }
 

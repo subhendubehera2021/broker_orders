@@ -73,6 +73,8 @@ const replayPickStart = document.querySelector("#replay-pick-start");
 const chartContainer = document.querySelector("#chart-container");
 const chartStatus = document.querySelector("#chart-status");
 const chartLiveStatus = document.querySelector("#chart-live-status");
+const chartCurrentPriceLabel = document.querySelector("#chart-current-price-label");
+const chartCurrentPriceValue = document.querySelector("#chart-current-price-value");
 const chartCandleCountdown = document.querySelector("#chart-candle-countdown");
 const chartTitleSymbol = document.querySelector("#chart-title-symbol");
 const chartTitleInterval = document.querySelector("#chart-title-interval");
@@ -208,6 +210,8 @@ const candleSeries = chart.addSeries(LightweightCharts.CandlestickSeries, {
   borderDownColor: chartPalette.bearish,
   wickUpColor: chartPalette.bullish,
   wickDownColor: chartPalette.bearish,
+  lastValueVisible: false,
+  priceLineVisible: true,
 });
 const volumeSeries = chart.addSeries(
   LightweightCharts.HistogramSeries,
@@ -356,6 +360,44 @@ function showCandleStats(candle, volume) {
       maximumFractionDigits: 0,
     }).format(volume)
     : "—";
+}
+
+function updateCurrentPriceLabel(
+  candle = replayIndex >= 0 ? candleData[replayIndex] : candleData.at(-1),
+) {
+  if (!candle) {
+    chartCurrentPriceLabel.hidden = true;
+    return;
+  }
+
+  const coordinate = candleSeries.priceToCoordinate(candle.close);
+  const priceScaleWidth = chart.priceScale("right").width();
+  if (
+    coordinate === null ||
+    !Number.isFinite(coordinate) ||
+    priceScaleWidth <= 0
+  ) {
+    chartCurrentPriceLabel.hidden = true;
+    return;
+  }
+
+  chartCurrentPriceLabel.hidden = false;
+  chartCurrentPriceValue.textContent = formatNumber(candle.close);
+  chartCurrentPriceLabel.style.backgroundColor = candle.close >= candle.open
+    ? chartPalette.bullish
+    : chartPalette.bearish;
+  chartCurrentPriceLabel.style.width = `${priceScaleWidth}px`;
+  const labelHeight = chartCurrentPriceLabel.offsetHeight;
+  const maxTop = Math.max(
+    0,
+    chartContainer.clientHeight - labelHeight - chart.timeScale().height(),
+  );
+  chartCurrentPriceLabel.style.top =
+    `${Math.max(0, Math.min(coordinate - 14, maxTop))}px`;
+  chartCurrentPriceLabel.setAttribute(
+    "aria-label",
+    `Current price ${formatNumber(candle.close)}. Candle closes in ${chartCandleCountdown.textContent}.`,
+  );
 }
 
 function getVolumeColor(candle) {
@@ -701,6 +743,7 @@ function setChartData(candles, volumes) {
   chart.timeScale().fitContent();
   refreshOrderBlocks(candles);
   showCandleStats(candles.at(-1), volumes.at(-1)?.value);
+  updateCurrentPriceLabel();
 }
 
 function setChartStatus(message, state = "") {
@@ -728,7 +771,8 @@ function updateCandleCountdown() {
     const seconds = remainingSeconds % 60;
     timeRemaining = `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
   }
-  chartCandleCountdown.textContent = `Candle closes in ${timeRemaining}`;
+  chartCandleCountdown.textContent = timeRemaining;
+  updateCurrentPriceLabel();
 }
 
 function disconnectLiveFeed(status = "Live feed off") {
@@ -781,6 +825,7 @@ function applyLiveTick(tick) {
   candleSeries.update(toCandlePoint(update.candle));
   volumeSeries.update(volumeData.at(-1));
   showCandleStats(update.candle, update.candle.volume);
+  updateCurrentPriceLabel();
   if (update.isNewBar) {
     chartCandleCount.textContent = `${candleData.length.toLocaleString()} ${getMinuteIntervalLabel()} candles`;
     refreshOrderBlocks(candleData);
@@ -973,6 +1018,7 @@ function updateReplayView(index, visibleRange = chart.timeScale().getVisibleLogi
   }
   refreshOrderBlocks(visibleCandles);
   showCandleStats(candleData[replayIndex], volumeData[replayIndex]?.value);
+  updateCurrentPriceLabel();
   updateReplayStatus();
   updateReplayControls();
 }
@@ -1009,6 +1055,7 @@ function advanceReplay() {
   }
   refreshOrderBlocks(candleData.slice(0, replayIndex + 1));
   showCandleStats(candleData[replayIndex], volumeData[replayIndex].value);
+  updateCurrentPriceLabel();
   updateReplayStatus();
   updateReplayControls();
   if (replayIndex >= candleData.length - 1) {
@@ -1237,14 +1284,21 @@ for (const setting of [
 
 setVolumeVisible(volumeEnabled.checked);
 updateIndicatorList();
-chart.timeScale().subscribeVisibleTimeRangeChange(scheduleOrderBlockOverlayRender);
-new ResizeObserver(scheduleOrderBlockOverlayRender).observe(chartContainer);
+chart.timeScale().subscribeVisibleTimeRangeChange(() => {
+  scheduleOrderBlockOverlayRender();
+  updateCurrentPriceLabel();
+});
+new ResizeObserver(() => {
+  scheduleOrderBlockOverlayRender();
+  updateCurrentPriceLabel();
+}).observe(chartContainer);
 chartContainer.addEventListener("pointerdown", () => {
   chartPointerDown = true;
 });
 chartContainer.addEventListener("pointermove", () => {
   if (chartPointerDown) {
     scheduleOrderBlockOverlayRender();
+    updateCurrentPriceLabel();
   }
 });
 orderBlockCanvas.addEventListener("pointerdown", (event) => {

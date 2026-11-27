@@ -24,7 +24,12 @@
             <button class="chart-icon-button chart-interval-button" type="button" data-resolution="15" aria-pressed="false">15m</button>
           </div>
           <details class="chart-toolbar-menu chart-date-menu">
-            <summary title="Choose chart date range">Date range</summary>
+            <summary aria-label="Choose chart date range" title="Choose chart date range">
+              <svg class="chart-menu-icon" aria-hidden="true" viewBox="0 0 24 24">
+                <rect x="3" y="5" width="18" height="16" rx="2"></rect>
+                <path d="M16 3v4M8 3v4M3 11h18"></path>
+              </svg>
+            </summary>
             <div class="chart-toolbar-popover">
               <label class="chart-control" for="chart-from-date">
                 From
@@ -121,11 +126,12 @@
               <span>C <b id="chart-close">—</b></span>
               <span>Vol <b id="chart-volume">—</b></span>
             </div>
-            <span class="chart-candle-countdown" id="chart-candle-countdown" role="timer">
-              Candle closes in --:--
-            </span>
             <span class="chart-status" id="chart-status" role="status">Choose a range and load candles</span>
             <span class="chart-live-status" id="chart-live-status" role="status">Live feed off</span>
+          </div>
+          <div class="chart-current-price-label" id="chart-current-price-label" role="timer" aria-label="Current price and candle countdown" hidden>
+            <span class="chart-current-price-value" id="chart-current-price-value">—</span>
+            <span class="chart-candle-countdown" id="chart-candle-countdown">--:--</span>
           </div>
           <div class="chart-indicator-list" id="chart-indicator-list" data-collapsed="true" aria-label="Chart indicators">
             <button class="chart-indicator-collapse" id="chart-indicator-collapse" type="button" aria-expanded="false" aria-controls="chart-indicator-items" aria-label="Expand indicators" title="Expand indicators">
