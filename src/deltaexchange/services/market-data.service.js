@@ -5,13 +5,34 @@ import { findLiquiditySwings } from "../lib/liquidity-swings.js";
 const CANDLES_PATH = "/v2/history/candles";
 const CANDLE_RANGE_SECONDS = 24 * 60 * 60;
 const DEFAULT_BREAKOUT_RANGE_DAYS = 3;
-const BREAKOUT_RANGE_DAYS = [3, 7, 15, 30];
-const SWING_CONTEXT_SECONDS = 5 * 60;
+export const SUPPORTED_BREAKOUT_RANGE_DAYS = Object.freeze([
+  3,
+  7,
+  15,
+  30,
+  60,
+  90,
+  120,
+  180,
+]);
 const SWING_PIVOT_LOOKBACK = 5;
 const MAX_CANDLES_PER_REQUEST = 2000;
 const MAX_CONCURRENT_CANDLE_REQUESTS = 5;
-const CANDLE_REQUEST_SPAN_SECONDS = CANDLE_RANGE_SECONDS + 2 * SWING_CONTEXT_SECONDS;
-const MAX_BACKTEST_RANGE_SECONDS = 26 * 60 * 60;
+const MAX_BACKTEST_RANGE_SECONDS = 31 * CANDLE_RANGE_SECONDS;
+export const SUPPORTED_CANDLE_RESOLUTIONS = Object.freeze(["1m", "3m", "5m", "15m"]);
+
+function getCandleIntervalSeconds(resolution) {
+  if (!SUPPORTED_CANDLE_RESOLUTIONS.includes(resolution)) {
+    const error = new Error("Candle resolution must be 1m, 3m, 5m, or 15m.");
+    error.statusCode = 400;
+    throw error;
+  }
+  return Number.parseInt(resolution, 10) * 60;
+}
+
+function getSwingContextSeconds(resolution) {
+  return SWING_PIVOT_LOOKBACK * getCandleIntervalSeconds(resolution);
+}
 
 function isValidCandle(candle) {
   const time = Number(candle?.time);
@@ -44,10 +65,10 @@ function toBreakoutCandle(candle) {
   };
 }
 
-async function fetchCandleRange(start, end, fetchImpl) {
+async function fetchCandleRange(start, end, resolution, fetchImpl) {
   const url = new URL(CANDLES_PATH, DELTA_EXCHANGE_API_BASE_URL);
   url.search = new URLSearchParams({
-    resolution: "1m",
+    resolution,
     symbol: "BTCUSD",
     start: String(start),
     end: String(end),
@@ -90,16 +111,18 @@ async function fetchCandleRange(start, end, fetchImpl) {
   );
 }
 
-async function fetchCandleWindow(start, end, fetchImpl) {
+async function fetchCandleWindow(start, end, resolution, fetchImpl) {
+  const requestSpanSeconds = (MAX_CANDLES_PER_REQUEST - 1) *
+    getCandleIntervalSeconds(resolution);
   const ranges = [];
   for (
     let rangeStart = start;
     rangeStart < end;
-    rangeStart += CANDLE_REQUEST_SPAN_SECONDS
+    rangeStart += requestSpanSeconds
   ) {
     ranges.push({
       start: rangeStart,
-      end: Math.min(rangeStart + CANDLE_REQUEST_SPAN_SECONDS, end),
+      end: Math.min(rangeStart + requestSpanSeconds, end),
     });
   }
 
@@ -108,7 +131,7 @@ async function fetchCandleWindow(start, end, fetchImpl) {
     const requestGroup = ranges.slice(offset, offset + MAX_CONCURRENT_CANDLE_REQUESTS);
     batches.push(...await Promise.all(
       requestGroup.map(({ start: rangeStart, end: rangeEnd }) =>
-        fetchCandleRange(rangeStart, rangeEnd, fetchImpl)),
+        fetchCandleRange(rangeStart, rangeEnd, resolution, fetchImpl)),
     ));
   }
   const candlesByTime = new Map();
@@ -131,9 +154,13 @@ export async function getRecentBtcUsdPerpetualCandles({
   fetchImpl = fetch,
   now = Date.now(),
   breakoutDays = DEFAULT_BREAKOUT_RANGE_DAYS,
+  resolution = "1m",
 } = {}) {
-  if (!BREAKOUT_RANGE_DAYS.includes(breakoutDays)) {
-    const error = new Error("Breakout range must be 3, 7, 15, or 30 days.");
+  const swingContextSeconds = getSwingContextSeconds(resolution);
+  if (!SUPPORTED_BREAKOUT_RANGE_DAYS.includes(breakoutDays)) {
+    const error = new Error(
+      `Breakout range must be one of ${SUPPORTED_BREAKOUT_RANGE_DAYS.join(", ")} days.`,
+    );
     error.statusCode = 400;
     throw error;
   }
@@ -141,14 +168,14 @@ export async function getRecentBtcUsdPerpetualCandles({
   const end = Math.floor(now / 1000);
   const recentStart = end - CANDLE_RANGE_SECONDS;
   const breakoutStart = end - breakoutDays * CANDLE_RANGE_SECONDS;
-  const requestStart = breakoutStart - SWING_CONTEXT_SECONDS;
-  const analysisCandles = await fetchCandleWindow(requestStart, end, fetchImpl);
+  const requestStart = breakoutStart - swingContextSeconds;
+  const analysisCandles = await fetchCandleWindow(requestStart, end, resolution, fetchImpl);
 
   const candles = analysisCandles.filter(
     (candle) => Number(candle.time) >= recentStart && Number(candle.time) <= end,
   );
   const recentAnalysisCandles = analysisCandles.filter(
-    (candle) => Number(candle.time) >= recentStart - SWING_CONTEXT_SECONDS,
+    (candle) => Number(candle.time) >= recentStart - swingContextSeconds,
   );
   const isInWindow = (start) => (swing) => {
     const time = Date.parse(swing.pivotTime) / 1000;
@@ -183,7 +210,7 @@ export async function getRecentBtcUsdPerpetualCandles({
   return {
     symbol: "BTCUSD.P",
     apiSymbol: "BTCUSD",
-    resolution: "1m",
+    resolution,
     pivotLookback: SWING_PIVOT_LOOKBACK,
     start: recentStart,
     breakoutStart,
@@ -200,7 +227,9 @@ export async function getBtcUsdPerpetualBreakoutsForRange({
   end,
   fetchImpl = fetch,
   now = Date.now(),
+  resolution = "1m",
 } = {}) {
+  const swingContextSeconds = getSwingContextSeconds(resolution);
   if (
     !Number.isSafeInteger(start) ||
     !Number.isSafeInteger(end) ||
@@ -221,11 +250,16 @@ export async function getBtcUsdPerpetualBreakoutsForRange({
   }
 
   const contextStart = start - CANDLE_RANGE_SECONDS;
-  const analysisStart = contextStart - SWING_CONTEXT_SECONDS;
-  const analysisEnd = rangeEnd + SWING_CONTEXT_SECONDS;
-  const analysisCandles = await fetchCandleWindow(analysisStart, analysisEnd, fetchImpl);
+  const analysisStart = contextStart - swingContextSeconds;
+  const analysisEnd = rangeEnd + swingContextSeconds;
+  const analysisCandles = await fetchCandleWindow(
+    analysisStart,
+    analysisEnd,
+    resolution,
+    fetchImpl,
+  );
   const backtestCandles = analysisCandles.filter(
-    (candle) => Number(candle.time) < rangeEnd,
+    (candle) => Number(candle.time) >= start && Number(candle.time) < rangeEnd,
   );
   const allSwings = findLiquiditySwings(
     analysisCandles.map(toSwingBar),
@@ -252,7 +286,7 @@ export async function getBtcUsdPerpetualBreakoutsForRange({
   return {
     symbol: "BTCUSD.P",
     apiSymbol: "BTCUSD",
-    resolution: "1m",
+    resolution,
     pivotLookback: SWING_PIVOT_LOOKBACK,
     start,
     breakoutStart: start,

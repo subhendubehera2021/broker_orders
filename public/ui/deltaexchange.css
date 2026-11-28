@@ -27,6 +27,13 @@
   align-items: center;
 }
 
+.candle-panel-actions,
+.candle-interval-buttons {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .delta-candles-scroll {
   max-height: 65vh;
   overflow: auto;
@@ -155,12 +162,39 @@
   font-size: 1.1rem;
 }
 
+.breakout-analysis-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 12px 0;
+}
+
 .breakout-date-filter {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
-  margin: 12px 0;
+}
+
+.backtest-date-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.backtest-date-button {
+  display: inline-grid;
+  width: 36px;
+  min-height: 36px;
+  padding: 0;
+  place-items: center;
+}
+
+.backtest-date-icon {
+  width: 18px;
+  height: 18px;
 }
 
 .breakout-date-filter label {
@@ -169,6 +203,8 @@
 }
 
 .breakout-date-filter input {
+  width: 150px;
+  max-width: 100%;
   padding: 6px 8px;
   border: 1px solid var(--border, #293342);
   border-radius: 6px;
@@ -178,22 +214,19 @@
   font: inherit;
 }
 
-.breakout-date-filter .status {
-  font-size: 0.8rem;
-}
-
 .breakout-quick-ranges {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
-  margin: 8px 0 12px;
+  gap: 6px;
+  margin: 0;
   color: var(--text-muted, #aab4c3);
-  font-size: 0.85rem;
+  font-size: 0.8rem;
 }
 
-.quick-range-button {
-  padding: 5px 10px;
+.quick-range-button,
+.candle-interval-button {
+  padding: 5px 8px;
   border: 1px solid var(--border, #293342);
   border-radius: 6px;
   background: #101722;
@@ -202,13 +235,15 @@
   font: inherit;
 }
 
-.quick-range-button[aria-pressed="true"] {
+.quick-range-button[aria-pressed="true"],
+.candle-interval-button[aria-pressed="true"] {
   border-color: #31b77b;
   background: #17352d;
   color: #a7e8c5;
 }
 
-.quick-range-button:disabled {
+.quick-range-button:disabled,
+.candle-interval-button:disabled {
   cursor: wait;
   opacity: 0.6;
 }

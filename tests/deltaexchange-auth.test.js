@@ -150,11 +150,61 @@ test("fetches the recent candle windows without auth headers", async () => {
   assert.deepEqual(requestOptions.headers, { Accept: "application/json" });
   assert.equal(result.symbol, "BTCUSD.P");
   assert.equal(result.apiSymbol, "BTCUSD");
+  assert.equal(result.resolution, "1m");
   assert.equal(result.candles.length, 1);
   assert.deepEqual(result.liquiditySwings, { highs: [], lows: [] });
   assert.deepEqual(result.liquidityBreakouts, []);
   assert.deepEqual(result.dailyLiquidityBreakouts, []);
   assert.equal(result.pivotLookback, 5);
+});
+
+test("fetches supported candle intervals and scales swing context by interval", async () => {
+  const now = 1_700_000_000_000;
+  const end = Math.floor(now / 1000);
+  for (const [resolution, intervalMinutes] of [
+    ["3m", 3],
+    ["5m", 5],
+    ["15m", 15],
+  ]) {
+    const requestUrls = [];
+    const result = await getRecentBtcUsdPerpetualCandles({
+      now,
+      resolution,
+      fetchImpl: async (url) => {
+        requestUrls.push(new URL(url));
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ success: true, result: [] }),
+        };
+      },
+    });
+
+    assert.equal(result.resolution, resolution);
+    assert.ok(requestUrls.length > 0);
+    assert.ok(requestUrls.every(
+      (url) => url.searchParams.get("resolution") === resolution,
+    ));
+    assert.equal(
+      Number(requestUrls[0].searchParams.get("start")),
+      end - 3 * 24 * 60 * 60 - 5 * intervalMinutes * 60,
+    );
+  }
+});
+
+test("rejects unsupported candle intervals before fetching", async () => {
+  await assert.rejects(
+    getRecentBtcUsdPerpetualCandles({
+      resolution: "2m",
+      fetchImpl: async () => {
+        throw new Error("The fetcher must not be called for an invalid interval.");
+      },
+    }),
+    {
+      message: "Candle resolution must be 1m, 3m, 5m, or 15m.",
+      statusCode: 400,
+    },
+  );
 });
 
 test("returns all confirmed swing highs and lows from the past 24 hours", async () => {
@@ -248,7 +298,7 @@ test("returns a separate 72-hour breakout series without extending the 24-hour t
   assert.equal(result.dailyLiquidityBreakouts[0].breakoutTime, breakoutStart + 11 * 60);
 });
 
-test("fetches a 30-day breakout range in bounded candle-request batches", async () => {
+test("fetches a 180-day breakout range in bounded candle-request batches", async () => {
   const now = 1_700_000_000_000;
   const end = Math.floor(now / 1000);
   const requestUrls = [];
@@ -256,7 +306,7 @@ test("fetches a 30-day breakout range in bounded candle-request batches", async 
   let maxActiveRequests = 0;
   const result = await getRecentBtcUsdPerpetualCandles({
     now,
-    breakoutDays: 30,
+    breakoutDays: 180,
     fetchImpl: async (url) => {
       requestUrls.push(new URL(url));
       activeRequests += 1;
@@ -271,9 +321,12 @@ test("fetches a 30-day breakout range in bounded candle-request batches", async 
     },
   });
 
-  assert.equal(requestUrls.length, 30);
+  assert.equal(
+    requestUrls.length,
+    Math.ceil((180 * 24 * 60 * 60 + 5 * 60) / (1999 * 60)),
+  );
   assert.equal(maxActiveRequests, 5);
-  assert.equal(result.breakoutStart, end - 30 * 24 * 60 * 60);
+  assert.equal(result.breakoutStart, end - 180 * 24 * 60 * 60);
   assert.equal(result.start, end - 24 * 60 * 60);
   assert.deepEqual(result.dailyLiquidityBreakouts, []);
 });
@@ -287,7 +340,7 @@ test("rejects unsupported quick breakout ranges before fetching candles", async 
       },
     }),
     {
-      message: "Breakout range must be 3, 7, 15, or 30 days.",
+      message: "Breakout range must be one of 3, 7, 15, 30, 60, 90, 120, 180 days.",
       statusCode: 400,
     },
   );
@@ -311,6 +364,7 @@ test("backtests breakouts for a requested historical date", async () => {
     start,
     end,
     now,
+    resolution: "5m",
     fetchImpl: async (url) => {
       const requestUrl = new URL(url);
       requestUrls.push(requestUrl);
@@ -329,7 +383,11 @@ test("backtests breakouts for a requested historical date", async () => {
     },
   });
 
-  assert.equal(requestUrls.length, 2);
+  assert.equal(requestUrls.length, 1);
+  assert.ok(requestUrls.every(
+    (url) => url.searchParams.get("resolution") === "5m",
+  ));
+  assert.equal(result.resolution, "5m");
   assert.equal(result.start, start);
   assert.equal(result.end, end);
   assert.equal(result.candles.length, candles.length);
@@ -339,11 +397,49 @@ test("backtests breakouts for a requested historical date", async () => {
   assert.deepEqual(result.dailyLiquidityBreakouts, result.liquidityBreakouts);
 });
 
-test("rejects historical backtest ranges longer than 26 hours", async () => {
+test("returns only candles within the selected historical date", async () => {
+  const start = 1_700_000_000;
+  const end = start + 24 * 60 * 60;
+  const candles = [start - 60, start, end - 60, end].map((time, index) => ({
+    time,
+    open: 100 + index,
+    high: 102 + index,
+    low: 99 + index,
+    close: 101 + index,
+    volume: 1,
+  }));
+  const result = await getBtcUsdPerpetualBreakoutsForRange({
+    start,
+    end,
+    now: end * 1000,
+    fetchImpl: async (url) => {
+      const requestUrl = new URL(url);
+      const requestStart = Number(requestUrl.searchParams.get("start"));
+      const requestEnd = Number(requestUrl.searchParams.get("end"));
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          success: true,
+          result: candles.filter(
+            (candle) => candle.time >= requestStart && candle.time <= requestEnd,
+          ),
+        }),
+      };
+    },
+  });
+
+  assert.deepEqual(
+    result.candles.map((candle) => candle.time),
+    [start, end - 60],
+  );
+});
+
+test("rejects historical backtest ranges longer than 31 elapsed days", async () => {
   await assert.rejects(
     getBtcUsdPerpetualBreakoutsForRange({
       start: 1_700_000_000,
-      end: 1_700_000_000 + 26 * 60 * 60 + 1,
+      end: 1_700_000_000 + 31 * 24 * 60 * 60 + 1,
       fetchImpl: async () => {
         throw new Error("The fetcher must not be called for an invalid range.");
       },
@@ -353,6 +449,25 @@ test("rejects historical backtest ranges longer than 26 hours", async () => {
       statusCode: 400,
     },
   );
+});
+
+test("accepts a 30-day historical backtest range", async () => {
+  const start = 1_700_000_000;
+  const end = start + 30 * 24 * 60 * 60;
+  const result = await getBtcUsdPerpetualBreakoutsForRange({
+    start,
+    end,
+    now: end * 1000,
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ success: true, result: [] }),
+    }),
+  });
+
+  assert.equal(result.start, start);
+  assert.equal(result.end, end);
+  assert.deepEqual(result.candles, []);
 });
 
 test("rejects unsuccessful Delta candle responses", async () => {

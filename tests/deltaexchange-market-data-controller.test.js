@@ -33,13 +33,13 @@ test("rejects malformed or incomplete historical candle ranges", async () => {
   }
 });
 
-test("rejects historical candle ranges longer than 26 hours", async () => {
+test("rejects historical candle ranges longer than 31 elapsed days", async () => {
   const start = 1_700_000_000;
   const response = createResponse();
   await getCandles({
     query: {
       start: String(start),
-      end: String(start + 26 * 60 * 60 + 1),
+      end: String(start + 31 * 24 * 60 * 60 + 1),
     },
   }, response);
 
@@ -51,7 +51,10 @@ test("rejects unsupported quick breakout ranges and mixed range parameters", asy
   const unsupportedResponse = createResponse();
   await getCandles({ query: { days: "6" } }, unsupportedResponse);
   assert.equal(unsupportedResponse.statusCode, 400);
-  assert.equal(unsupportedResponse.body.error, "days must be one of 3, 7, 15, or 30.");
+  assert.equal(
+    unsupportedResponse.body.error,
+    "days must be one of 3, 7, 15, 30, 60, 90, 120, 180.",
+  );
 
   const mixedResponse = createResponse();
   await getCandles({
@@ -62,4 +65,16 @@ test("rejects unsupported quick breakout ranges and mixed range parameters", asy
     mixedResponse.body.error,
     "Use either a historical date range or a quick breakout range, not both.",
   );
+});
+
+test("rejects unsupported candle resolutions", async () => {
+  for (const resolution of ["2m", ["1m"]]) {
+    const response = createResponse();
+    await getCandles({ query: { resolution } }, response);
+    assert.equal(response.statusCode, 400);
+    assert.equal(
+      response.body.error,
+      "resolution must be 1m, 3m, 5m, or 15m.",
+    );
+  }
 });

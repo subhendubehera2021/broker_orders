@@ -5,6 +5,8 @@ const authenticationStatus = document.querySelector("#authentication-status");
 const authMessage = document.querySelector("#auth-message");
 const testAuthButton = document.querySelector("#test-auth-button");
 const loadCandlesButton = document.querySelector("#load-candles-button");
+const candlesTitle = document.querySelector("#candles-title");
+const candleIntervalButtons = [...document.querySelectorAll(".candle-interval-button")];
 const candlesStatus = document.querySelector("#candles-status");
 const candlesRange = document.querySelector("#candles-range");
 const candlesEmpty = document.querySelector("#candles-empty");
@@ -26,10 +28,9 @@ const breakoutChartContainer = document.querySelector("#breakout-chart");
 const breakoutDailyStatus = document.querySelector("#breakout-daily-status");
 const breakoutDailyEmpty = document.querySelector("#breakout-daily-empty");
 const breakoutRangeLabel = document.querySelector("#breakout-range-label");
-const backtestDateInput = document.querySelector("#backtest-date");
+const backtestDateFromInput = document.querySelector("#backtest-date-from");
+const backtestDateToInput = document.querySelector("#backtest-date-to");
 const loadBacktestDateButton = document.querySelector("#load-backtest-date");
-const showRecentBreakoutsButton = document.querySelector("#show-recent-breakouts");
-const backtestDateStatus = document.querySelector("#backtest-date-status");
 const quickRangeButtons = [...document.querySelectorAll(".quick-range-button")];
 const dailyMoveChart = document.querySelector("#daily-move-chart");
 const dailyMoveDetails = document.querySelector("#daily-move-details");
@@ -62,6 +63,7 @@ let dailyMoveSessionLineLayer;
 let dailyMoveSessionBoundaries = [];
 let isHistoricalBacktest = false;
 let selectedBreakoutDays = 3;
+let selectedResolution = "1m";
 
 function getLocalDateString(date = new Date()) {
   const year = date.getFullYear();
@@ -94,6 +96,43 @@ function getLocalDateRange(value) {
   };
 }
 
+function getLocalDateSpan(fromValue, toValue) {
+  const from = getLocalDateRange(fromValue);
+  const to = getLocalDateRange(toValue);
+  const [fromYear, fromMonth, fromDay] = fromValue.split("-").map(Number);
+  const [toYear, toMonth, toDay] = toValue.split("-").map(Number);
+  const calendarDays = (
+    Date.UTC(toYear, toMonth - 1, toDay) -
+    Date.UTC(fromYear, fromMonth - 1, fromDay)
+  ) / (24 * 60 * 60 * 1000) + 1;
+
+  if (calendarDays < 1) {
+    throw new Error("The From date must be on or before the To date.");
+  }
+  if (calendarDays > 30) {
+    throw new Error("Choose a date range of 30 days or less.");
+  }
+  return { start: from.start, end: to.end };
+}
+
+function synchronizeBacktestDateInputs(changedInput) {
+  if (
+    changedInput === backtestDateFromInput &&
+    backtestDateToInput.value &&
+    backtestDateToInput.value < backtestDateFromInput.value
+  ) {
+    backtestDateToInput.value = backtestDateFromInput.value;
+  } else if (
+    changedInput === backtestDateToInput &&
+    backtestDateFromInput.value &&
+    backtestDateFromInput.value > backtestDateToInput.value
+  ) {
+    backtestDateFromInput.value = backtestDateToInput.value;
+  }
+  backtestDateFromInput.max = backtestDateToInput.value || getLocalDateString();
+  backtestDateToInput.min = backtestDateFromInput.value;
+}
+
 function getLocalSessionBoundaries(startTime, endTime) {
   const firstDate = new Date(startTime * 1000);
   const boundary = new Date(
@@ -107,6 +146,28 @@ function getLocalSessionBoundaries(startTime, endTime) {
     boundary.setDate(boundary.getDate() + 1);
   }
   return boundaries;
+}
+
+function formatResolution(resolution) {
+  const minutes = Number.parseInt(resolution, 10);
+  return `${minutes} minute${minutes === 1 ? "" : "s"}`;
+}
+
+function setSelectedResolution(resolution) {
+  selectedResolution = resolution;
+  candlesTitle.textContent = `BTCUSD.P · ${formatResolution(resolution)}`;
+  for (const button of candleIntervalButtons) {
+    button.setAttribute(
+      "aria-pressed",
+      String(button.dataset.resolution === selectedResolution),
+    );
+  }
+}
+
+function setCandleIntervalButtonsDisabled(disabled) {
+  for (const button of candleIntervalButtons) {
+    button.disabled = disabled;
+  }
 }
 
 async function readResponse(response) {
@@ -274,11 +335,18 @@ function drawSelectedBreakout(index) {
     );
   }
 
-  const from = Math.max(
-    Number(breakoutCandles[0]?.time ?? event.breakoutTime),
-    event.breakoutTime - 30 * 60,
-  );
-  const to = event.stopHitAt ?? Number(breakoutCandles.at(-1)?.time ?? event.breakoutTime);
+  const historicalRange = isHistoricalBacktest
+    ? getLocalDateSpan(backtestDateFromInput.value, backtestDateToInput.value)
+    : null;
+  const from = historicalRange
+    ? historicalRange.start
+    : Math.max(
+      Number(breakoutCandles[0]?.time ?? event.breakoutTime),
+      event.breakoutTime - 30 * 60,
+    );
+  const to = historicalRange
+    ? historicalRange.end - 1
+    : event.stopHitAt ?? Number(breakoutCandles.at(-1)?.time ?? event.breakoutTime);
   const visibleCandles = breakoutCandles
     .filter((candle) => Number(candle.time) >= from && Number(candle.time) <= to)
     .map((candle) => ({
@@ -288,6 +356,15 @@ function drawSelectedBreakout(index) {
       low: Number(candle.low),
       close: Number(candle.close),
     }));
+  if (historicalRange) {
+    const candleTimes = new Set(visibleCandles.map((candle) => candle.time));
+    for (const time of [historicalRange.start, historicalRange.end - 1]) {
+      if (!candleTimes.has(time)) {
+        visibleCandles.push({ time });
+      }
+    }
+    visibleCandles.sort((left, right) => left.time - right.time);
+  }
 
   breakoutCandleSeries.setData(visibleCandles);
   if (breakoutLevelLine) {
@@ -312,7 +389,14 @@ function drawSelectedBreakout(index) {
     axisLabelVisible: true,
     title: "Stop loss",
   });
-  breakoutChart.timeScale().fitContent();
+  if (historicalRange) {
+    breakoutChart.timeScale().setVisibleRange({
+      from: historicalRange.start,
+      to: historicalRange.end - 1,
+    });
+  } else {
+    breakoutChart.timeScale().fitContent();
+  }
 
   const direction = event.side === "high" ? "Upside" : "Downside";
   const outcome = event.stopHitAt
@@ -418,12 +502,12 @@ function renderDailyMoveChart(events, startTime, endTime) {
   dailyMoveChart.setAttribute(
     "aria-label",
     isHistoricalBacktest
-      ? "Individual breakout moves and stop risks for the selected date"
+      ? "Individual breakout moves and stop risks for the selected date range"
       : `Individual breakout moves and stop risks from the last ${selectedBreakoutDays} days`,
   );
   breakoutDailyEmpty.hidden = eventCount > 0;
   breakoutDailyEmpty.textContent = isHistoricalBacktest
-    ? "No breakouts on the selected date."
+    ? "No breakouts in the selected date range."
     : `No breakouts in the last ${selectedBreakoutDays} days.`;
   dailyMoveChart.hidden = eventCount === 0;
   dailyMovePointDetails = new Map();
@@ -433,7 +517,7 @@ function renderDailyMoveChart(events, startTime, endTime) {
     dailyMoveSessionLineLayer?.replaceChildren();
     dailyMoveSeries?.setData([]);
     breakoutDailyStatus.textContent = isHistoricalBacktest
-      ? "No breakouts on selected date"
+      ? "No breakouts in selected date range"
       : `No breakouts in the last ${selectedBreakoutDays} days`;
     breakoutDailyStatus.dataset.state = "";
     dailyMoveDetails.textContent = "";
@@ -485,9 +569,15 @@ function renderDailyMoveChart(events, startTime, endTime) {
     }
 
     const dataTimes = new Set(data.map((point) => point.time));
-    for (const boundary of dailyMoveSessionBoundaries) {
-      if (!dataTimes.has(boundary)) {
-        data.push({ time: boundary, value: 0, color: "#101722" });
+    const rangeAnchors = isHistoricalBacktest &&
+        Number.isSafeInteger(startTime) &&
+        Number.isSafeInteger(endTime)
+      ? [startTime, endTime - 1]
+      : [];
+    for (const time of [...dailyMoveSessionBoundaries, ...rangeAnchors]) {
+      if (!dataTimes.has(time)) {
+        data.push({ time, value: 0, color: "#101722" });
+        dataTimes.add(time);
       }
     }
     data.sort((left, right) => left.time - right.time);
@@ -497,7 +587,12 @@ function renderDailyMoveChart(events, startTime, endTime) {
       rightOffset: 3,
       barSpacing: 12,
     });
-    if (dailyMovePointCount > 50) {
+    if (isHistoricalBacktest && rangeAnchors.length === 2) {
+      dailyMoveChartInstance.timeScale().setVisibleRange({
+        from: startTime,
+        to: endTime - 1,
+      });
+    } else if (dailyMovePointCount > 50) {
       dailyMoveChartInstance.timeScale().setVisibleLogicalRange({
         from: dailyMovePointCount - 50,
         to: dailyMovePointCount - 1,
@@ -507,7 +602,7 @@ function renderDailyMoveChart(events, startTime, endTime) {
     }
     dailyMoveDetails.textContent = "Hover over a bar to see its breakout time, percentage, level, and SL result.";
     breakoutDailyStatus.textContent = isHistoricalBacktest
-      ? `${eventCount} on selected date`
+      ? `${eventCount} in selected range`
       : `${eventCount} in last ${selectedBreakoutDays} days`;
     breakoutDailyStatus.dataset.state = "success";
     breakoutDailyEmpty.hidden = true;
@@ -680,9 +775,14 @@ function appendCandleRow(candle) {
   candlesTableBody.append(row);
 }
 
-async function loadCandles(breakoutDays = selectedBreakoutDays) {
+async function loadCandles(
+  breakoutDays = selectedBreakoutDays,
+  resolution = selectedResolution,
+) {
   isHistoricalBacktest = false;
   selectedBreakoutDays = breakoutDays;
+  setSelectedResolution(resolution);
+  setCandleIntervalButtonsDisabled(true);
   for (const button of quickRangeButtons) {
     button.disabled = true;
     button.setAttribute(
@@ -692,10 +792,8 @@ async function loadCandles(breakoutDays = selectedBreakoutDays) {
   }
   loadCandlesButton.disabled = true;
   loadBacktestDateButton.disabled = true;
-  showRecentBreakoutsButton.disabled = true;
-  breakoutRangeLabel.textContent = `LAST ${selectedBreakoutDays} DAYS · LOCAL TIME`;
-  backtestDateStatus.textContent = `Loading latest ${selectedBreakoutDays} days`;
-  backtestDateStatus.dataset.state = "";
+  breakoutRangeLabel.textContent =
+    `LAST ${selectedBreakoutDays} DAYS · ${selectedResolution} · LOCAL TIME`;
   candlesStatus.textContent = "Loading";
   candlesStatus.dataset.state = "";
   candlesEmpty.hidden = false;
@@ -730,7 +828,10 @@ async function loadCandles(breakoutDays = selectedBreakoutDays) {
   dailyChartNewerButton.disabled = true;
 
   try {
-    const query = new URLSearchParams({ days: String(selectedBreakoutDays) });
+    const query = new URLSearchParams({
+      days: String(selectedBreakoutDays),
+      resolution: selectedResolution,
+    });
     const response = await fetch(`/api/deltaexchange/market-data/candles?${query}`);
     const result = await readResponse(response);
     const candles = [...result.candles].sort((a, b) => Number(b.time) - Number(a.time));
@@ -741,7 +842,9 @@ async function loadCandles(breakoutDays = selectedBreakoutDays) {
     candlesStatus.textContent = `${candles.length.toLocaleString()} candles`;
     candlesStatus.dataset.state = "success";
     const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    candlesRange.textContent = `BTCUSD.P · 1 minute · Last 24 hours · Local timezone ${timeZone} · API symbol ${result.apiSymbol}`;
+    candlesRange.textContent =
+      `BTCUSD.P · ${formatResolution(result.resolution)} · Last 24 hours · ` +
+      `Local timezone ${timeZone} · API symbol ${result.apiSymbol}`;
     candlesEmpty.hidden = candles.length > 0;
     candlesEmpty.textContent = "No candles were returned for this range.";
     candlesTableWrap.hidden = candles.length === 0;
@@ -753,9 +856,9 @@ async function loadCandles(breakoutDays = selectedBreakoutDays) {
       result.breakoutStart,
       result.end,
     );
-    breakoutRangeLabel.textContent = `LAST ${selectedBreakoutDays} DAYS · LOCAL TIME`;
-    backtestDateStatus.textContent = `Showing latest ${selectedBreakoutDays} days`;
-    backtestDateStatus.dataset.state = "";
+    breakoutRangeLabel.textContent =
+      `LAST ${selectedBreakoutDays} DAYS · ${selectedResolution} · LOCAL TIME`;
+    return true;
   } catch (error) {
     candlesStatus.textContent = "Request failed";
     candlesStatus.dataset.state = "error";
@@ -772,17 +875,16 @@ async function loadCandles(breakoutDays = selectedBreakoutDays) {
     breakoutChartEmpty.textContent = error.message;
     breakoutDailyStatus.textContent = "Unavailable";
     breakoutDailyStatus.dataset.state = "error";
-    backtestDateStatus.textContent = error.message;
-    backtestDateStatus.dataset.state = "error";
     breakoutDailyEmpty.textContent = error.message;
     dailyMoveChart.hidden = true;
     dailyMoveDetails.textContent = "";
     dailyChartOlderButton.disabled = true;
     dailyChartNewerButton.disabled = true;
+    return false;
   } finally {
     loadCandlesButton.disabled = false;
     loadBacktestDateButton.disabled = false;
-    showRecentBreakoutsButton.disabled = false;
+    setCandleIntervalButtonsDisabled(false);
     quickRangeButtons.forEach((button) => {
       button.disabled = false;
     });
@@ -792,41 +894,49 @@ async function loadCandles(breakoutDays = selectedBreakoutDays) {
 async function loadBacktestDate() {
   let range;
   try {
-    range = getLocalDateRange(backtestDateInput.value);
+    range = getLocalDateSpan(
+      backtestDateFromInput.value,
+      backtestDateToInput.value,
+    );
   } catch (error) {
-    backtestDateStatus.textContent = error.message;
-    backtestDateStatus.dataset.state = "error";
+    breakoutDailyStatus.textContent = "Invalid date";
+    breakoutDailyStatus.dataset.state = "error";
+    breakoutDailyEmpty.hidden = false;
+    breakoutDailyEmpty.textContent = error.message;
     return;
   }
 
   loadBacktestDateButton.disabled = true;
   loadCandlesButton.disabled = true;
-  showRecentBreakoutsButton.disabled = true;
+  backtestDateFromInput.disabled = true;
+  backtestDateToInput.disabled = true;
+  setCandleIntervalButtonsDisabled(true);
   quickRangeButtons.forEach((button) => {
     button.disabled = true;
     button.setAttribute("aria-pressed", "false");
   });
   isHistoricalBacktest = true;
-  backtestDateStatus.textContent = "Loading selected date";
-  backtestDateStatus.dataset.state = "";
+  const localDateFormatter = new Intl.DateTimeFormat(navigator.language, {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+  });
   breakoutRangeLabel.textContent =
-    `${new Intl.DateTimeFormat(navigator.language, {
-      year: "numeric",
-      month: "short",
-      day: "2-digit",
-    }).format(new Date(range.start * 1000))} · LOCAL TIME`;
+    `${localDateFormatter.format(new Date(range.start * 1000))} – ` +
+    `${localDateFormatter.format(new Date((range.end - 1) * 1000))} · ` +
+    `${selectedResolution} · LOCAL TIME`;
   breakoutStatus.textContent = "Loading";
   breakoutStatus.dataset.state = "";
   breakoutEmpty.hidden = false;
-  breakoutEmpty.textContent = "Loading breakouts for the selected date…";
+  breakoutEmpty.textContent = "Loading breakouts for the selected date range…";
   breakoutsTableWrap.hidden = true;
   breakoutChartWrap.hidden = true;
   breakoutChartEmpty.hidden = false;
-  breakoutChartEmpty.textContent = "Loading selected-date breakouts…";
+  breakoutChartEmpty.textContent = "Loading selected-range breakouts…";
   breakoutDailyStatus.textContent = "Loading";
   breakoutDailyStatus.dataset.state = "";
   breakoutDailyEmpty.hidden = false;
-  breakoutDailyEmpty.textContent = "Loading breakouts for the selected date…";
+  breakoutDailyEmpty.textContent = "Loading breakouts for the selected date range…";
   dailyMoveChart.hidden = true;
   dailyMoveDetails.textContent = "";
   dailyChartOlderButton.disabled = true;
@@ -836,6 +946,7 @@ async function loadBacktestDate() {
     const query = new URLSearchParams({
       start: String(range.start),
       end: String(range.end),
+      resolution: selectedResolution,
     });
     const response = await fetch(`/api/deltaexchange/market-data/candles?${query}`);
     const result = await readResponse(response);
@@ -843,17 +954,10 @@ async function loadBacktestDate() {
       result.liquidityBreakouts,
       result.candles,
       result.dailyLiquidityBreakouts,
-      result.start,
-      result.end,
+      range.start,
+      range.end,
     );
-    const eventCount = result.liquidityBreakouts.length;
-    backtestDateStatus.textContent = eventCount
-      ? `${eventCount} breakout${eventCount === 1 ? "" : "s"} loaded`
-      : "No breakouts on this date";
-    backtestDateStatus.dataset.state = eventCount ? "success" : "";
   } catch (error) {
-    backtestDateStatus.textContent = error.message;
-    backtestDateStatus.dataset.state = "error";
     breakoutStatus.textContent = "Unavailable";
     breakoutStatus.dataset.state = "error";
     breakoutEmpty.hidden = false;
@@ -870,15 +974,27 @@ async function loadBacktestDate() {
   } finally {
     loadBacktestDateButton.disabled = false;
     loadCandlesButton.disabled = false;
-    showRecentBreakoutsButton.disabled = false;
+    backtestDateFromInput.disabled = false;
+    backtestDateToInput.disabled = false;
+    setCandleIntervalButtonsDisabled(false);
     quickRangeButtons.forEach((button) => {
       button.disabled = false;
     });
   }
 }
 
-backtestDateInput.max = getLocalDateString();
-backtestDateInput.value = getLocalDateString();
+const today = getLocalDateString();
+backtestDateFromInput.value = today;
+backtestDateToInput.value = today;
+backtestDateFromInput.max = today;
+backtestDateToInput.max = today;
+synchronizeBacktestDateInputs(backtestDateToInput);
+backtestDateFromInput.addEventListener("change", () => {
+  synchronizeBacktestDateInputs(backtestDateFromInput);
+});
+backtestDateToInput.addEventListener("change", () => {
+  synchronizeBacktestDateInputs(backtestDateToInput);
+});
 testAuthButton.addEventListener("click", async () => {
   testAuthButton.disabled = true;
   authenticationStatus.textContent = "Testing";
@@ -901,12 +1017,26 @@ testAuthButton.addEventListener("click", async () => {
   }
 });
 
-loadCandlesButton.addEventListener("click", () => loadCandles(selectedBreakoutDays));
+loadCandlesButton.addEventListener(
+  "click",
+  () => loadCandles(selectedBreakoutDays, selectedResolution),
+);
 loadBacktestDateButton.addEventListener("click", loadBacktestDate);
-showRecentBreakoutsButton.addEventListener("click", () => loadCandles(3));
 for (const button of quickRangeButtons) {
   button.addEventListener("click", () => {
-    loadCandles(Number(button.dataset.breakoutDays));
+    loadCandles(Number(button.dataset.breakoutDays), selectedResolution);
+  });
+}
+for (const button of candleIntervalButtons) {
+  button.addEventListener("click", async () => {
+    if (button.dataset.resolution === selectedResolution) {
+      return;
+    }
+    const keepHistoricalDate = isHistoricalBacktest;
+    const loaded = await loadCandles(selectedBreakoutDays, button.dataset.resolution);
+    if (loaded && keepHistoricalDate) {
+      await loadBacktestDate();
+    }
   });
 }
 breakoutSelect.addEventListener("change", () => {
