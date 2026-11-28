@@ -43,6 +43,11 @@ const localDateTimeFormatter = new Intl.DateTimeFormat(navigator.language, {
   minute: "2-digit",
   timeZoneName: "short",
 });
+const localSessionDateFormatter = new Intl.DateTimeFormat(navigator.language, {
+  weekday: "short",
+  month: "short",
+  day: "numeric",
+});
 let breakoutEvents = [];
 let breakoutCandles = [];
 let breakoutChart;
@@ -53,6 +58,8 @@ let dailyMoveChartInstance;
 let dailyMoveSeries;
 let dailyMovePointDetails = new Map();
 let dailyMovePointCount = 0;
+let dailyMoveSessionLineLayer;
+let dailyMoveSessionBoundaries = [];
 let isHistoricalBacktest = false;
 let selectedBreakoutDays = 3;
 
@@ -85,6 +92,21 @@ function getLocalDateRange(value) {
     start: Math.floor(start.getTime() / 1000),
     end: Math.floor(end.getTime() / 1000),
   };
+}
+
+function getLocalSessionBoundaries(startTime, endTime) {
+  const firstDate = new Date(startTime * 1000);
+  const boundary = new Date(
+    firstDate.getFullYear(),
+    firstDate.getMonth(),
+    firstDate.getDate() + 1,
+  );
+  const boundaries = [];
+  while (boundary.getTime() / 1000 < endTime) {
+    boundaries.push(Math.floor(boundary.getTime() / 1000));
+    boundary.setDate(boundary.getDate() + 1);
+  }
+  return boundaries;
 }
 
 async function readResponse(response) {
@@ -407,6 +429,8 @@ function renderDailyMoveChart(events, startTime, endTime) {
   dailyMovePointDetails = new Map();
   dailyMovePointCount = eventCount * 2;
   if (eventCount === 0) {
+    dailyMoveSessionBoundaries = [];
+    dailyMoveSessionLineLayer?.replaceChildren();
     dailyMoveSeries?.setData([]);
     breakoutDailyStatus.textContent = isHistoricalBacktest
       ? "No breakouts on selected date"
@@ -426,6 +450,7 @@ function renderDailyMoveChart(events, startTime, endTime) {
 
     dailyMoveChartInstance ??= createDailyMoveChart(chartLibrary);
     const data = [];
+    dailyMoveSessionBoundaries = getLocalSessionBoundaries(startTime, endTime);
     const offsetsByBreakoutTime = new Map();
     for (const event of analysis) {
       const baseTime = event.breakoutTime;
@@ -459,7 +484,14 @@ function renderDailyMoveChart(events, startTime, endTime) {
       dailyMovePointDetails.set(riskTime, { ...details, metric: "Stop risk", value: event.stopRiskPercent });
     }
 
+    const dataTimes = new Set(data.map((point) => point.time));
+    for (const boundary of dailyMoveSessionBoundaries) {
+      if (!dataTimes.has(boundary)) {
+        data.push({ time: boundary, value: 0, color: "#101722" });
+      }
+    }
     data.sort((left, right) => left.time - right.time);
+    dailyMovePointCount = data.length;
     dailyMoveSeries.setData(data);
     dailyMoveChartInstance.timeScale().applyOptions({
       rightOffset: 3,
@@ -479,7 +511,7 @@ function renderDailyMoveChart(events, startTime, endTime) {
       : `${eventCount} in last ${selectedBreakoutDays} days`;
     breakoutDailyStatus.dataset.state = "success";
     breakoutDailyEmpty.hidden = true;
-    requestAnimationFrame(updateDailyChartNavigation);
+    requestAnimationFrame(updateDailyChartView);
   } catch (error) {
     setDailyMoveChartError(error);
   }
@@ -539,6 +571,10 @@ function createDailyMoveChart(chartLibrary) {
     lastValueVisible: false,
     priceLineVisible: false,
   });
+  dailyMoveSessionLineLayer = document.createElement("div");
+  dailyMoveSessionLineLayer.className = "daily-session-line-layer";
+  dailyMoveSessionLineLayer.setAttribute("aria-hidden", "true");
+  dailyMoveChart.append(dailyMoveSessionLineLayer);
   chart.subscribeCrosshairMove((parameter) => {
     const point = parameter.seriesData.get(series);
     const details = point ? dailyMovePointDetails.get(Number(point.time)) : undefined;
@@ -548,7 +584,8 @@ function createDailyMoveChart(chartLibrary) {
         `Level ${formatCandleValue(details.event.level)} · ${details.outcome}`
       : "Hover over a bar to see its breakout time, percentage, level, and SL result.";
   });
-  chart.timeScale().subscribeVisibleLogicalRangeChange(updateDailyChartNavigation);
+  chart.timeScale().subscribeVisibleLogicalRangeChange(updateDailyChartView);
+  new ResizeObserver(updateDailySessionLines).observe(dailyMoveChart);
   dailyMoveSeries = series;
   return chart;
 }
@@ -580,6 +617,35 @@ function updateDailyChartNavigation() {
   const maxFrom = Math.max(0, dailyMovePointCount - 1 - rangeWidth);
   dailyChartOlderButton.disabled = range.from <= 0.5;
   dailyChartNewerButton.disabled = range.from >= maxFrom - 0.5;
+}
+
+function updateDailyChartView() {
+  updateDailyChartNavigation();
+  updateDailySessionLines();
+}
+
+function updateDailySessionLines() {
+  if (!dailyMoveChartInstance || !dailyMoveSessionLineLayer) {
+    return;
+  }
+
+  const timeScale = dailyMoveChartInstance.timeScale();
+  const lines = [];
+  for (const boundary of dailyMoveSessionBoundaries) {
+    const x = timeScale.timeToCoordinate(boundary);
+    if (x === null || !Number.isFinite(x) || x < 0 || x > dailyMoveChart.clientWidth) {
+      continue;
+    }
+    const line = document.createElement("span");
+    line.className = "daily-session-line";
+    line.style.left = `${x + 1}px`;
+    const label = document.createElement("span");
+    label.className = "daily-session-line-label";
+    label.textContent = localSessionDateFormatter.format(new Date(boundary * 1000));
+    line.append(label);
+    lines.push(line);
+  }
+  dailyMoveSessionLineLayer.replaceChildren(...lines);
 }
 
 function scrollDailyChart(direction) {

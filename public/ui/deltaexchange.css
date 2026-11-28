@@ -236,12 +236,40 @@
 }
 
 .daily-move-chart {
+  position: relative;
   width: 100%;
   height: 500px;
   margin-top: 18px;
   overflow: hidden;
   border: 1px solid var(--border, #293342);
   border-radius: 8px;
+}
+
+.daily-session-line-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.daily-session-line {
+  position: absolute;
+  top: 0;
+  bottom: 28px;
+  border-left: 1px dashed rgb(170 190 210 / 45%);
+}
+
+.daily-session-line-label {
+  position: absolute;
+  top: 6px;
+  left: 4px;
+  padding: 2px 4px;
+  border-radius: 3px;
+  background: rgb(16 23 34 / 85%);
+  color: #aab4c3;
+  font-size: 0.7rem;
+  white-space: nowrap;
 }
 
 .daily-move-details {
