@@ -301,6 +301,7 @@ let indicatorCandles = [];
 let currentOrderBlocks = { internal: [], swing: [] };
 let currentLiquiditySwings = { highs: [], lows: [] };
 let replayIndex = -1;
+let crosshairY = null;
 let replayStartIndex = 0;
 let replayTimer;
 let loadRequestId = 0;
@@ -392,8 +393,18 @@ function updateCurrentPriceLabel(
     0,
     chartContainer.clientHeight - labelHeight - chart.timeScale().height(),
   );
-  chartCurrentPriceLabel.style.top =
-    `${Math.max(0, Math.min(coordinate - 14, maxTop))}px`;
+  const priceLabelTop = Math.max(0, Math.min(coordinate - 14, maxTop));
+  const crosshairOverlapsLabel = crosshairY !== null &&
+    crosshairY >= priceLabelTop - 22 &&
+    crosshairY <= priceLabelTop + labelHeight + 22;
+  let labelTop = priceLabelTop;
+  if (crosshairOverlapsLabel) {
+    const belowLabelTop = Math.max(priceLabelTop, crosshairY + 14);
+    labelTop = belowLabelTop <= maxTop
+      ? belowLabelTop
+      : Math.max(0, priceLabelTop - labelHeight - 22);
+  }
+  chartCurrentPriceLabel.style.top = `${labelTop}px`;
   chartCurrentPriceLabel.setAttribute(
     "aria-label",
     `Current price ${formatNumber(candle.close)}. Candle closes in ${chartCandleCountdown.textContent}.`,
@@ -1266,6 +1277,7 @@ chart.subscribeCrosshairMove((parameter) => {
   } else {
     showCandleStats(candleData.at(-1), volumeData.at(-1)?.value);
   }
+  updateCurrentPriceLabel();
 });
 
 for (const setting of [
@@ -1295,10 +1307,15 @@ new ResizeObserver(() => {
 chartContainer.addEventListener("pointerdown", () => {
   chartPointerDown = true;
 });
-chartContainer.addEventListener("pointermove", () => {
+chartContainer.addEventListener("pointerleave", () => {
+  crosshairY = null;
+  updateCurrentPriceLabel();
+});
+chartContainer.addEventListener("pointermove", (event) => {
+  crosshairY = event.clientY - chartContainer.getBoundingClientRect().top;
+  updateCurrentPriceLabel();
   if (chartPointerDown) {
     scheduleOrderBlockOverlayRender();
-    updateCurrentPriceLabel();
   }
 });
 orderBlockCanvas.addEventListener("pointerdown", (event) => {

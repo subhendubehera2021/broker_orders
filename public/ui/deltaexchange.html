@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#101722">
+    <title>Delta Exchange Authentication | Auto Trade Processor</title>
+    <link rel="stylesheet" href="/ui/styles.css">
+    <link rel="stylesheet" href="/ui/deltaexchange.css">
+    <script src="/vendor/lightweight-charts.js" defer></script>
+    <script type="module" src="/ui/deltaexchange.js"></script>
+  </head>
+  <body>
+    <main class="page">
+      <header class="page-header">
+        <div class="header-top">
+          <a class="brand" href="/">Auto Trade Processor</a>
+          <span class="api-label">DELTA EXCHANGE · PRODUCTION</span>
+        </div>
+        <h1>Delta Exchange authentication</h1>
+        <p>Check the server-side API credentials without exposing them in this page.</p>
+      </header>
+
+      <section class="panel delta-auth-panel" aria-labelledby="auth-panel-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">READ-ONLY CHECK</p>
+            <h2 id="auth-panel-title">Connection status</h2>
+          </div>
+          <span class="status" id="configuration-status" role="status">Checking configuration</span>
+        </div>
+
+        <p id="auth-message" class="auth-message" aria-live="polite">
+          Checking whether production credentials are configured on the server.
+        </p>
+
+        <div class="credential-setup">
+          <p>Set these variables in the server’s <code>.env</code> file, then restart the server:</p>
+          <pre><code>DELTA_EXCHANGE_API_KEY=your-api-key
+DELTA_EXCHANGE_API_SECRET=your-api-secret</code></pre>
+        </div>
+
+        <div class="auth-actions">
+          <button class="primary-button" id="test-auth-button" type="button" disabled>
+            Test authentication
+          </button>
+          <span class="status" id="authentication-status" role="status">Not tested</span>
+        </div>
+
+        <p class="auth-safety-note">
+          This check only reads the authenticated profile endpoint. It does not place or modify orders.
+          Keep the API secret on the server, grant only the required Read Data permission, and use Delta’s IP allowlist.
+        </p>
+      </section>
+
+      <section class="panel delta-candles-panel" aria-labelledby="candles-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">PUBLIC MARKET DATA</p>
+            <h2 id="candles-title">BTCUSD.P · 1 minute</h2>
+          </div>
+          <button class="primary-button" id="load-candles-button" type="button">
+            Refresh candles
+          </button>
+        </div>
+
+        <p class="help-text" id="candles-range">Loading the last 24 hours; times use your local timezone.</p>
+        <span class="status" id="candles-status" role="status">Loading</span>
+        <p class="empty-state" id="candles-empty" aria-live="polite">Requesting candle data…</p>
+        <div class="table-scroll delta-candles-scroll" id="candles-table-wrap" hidden>
+          <table class="candles-table">
+            <thead>
+              <tr>
+                <th scope="col">Time (Local)</th>
+                <th scope="col">Open</th>
+                <th scope="col">High</th>
+                <th scope="col">Low</th>
+                <th scope="col">Close</th>
+                <th scope="col">Volume</th>
+              </tr>
+            </thead>
+            <tbody id="candles-table-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel delta-liquidity-panel" aria-labelledby="liquidity-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">MARKET STRUCTURE</p>
+            <h2 id="liquidity-title">Liquidity swings</h2>
+          </div>
+          <span class="status" id="liquidity-status" role="status">Loading</span>
+        </div>
+
+        <p class="help-text" id="liquidity-description">
+          Confirmed swing highs and lows from the past 24 hours, using a five-candle pivot lookback.
+        </p>
+        <p class="empty-state" id="liquidity-empty" aria-live="polite">Calculating liquidity swings…</p>
+        <div class="table-scroll delta-liquidity-scroll" id="liquidity-table-wrap" hidden>
+          <table class="liquidity-table">
+            <thead>
+              <tr>
+                <th scope="col">Direction</th>
+                <th scope="col">Pivot time (Local)</th>
+                <th scope="col">Confirmed (Local)</th>
+                <th scope="col">Level</th>
+                <th scope="col">Zone top / bottom</th>
+                <th scope="col">Pivot volume</th>
+                <th scope="col">Touches</th>
+                <th scope="col">Touch volume</th>
+                <th scope="col">Status</th>
+              </tr>
+            </thead>
+            <tbody id="liquidity-table-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel delta-breakout-panel" aria-labelledby="breakout-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">BREAKOUT ANALYSIS</p>
+            <h2 id="breakout-title">Broken liquidity levels</h2>
+          </div>
+          <span class="status" id="breakout-status" role="status">Loading</span>
+        </div>
+
+        <p class="help-text" id="breakout-description">
+          Wick breaks only. Stop loss is the break candle low for upside breaks or high for downside breaks.
+          Points show the best move from the broken level on later candles, through stop-out or the latest candle.
+          A stop-hit candle's favorable wick is excluded because one-minute OHLC data cannot show intrabar order.
+        </p>
+        <p class="empty-state" id="breakout-empty" aria-live="polite">Analyzing broken levels…</p>
+        <div class="table-scroll delta-breakout-scroll" id="breakouts-table-wrap" hidden>
+          <table class="breakouts-table">
+            <thead>
+              <tr>
+                <th scope="col">Direction</th>
+                <th scope="col">Swing pivot (Local)</th>
+                <th scope="col">Broken at (Local)</th>
+                <th scope="col">Level</th>
+                <th scope="col">Break candle extreme</th>
+                <th scope="col">Stop loss</th>
+                <th scope="col">Max points</th>
+                <th scope="col">SL result</th>
+                <th scope="col">SL hit at (Local)</th>
+              </tr>
+            </thead>
+            <tbody id="breakouts-table-body"></tbody>
+          </table>
+        </div>
+
+        <div class="breakout-chart-section">
+          <div class="breakout-chart-controls">
+            <label for="breakout-select">Breakout to chart</label>
+            <select id="breakout-select" disabled>
+              <option value="">No broken levels</option>
+            </select>
+          </div>
+          <p class="help-text" id="breakout-chart-summary" aria-live="polite"></p>
+          <p class="empty-state" id="breakout-chart-empty">The chart will appear when a broken level is available.</p>
+          <div class="breakout-chart-wrap" id="breakout-chart-wrap" hidden>
+            <div class="breakout-chart" id="breakout-chart" role="img" aria-label="Candlestick chart for the selected liquidity breakout"></div>
+          </div>
+        </div>
+
+        <div class="breakout-daily-section" aria-labelledby="breakout-daily-title">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow" id="breakout-range-label">LAST 3 DAYS · LOCAL TIME</p>
+              <h3 id="breakout-daily-title">Breakout moves and stop risk</h3>
+            </div>
+            <div class="daily-chart-actions">
+              <span class="status" id="breakout-daily-status" role="status">Loading</span>
+              <div class="daily-chart-nav" role="group" aria-label="Scroll breakout chart">
+                <button class="daily-chart-nav-button" id="daily-chart-older" type="button" disabled>
+                  ← Older
+                </button>
+                <button class="daily-chart-nav-button" id="daily-chart-newer" type="button" disabled>
+                  Newer →
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="breakout-date-filter">
+            <label for="backtest-date">Backtest date (local)</label>
+            <input id="backtest-date" type="date" required>
+            <button class="primary-button" id="load-backtest-date" type="button">Load date</button>
+            <button class="daily-chart-nav-button" id="show-recent-breakouts" type="button">
+              Latest 3 days
+            </button>
+            <span class="status" id="backtest-date-status" role="status">Showing latest 3 days</span>
+          </div>
+          <div class="breakout-quick-ranges" role="group" aria-label="Quick breakout analysis range">
+            <span>Quick analysis:</span>
+            <button class="quick-range-button" type="button" data-breakout-days="3" aria-pressed="true">3 days</button>
+            <button class="quick-range-button" type="button" data-breakout-days="7" aria-pressed="false">7 days</button>
+            <button class="quick-range-button" type="button" data-breakout-days="15" aria-pressed="false">15 days</button>
+            <button class="quick-range-button" type="button" data-breakout-days="30" aria-pressed="false">30 days</button>
+          </div>
+          <p class="help-text">
+            Select any date to load and backtest its breakouts, or choose a quick range ending at the latest candle.
+            The candle and swing tables remain on their latest 24-hour data.
+            Historical backtests end at that date’s latest available candle.
+            Favorable move and stop risk are percentages of the broken level.
+            Favorable move includes the breakout candle’s extreme and continues until a later SL touch or the latest candle.
+            Favorable-move bars extend upward in green for upside breaks and orange for downside breaks; stop-risk bars extend downward in red.
+            Drag the right price scale to adjust the vertical scale, drag the chart to move left or right, or use the arrows.
+          </p>
+          <p class="empty-state" id="breakout-daily-empty" aria-live="polite">Loading breakouts from the last three days…</p>
+          <div class="daily-move-chart" id="daily-move-chart" role="img" aria-label="Individual breakout moves and stop risks for the selected range" tabindex="0" hidden></div>
+          <p class="daily-move-details" id="daily-move-details" aria-live="polite"></p>
+        </div>
+      </section>
+
+      <footer class="page-footer">
+        <a class="history-link" href="/ui/">Open Fyers data UI</a>
+        <a class="history-link" href="/ui/chart.html">Open historical chart</a>
+        <a class="history-link" href="/ui/history.html">Open swing history</a>
+      </footer>
+    </main>
+  </body>
+</html>

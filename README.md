@@ -9,6 +9,7 @@ Simple Express API with Swagger UI.
 - `src/api.routes.js` mounts the Fyers and internal API modules.
 - `src/fyers/` contains Fyers routes, controllers, validation, services, models, and constants.
 - `src/fyers/models/` describes Fyers response shapes such as the option chain.
+- `src/deltaexchange/` contains Delta Exchange production authentication, public BTCUSD market data, and liquidity-swing analysis.
 - `src/auto-trade-process/` contains the auto-trade-process route, controllers, validation, response models, services, and candle aggregation.
 - `src/internal/` contains internal routes, controllers, validation, and liquidity-swing analysis.
 - `public/ui/` contains the browser UIs for Fyers expiry dates, liquidity-swing history, and historical chart replay. Vercel serves these assets from its CDN.
@@ -17,7 +18,7 @@ Simple Express API with Swagger UI.
 
 ## Run
 
-Set `FYERS_APP_ID`, `FYERS_ACCESS_TOKEN`, `TURSO_DATABASE_URL`, and `TURSO_AUTH_TOKEN` in `.env` (see `.env.example`). Set either `MASTER_API_KEY` or `MASTER_PASSCODE` to protect history delete/restore actions. If both are set, `MASTER_API_KEY` takes precedence. The database client also accepts the existing `_v2` Turso variable names.
+Set `FYERS_APP_ID`, `FYERS_ACCESS_TOKEN`, `DELTA_EXCHANGE_API_KEY`, `DELTA_EXCHANGE_API_SECRET`, `TURSO_DATABASE_URL`, and `TURSO_AUTH_TOKEN` in `.env` (see `.env.example`). Delta Exchange credentials are used only by the server; do not put them in browser storage or share them. Set either `MASTER_API_KEY` or `MASTER_PASSCODE` to protect history delete/restore actions. If both are set, `MASTER_API_KEY` takes precedence. The database client also accepts the existing `_v2` Turso variable names.
 
 ```sh
 npm install
@@ -38,6 +39,9 @@ Set `PORT` to change the default port (`3000`).
 - Fyers historical data: `GET /api/fyers/market-data/historical-data`
 - Fyers option chain: `GET /api/fyers/market-data/option-chain`
 - Fyers quotes: `GET /api/fyers/market-data/quotes`
+- Delta Exchange auth status: `GET /api/deltaexchange/auth/status`
+- Delta Exchange authentication check: `POST /api/deltaexchange/auth/test`
+- Delta Exchange BTCUSD.P 1-minute candles, quick breakout ranges, and historical backtests: `GET /api/deltaexchange/market-data/candles?days=3|7|15|30` or `GET /api/deltaexchange/market-data/candles?start=<unix-seconds>&end=<unix-seconds>`
 - Internal liquidity swings: `GET /api/internal/liquidity-swings`
 - Internal highest-volume options: `GET /api/internal/option-chain/highest-volume`
 - Auto-trade-process data: `GET /api/auto-trade-process`
@@ -45,7 +49,16 @@ Set `PORT` to change the default port (`3000`).
 - Expiry-dates UI: `http://localhost:3000/ui/`
 - Liquidity-swing history UI: `http://localhost:3000/ui/history.html`
 - Fyers historical replay chart: `http://localhost:3000/ui/chart.html`
+- Delta Exchange authentication UI: `http://localhost:3000/ui/deltaexchange.html`
 - Swagger UI: `http://localhost:3000/docs`
+
+The Delta Exchange page at `/ui/deltaexchange.html` checks production credentials configured on the server. It signs a read-only `GET /v2/profile` request using Delta’s timestamped HMAC-SHA256 scheme; it does not place orders or return profile data. Use a key with the required Read Data permission and configure Delta’s IP allowlist for the server.
+
+The same page loads the most recent 24 hours of public 1-minute BTCUSD perpetual candles. It displays the `BTCUSD.P` alias and requests Delta’s canonical `BTCUSD` product from `GET /v2/history/candles`; this public market-data endpoint does not require API credentials. The page also displays all confirmed one-minute liquidity swing highs (upside) and lows (downside) with pivot times in that 24-hour window. The table includes local pivot and confirmation times, level, price zone, pivot volume, touch count, touch volume, and status. Analysis uses a five-candle pivot lookback and fetches five minutes of extra candles for boundary context.
+
+The breakout-analysis section lists only wick-broken levels from the latest 24 hours. The stop is the breakout candle low for upside breaks or high for downside breaks. It reports maximum favorable points from the broken level on subsequent candles, whether and when the stop was hit, and provides a selectable candlestick chart with the broken level and stop marked. A Lightweight Charts histogram shows every breakout in the selected rolling quick range (3, 7, 15, or 30 days) through the latest candle separately, with favorable-move and stop-risk percentages relative to the broken level. Use the local-date filter to backtest any historical calendar date; its day boundaries account for the browser's local timezone and daylight-saving changes. The date request returns that day's breakout data through its latest available candle, while the main candle and swing tables continue to show their latest 24-hour data. The API accepts `days=3`, `7`, `15`, or `30` for quick ranges, or paired Unix-second `start` and `end` query parameters for historical ranges up to 26 hours. Favorable moves extend upward in green for upside breaks and orange for downside breaks; stop-risk bars extend downward in red. Hover over each bar for its breakout time and result; drag the right price scale to adjust the vertical scale and drag the chart horizontally to navigate. Older/newer controls are also available. It includes the breakout candle's favorable extreme and movement until any later stop hit; one-minute candles cannot establish the intrabar order of the breakout extreme and stop.
+
+The Delta liquidity-swing helper is adapted from LuxAlgo Liquidity Swings and remains subject to CC BY-NC-SA 4.0, including attribution, share-alike, and noncommercial-use requirements.
 
 Previous `/api/market-data/*`, `/api/liquidity-swings`, and `/api/health` paths remain available as compatibility aliases.
 

@@ -29,6 +29,11 @@ app.get("/", (_request, response) => {
         liquiditySwings: "/api/internal/liquidity-swings",
         highestVolumeOptions: "/api/internal/option-chain/highest-volume",
       },
+      deltaExchange: {
+        authStatus: "/api/deltaexchange/auth/status",
+        testAuthentication: "/api/deltaexchange/auth/test",
+        btcUsdOneMinuteCandles: "/api/deltaexchange/market-data/candles",
+      },
       autoTradeProcess: "/api/auto-trade-process",
     },
   });
